@@ -10,11 +10,11 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from seedmatch.annotation.genome import Genome
+from seedmatch.annotation.genome import Genome, duplicate_contig_error
 from seedmatch.errors import InputError
 from seedmatch.sequence.alphabet import MASKS
 
-_SIGNATURES: Final = {order: struct.pack(f"{order}I", 0x1A412743) for order in "<>"}
+SIGNATURES: Final = {order: struct.pack(f"{order}I", 0x1A412743) for order in "<>"}
 _HEADER_SIZE: Final = 16
 _BASES_PER_BYTE: Final = 4
 # Version 1 has 64-bit offsets in the index. Each other number of the file is 32-bit.
@@ -87,10 +87,13 @@ class TwoBitGenome(Genome):
 
     def _byte_order(self, head: bytes) -> str:
         """Return the struct prefix of the byte order that the signature shows."""
-        for order, signature in _SIGNATURES.items():
+        if not head:
+            message = f"{self._shown!r}: the file is empty; expected a 2bit file"
+            raise InputError(message)
+        for order, signature in SIGNATURES.items():
             if head == signature:
                 return order
-        expected = " or ".join(signature.hex() for signature in _SIGNATURES.values())
+        expected = " or ".join(signature.hex() for signature in SIGNATURES.values())
         message = (
             f"{self._shown!r}: not a 2bit file; the first bytes are {head.hex()}, "
             f"expected {expected}"
@@ -138,11 +141,7 @@ class TwoBitGenome(Genome):
                 message = f"{self._shown!r}: contig name {raw_name!r} is not valid UTF-8"
                 raise InputError(message) from exc
             if name in offsets:
-                message = (
-                    f"{self._shown!r}: contig {name!r} occurs twice in the index; "
-                    "expected each name once"
-                )
-                raise InputError(message)
+                raise duplicate_contig_error(self._shown, name)
             position += 1 + name_size
             (offset,) = self._read_fields(offset_format, position, "the index")
             position += struct.calcsize(offset_format)

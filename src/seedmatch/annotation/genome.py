@@ -18,6 +18,12 @@ _LISTED_CONTIGS: Final = 10
 _MITOCHONDRIAL: Final = {"chrM": "MT", "MT": "chrM"}
 
 
+def duplicate_contig_error(shown: str, contig: str) -> InputError:
+    """Return the error for a contig name that occurs twice in the index of a genome file."""
+    message = f"{shown!r}: contig {contig!r} occurs twice in the index; expected each name once"
+    return InputError(message)
+
+
 class Genome(ABC):
     """The sequences of the contigs of one genome. A range has 1-based inclusive coordinates."""
 

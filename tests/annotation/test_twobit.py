@@ -207,10 +207,16 @@ def test_file_that_is_not_2bit_raises(tmp_path):
         TwoBitGenome(path)
 
 
-@pytest.mark.parametrize("data", [b"", b"C'A"])
-def test_file_that_is_too_short_for_the_signature_is_not_2bit(tmp_path, data):
+def test_file_that_is_too_short_for_the_signature_is_not_2bit(tmp_path):
     with pytest.raises(InputError, match="not a 2bit file"):
-        TwoBitGenome(write(tmp_path, data))
+        TwoBitGenome(write(tmp_path, b"C'A"))
+
+
+def test_empty_file_raises_and_says_that_it_is_empty(tmp_path):
+    path = write(tmp_path, b"")
+    message = f"{os.fspath(path)!r}: the file is empty; expected a 2bit file"
+    with pytest.raises(InputError, match=re.escape(message)):
+        TwoBitGenome(path)
 
 
 @pytest.mark.parametrize("order", ["<", ">"])
