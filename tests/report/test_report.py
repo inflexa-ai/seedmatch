@@ -1,5 +1,6 @@
 import dataclasses
 import math
+import re
 
 import numpy as np
 import pandas as pd
@@ -63,7 +64,7 @@ def report_row(got, name):
 
 @pytest.mark.parametrize(
     ("variant", "options"),
-    [("default", ReportOptions()), ("wobble", ReportOptions(wobble=True))],
+    [("default", ReportOptions()), ("wobble", ReportOptions(wobble=True, fixed_pattern=False))],
 )
 def test_report_matches_r(variant, options):
     got = seed_match_report(sirna_de(), sirna_seqs(), Guide(GUIDE), options)
@@ -161,8 +162,8 @@ def test_percent_is_the_share_of_off_targets_among_the_expressed_genes():
             FullSearchOptions(seed_edit_distances=(0,)),
         ),
         (
-            ReportOptions(wobble=True, seed_edit_distances=(0, 1)),
-            FullSearchOptions(wobble=True, indels=True, fixed_pattern=True, fixed_subject=True),
+            ReportOptions(wobble=True, fixed_pattern=False, seed_edit_distances=(0, 1)),
+            FullSearchOptions(wobble=True, indels=True, fixed_pattern=False, fixed_subject=True),
         ),
     ],
 )
@@ -314,12 +315,20 @@ def test_workers_does_not_change_the_result():
     pd.testing.assert_frame_equal(alone.matches, pooled.matches)
 
 
-def test_the_wobble_option_changes_the_matches():
-    plain = seed_match_report(sirna_de(), sirna_seqs(), Guide(GUIDE)).report
+def test_the_wobble_adds_in_silico_predictions_D026():
+    plain = seed_match_report(sirna_de(), sirna_seqs(), Guide(GUIDE))
     wobble = seed_match_report(
-        sirna_de(), sirna_seqs(), Guide(GUIDE), ReportOptions(wobble=True)
-    ).report
-    assert not plain.equals(wobble)
+        sirna_de(), sirna_seqs(), Guide(GUIDE), ReportOptions(wobble=True, fixed_pattern=False)
+    )
+    total = "In silico predictions"
+    assert report_row(wobble, total)["Total"] > report_row(plain, total)["Total"]
+
+
+@pytest.mark.parametrize("make", [ReportOptions, FullSearchOptions])
+def test_the_wobble_with_a_fixed_pattern_causes_an_error_D026(make):
+    message = "wobble=True needs fixed_pattern=False"
+    with pytest.raises(InputError, match=re.escape(message)):
+        make(wobble=True, fixed_pattern=True)
 
 
 def test_the_report_is_a_frozen_dataclass_of_two_frames():

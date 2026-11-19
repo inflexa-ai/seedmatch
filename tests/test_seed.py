@@ -150,3 +150,28 @@ def test_d018_lowercase_guide_gets_the_wobble_target_of_the_uppercase_guide():
     lower = Guide("uuauagagcaagaacacuguuuu").target(Seed.MER7M8, wobble=True)
     assert lower.sequence == "CTCTRTR"
     assert lower == Guide(GUIDE).target(Seed.MER7M8, wobble=True)
+
+
+@pytest.mark.parametrize("seed", ["mer7m8", "Mer7m8"])
+def test_target_rejects_a_seed_name_as_text(seed):
+    message = f"seed {seed!r} has type str; expected a Seed or a CustomSeed"
+    with pytest.raises(InputError, match=re.escape(message)):
+        Guide(GUIDE).target(seed)
+
+
+def test_target_rejects_a_wobble_that_is_not_a_bool():
+    with pytest.raises(InputError, match=re.escape("wobble 'no' has type str; expected a bool")):
+        Guide(GUIDE).target(Seed.MER7M8, wobble="no")
+
+
+@pytest.mark.parametrize(
+    ("start", "stop", "message"),
+    [
+        (2.5, 8, "start 2.5 has type float; expected an integer"),
+        (True, 8, "start True has type bool; expected an integer"),
+        (2, "8", "stop '8' has type str; expected an integer"),
+    ],
+)
+def test_custom_seed_rejects_a_window_position_that_is_not_an_integer(start, stop, message):
+    with pytest.raises(InputError, match=re.escape(message)):
+        CustomSeed("x", start, stop)

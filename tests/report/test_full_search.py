@@ -69,19 +69,16 @@ def test_the_indels_golden_differs_from_the_default_golden():
 
 def test_best_match_skips_absent_columns_D012():
     got = full_search(Guide(GUIDE), sirna_seqs(), FullSearchOptions(nonseed_edit_distances=(0, 1)))
-    assert set(got["best_match"]) <= {
-        "Full-D0",
-        "Full-D1",
-        "18mer-D0",
-        "18mer-D1",
-        "15mer-D0",
-        "15mer-D1",
-        "8mer",
-        "7mer-m8",
-        "7mer-A1",
-        "6mer",
-        "No.matches",
+    made = {
+        *(f"{seed}-D{d}" for seed in ("Full", "18mer", "15mer") for d in (0, 1)),
+        *("8mer", "7mer-m8", "7mer-A1", "6mer", "No.matches"),
     }
+    assert set(got["best_match"]) <= made
+    # A label of a column that the search makes is the highest present label in both searches.
+    default = golden("seedmatchr/full_search_counts_default.tsv")
+    kept = default["best.match"].isin(made).to_numpy()
+    assert {"Full-D1", "6mer", "No.matches"} <= set(default.loc[kept, "best.match"])
+    assert got.loc[kept, "best_match"].tolist() == default.loc[kept, "best.match"].tolist()
 
 
 def test_best_match_of_a_frame_without_count_columns_is_no_matches_D012():

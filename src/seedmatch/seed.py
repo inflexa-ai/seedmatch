@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, assert_never
 
+from seedmatch._checks import as_flag, as_limit, shown
 from seedmatch.errors import InputError
 from seedmatch.sequence import reverse_complement
 
@@ -33,6 +34,12 @@ class CustomSeed:
     start: int
     stop: int
 
+    def __post_init__(self) -> None:
+        """Store `start` and `stop` as plain ints."""
+        # The dataclass is frozen, so the constructor is the one writer of the normalized values.
+        object.__setattr__(self, "start", as_limit("start", self.start))
+        object.__setattr__(self, "stop", as_limit("stop", self.stop))
+
 
 SeedSpec = Seed | CustomSeed
 
@@ -41,7 +48,8 @@ SeedSpec = Seed | CustomSeed
 class Target:
     """The pattern that a search looks for.
 
-    `sequence` is DNA. `seed_rna` is the guide window as RNA: the reverse complement of `sequence`.
+    `sequence` is DNA. `seed_rna` is the reverse complement of `sequence` as RNA. Thus it holds the
+    U of the A suffix of `mer8` and `mer7A1`, and a Y for each wobble position.
     """
 
     name: str
@@ -113,9 +121,17 @@ class Guide:
     def target(self, seed: SeedSpec, *, wobble: bool = False) -> Target:
         """Return the DNA pattern that finds the window of the guide that `seed` names.
 
-        With `wobble`, each U of the guide becomes Y before the window is cut, so a G of the target
-        can pair with it.
+        With `wobble`, each U of the guide becomes Y before the window is cut. Thus the target has R
+        at each such position, and only a search with `fixed_pattern=False` matches an A or a G
+        there.
         """
+        if not isinstance(seed, Seed | CustomSeed):
+            message = (
+                f"seed {shown(seed)} has type {type(seed).__name__}; "
+                "expected a Seed or a CustomSeed"
+            )
+            raise InputError(message)
+        wobble = as_flag("wobble", wobble)
         length = len(self.sequence)
         if isinstance(seed, CustomSeed):
             _check_custom_window(seed, length)

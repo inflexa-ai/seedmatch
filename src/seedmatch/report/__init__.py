@@ -2,6 +2,8 @@
 
 from seedmatch.report.annotate import annotate_seed_counts
 from seedmatch.report.grid import (
+    DEFAULT_SEEDS,
+    NONSEED_SEEDS,
     FullSearchOptions,
     FullSearchRangesOptions,
     best_match,
@@ -16,6 +18,8 @@ from seedmatch.report.report import (
 )
 
 __all__ = [
+    "DEFAULT_SEEDS",
+    "NONSEED_SEEDS",
     "REPORT_CATEGORIES",
     "FullSearchOptions",
     "FullSearchRangesOptions",

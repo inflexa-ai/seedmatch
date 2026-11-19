@@ -158,7 +158,7 @@ Biostrings 2.78.0 shows these rules. Each rule is normative for the port.
    1. Each sequence position j can give one candidate that starts at j. Find the first pattern letter that matches the sequence letter at j. Let i0 be the number of pattern letters before it. If no pattern letter matches, or if i0 > `max_mismatch`, position j gives no candidate.
    2. Align the pattern letters after this letter to a substring that starts at j + 1. The substring can have each width, also 0. Find the least edit distance d, and the shortest width with this distance.
    3. The cost of the candidate is i0 + d. The candidate starts at j and ends at the end of this substring. If the cost is greater than `max_mismatch`, discard the candidate.
-   4. Examine the candidates in the order of their starts, and hold one candidate. If the end of the next candidate is not after the held end, the next candidate replaces the held candidate only if its cost is not greater. Else, discard the next candidate. If the next candidate ends after the held candidate, report the held candidate, and then hold the next candidate. At the end, report the held candidate.
+   4. Examine the candidates in the order of their starts, and hold one candidate. If the end of the next candidate is not after the held end, compare the two costs. If the cost of the next candidate is not greater, the next candidate replaces the held candidate. Else, discard the next candidate. If the next candidate ends after the held candidate, report the held candidate, and then hold the next candidate. At the end, report the held candidate.
 
    Step 1 uses only the first matching pattern letter. A later matching letter cannot give a lower cost, because the alignment of the first letter can delete the letters between them. Thus, if two letters give the same cost, the first letter sets the width.
 
@@ -336,6 +336,8 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `full_search_ranges` | Stops if every search finds a match, or if no search finds a match (`R/full_search.R:170-183`). | The result does not depend on the searches that find a match. |
 | `full_search`, `full_search_ranges` | `full_search` stops for a duplicate seed or distance. `full_search_ranges` gives duplicate rows, and it takes any `max.seed.edit.dist` (`R/full_search.R:156-162`). | The options raise `InputError` for a duplicate and for a `max_seed_edit_distance` that is not an integer of 0 or more. |
 | `SeedMatchReport` | A NaN cutoff gives no off-target. A bool cutoff, a text cutoff, or a text `log2FoldChange` or `padj` column gives a wrong count (`R/SeedMatchReport.R:94-99`). R gives no message. | The report raises `InputError` for these inputs. |
+| `filter_res` | A NaN cutoff keeps no row, and a bool or text cutoff gives a wrong result (`R/filter_res.R:64-70`). R gives no message. A `NULL` cutoff stops with a dplyr error. | `filter_de` raises `InputError` for these cutoffs. |
+| `SeedMatchReport` with `allow_wobbles` | The default `fixed = T` matches the wobble letter `R` only to `R`, thus the wobble finds fewer matches (`R/SeedMatchReport.R:51,55`). The R documentation tells the user to set `fixed` to `FALSE` with wobbles (`R/SeedMatchR.R:37`). | `ReportOptions` and `FullSearchOptions` raise `InputError` for `wobble=True` with `fixed_pattern=True`. With a fixed pattern, `annotate_seed_counts` raises `InputError` for a target with an ambiguity letter. |
 
 ## Tests
 

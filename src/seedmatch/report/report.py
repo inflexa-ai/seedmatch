@@ -8,8 +8,12 @@ from typing import Final
 
 import pandas as pd
 
-from seedmatch._checks import as_cutoff, check_gene_ids_are_text
-from seedmatch.de import check_columns, check_numeric_columns
+from seedmatch._checks import (
+    as_cutoff,
+    check_columns,
+    check_gene_ids_are_text,
+    check_numeric_columns,
+)
 from seedmatch.report.grid import FullSearchOptions, best_match, full_search
 from seedmatch.seed import Guide
 from seedmatch.sequence import SequenceSet
@@ -38,7 +42,10 @@ class ReportOptions:
     The defaults copy `R/SeedMatchReport.R:46-55`. `indels`, `wobble`, `seed_edit_distances`,
     `fixed_pattern`, and `fixed_subject` are the fields of `FullSearchOptions` with the same names.
     A gene is an off-target if its `log2FoldChange` is at most `log2fc_cut` and its `padj` is at
-    most `padj_cut`. Each field is checked when the object is made.
+    most `padj_cut`. Each field is checked when the object is made. `wobble=True` needs
+    `fixed_pattern=False`, because the wobble target has R at each U of the guide, and a fixed
+    pattern matches R only to the letter R (`D-026`). The default of `fixed_pattern` is `True`, as
+    in R, thus set it to `False` with the wobble.
     """
 
     indels: bool = True

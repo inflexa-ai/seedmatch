@@ -1,7 +1,10 @@
 """seedmatch: a Python port of SeedMatchR."""
 
 from seedmatch.de import filter_de, read_deseq2_table
+from seedmatch.errors import InputError, SeedMatchError
 from seedmatch.report import (
+    DEFAULT_SEEDS,
+    NONSEED_SEEDS,
     REPORT_CATEGORIES,
     FullSearchOptions,
     FullSearchRangesOptions,
@@ -18,14 +21,18 @@ from seedmatch.seed import CustomSeed, Guide, Seed, SeedSpec, Target
 from seedmatch.sequence import SequenceSet, read_fasta, reverse_complement, write_fasta
 
 __all__ = [
+    "DEFAULT_SEEDS",
+    "NONSEED_SEEDS",
     "REPORT_CATEGORIES",
     "CustomSeed",
     "FullSearchOptions",
     "FullSearchRangesOptions",
     "Guide",
+    "InputError",
     "ReportOptions",
     "SearchOptions",
     "Seed",
+    "SeedMatchError",
     "SeedMatchReport",
     "SeedSpec",
     "SequenceSet",
