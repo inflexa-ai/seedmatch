@@ -74,6 +74,9 @@ extend-immutable-calls = [
     "seedmatch.ReportOptions",
     "seedmatch.report.ReportOptions",
     "seedmatch.report.report.ReportOptions",
+    "seedmatch.TranscriptFilter",
+    "seedmatch.annotation.TranscriptFilter",
+    "seedmatch.annotation.filters.TranscriptFilter",
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

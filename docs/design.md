@@ -361,6 +361,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `.get_longest_utr` | A gene without a coding transcript stops the function with `subscript contains invalid names` (`R/load_annotations.R:408-415`), for example with `protein.coding = FALSE`. | Only a transcript with the feature is a candidate. A gene without a candidate has no sequence. |
 | `load_annotations` with `longest.utr` or `reduce.features` | R applies the two options only to the 3' UTR. For the other feature types, it ignores them without a message (`R/load_annotations.R:82-91`). | `PerGene` applies to each feature type. |
 | `ensembldb::transcripts` (used by `load_annotations` for `$gtf`, and by `.get_longest_utr` through `transcriptLengths`) | The SQL sorts on `seq_name` and `tx_seq_start` only. A tie of two genes then gets the scan order of the SQLite query plan, and the plan depends on the filter. The fixture golden gives two orders for one tie. | The order of a tie is the row order of the `gene` table, then of the `tx` table, for each filter. |
+| `build_annotation_filter` (used by `load_annotations`) | A `transcript.support` of 0 or less, or an `entrez_id` of 0 or less, selects no transcript and gives no message (`R/load_annotations.R:298-330`). | `TranscriptFilter` raises `InputError` for a support level below 1 and for an Entrez ID below 1. |
 
 ## Tests
 

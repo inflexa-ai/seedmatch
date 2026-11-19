@@ -188,3 +188,30 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `ReportOptions` and `FullSearchOptions` raise `InputError` for `wobble=True` with `fixed_pattern=True`. The default of `ReportOptions` keeps `fixed_pattern=True`, as in R, thus `fixed_pattern=False` is necessary for a wobble report. With `options.fixed_pattern`, `annotate_seed_counts` raises `InputError` for a target with an ambiguity letter. The message gives the first such letter. `count_matches` and `find_matches` keep the Biostrings behavior.
 - Reason: A wobble search with a fixed pattern loses the matches at each guide `U` without a message. The R documentation gives the rule, but R does not apply it. In `count_matches` and `find_matches`, a fixed ambiguity letter is a valid Biostrings search.
 - Test: `test_the_wobble_with_a_fixed_pattern_causes_an_error_D026` and `test_the_wobble_adds_in_silico_predictions_D026` in `tests/report/test_report.py`, and `test_annotate_rejects_a_wobble_target_with_a_fixed_pattern_D026` in `tests/report/test_annotate.py`.
+
+## D-030: The order of a tie of two genes does not depend on the filter
+
+- ID: `D-030`
+- R location: `ensembldb::transcripts` runs the SQL `order by gene.seq_name, tx.tx_seq_start`. `load_species_anno_db` calls it for `$gtf` (`R/load_annotations.R:160`), and `load_annotations` calls `load_species_anno_db` (`R/load_annotations.R:75`). `.get_longest_utr` uses it through `transcriptLengths` (`R/load_annotations.R:408`).
+- R behavior: The SQL sorts on `seq_name` and `tx_seq_start` only. A tie keeps the scan order of the SQLite query plan, and the plan depends on the filter. The R goldens give the evidence. The fixture has the transcripts `ENSSYNT00000000010`, `ENSSYNT00000000002`, and `ENSSYNT00000000001`. They start at the same base of contig 1. `ENSSYNT00000000010` belongs to a gene whose row comes first in the `gene` table. The other two belong to a gene whose row comes later, but their `tx` rows come before the `tx` row of `ENSSYNT00000000010`:
+  - `tests/golden/annotation/transcripts_exons_all.tsv` uses the filter on the standard chromosomes. The tie is `ENSSYNT00000000010`, `ENSSYNT00000000002`, `ENSSYNT00000000001`.
+  - `tests/golden/annotation/transcripts_exons_everything.tsv` uses no filter on the chromosomes. The tie is `ENSSYNT00000000002`, `ENSSYNT00000000001`, `ENSSYNT00000000010`.
+- New behavior: The tie is `ENSSYNT00000000010`, `ENSSYNT00000000002`, `ENSSYNT00000000001` for each filter. `AnnotationDb.transcripts` and `Reference.transcripts` sort on these keys, in this order:
+  - `seq_name`
+  - `tx_seq_start`
+  - the row order of the `gene` table
+  - the row order of the `tx` table
+- Reason: The order of the transcripts sets the row order of the searches, thus it must not depend on the filter. An EnsDb from ensembldb has the `tx` rows of each gene in the order of the `gene` rows. Thus the two scan orders agree in such a file, and the port gives the order of R. The fixture has a tie where the two row orders disagree. This tie lets the test show the rule of the port.
+- Test: `test_tie_order_does_not_depend_on_the_filter_D030` and `test_transcripts_match_r` in `tests/annotation/test_ensdb.py`.
+
+## D-031: TranscriptFilter rejects a support level and an Entrez ID below 1
+
+- ID: `D-031`
+- R location: `build_annotation_filter` (`R/load_annotations.R:298-330`). `load_annotations` calls it (`R/load_annotations.R:63`).
+- R behavior: R limits `transcript.support` only above 5, with `stopifnot(transcript.support <= 5)`. It does not limit `entrez_id`. An R probe gives these results:
+  - `transcript.support = 0` and `transcript.support = -1` select no transcript. R gives no message.
+  - `transcript.support = 6` stops with `transcript.support <= 5 is not TRUE`.
+  - `entrez_id = -5` selects no transcript. R gives no message.
+- New behavior: `TranscriptFilter` raises `InputError` for a `support_level` below 1 and for an Entrez ID below 1. The message gives the value and the permitted range. A `support_level` above 5 raises `InputError`, as in R.
+- Reason: A value below 1 cannot match a transcript. An empty result without a message hides the mistake of the caller.
+- Test: `test_support_level_below_1_raises_D031` and `test_entrez_id_below_1_raises_D031` in `tests/annotation/test_filters.py`.

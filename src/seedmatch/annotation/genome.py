@@ -2,7 +2,7 @@
 
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Final, Self
 
@@ -22,6 +22,13 @@ def duplicate_contig_error(shown: str, contig: str) -> InputError:
     """Return the error for a contig name that occurs twice in the index of a genome file."""
     message = f"{shown!r}: contig {contig!r} occurs twice in the index; expected each name once"
     return InputError(message)
+
+
+def listed_names(names: Iterable[str]) -> str:
+    """Return the first names in sorted order as text for an error message, with `...` for more."""
+    ordered = sorted(names)
+    listed = ", ".join(ordered[:_LISTED_CONTIGS])
+    return f"{listed}, ..." if len(ordered) > _LISTED_CONTIGS else listed
 
 
 class Genome(ABC):
@@ -92,10 +99,7 @@ class Genome(ABC):
         last = as_limit("end", end)
         length = self.contigs.get(contig)
         if length is None:
-            names = sorted(self.contigs)
-            listed = ", ".join(names[:_LISTED_CONTIGS])
-            if len(names) > _LISTED_CONTIGS:
-                listed += ", ..."
+            listed = listed_names(self.contigs)
             message = f"contig {contig!r} is not in the genome; expected one of {listed}"
             raise InputError(message)
         if last < first - 1:
