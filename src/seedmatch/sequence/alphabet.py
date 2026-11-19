@@ -77,6 +77,18 @@ def _decode_table() -> bytes:
 _DECODE_TABLE: Final = _decode_table()
 
 
+def _complement_code_table() -> NDArray[np.uint8]:
+    """Map each mask to the mask of its complement. Each other value maps to 0."""
+    table = np.zeros(_TABLE_SIZE, dtype=np.uint8)
+    for letter, mask in MASKS.items():
+        table[mask] = MASKS[_COMPLEMENT[letter]]
+    table.flags.writeable = False
+    return table
+
+
+_COMPLEMENT_CODE_TABLE: Final = _complement_code_table()
+
+
 def _translate(text: str, table: bytes) -> bytes:
     """Map each letter of the text through the table. Raise for the first letter that is not DNA."""
     # A character outside ASCII becomes "?", which the tables map to 0, so the position stays the
@@ -110,3 +122,11 @@ def decode_dna(codes: NDArray[np.uint8]) -> str:
 def reverse_complement(text: str) -> str:
     """Return the reverse complement of IUPAC DNA text, in uppercase."""
     return _translate(text, _COMPLEMENT_TABLE)[::-1].decode("ascii")
+
+
+def reverse_complement_codes(codes: NDArray[np.uint8]) -> NDArray[np.uint8]:
+    """Return the complement mask of each code, in reverse order.
+
+    A value that is not a mask becomes 0, which `decode_dna` rejects.
+    """
+    return _COMPLEMENT_CODE_TABLE[codes[::-1]]

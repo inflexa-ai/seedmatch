@@ -5,7 +5,6 @@ import gzip
 import io
 import lzma
 import os
-import re
 import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,6 +14,7 @@ from typing import Final, TextIO
 import pandas as pd
 
 from seedmatch._checks import as_cutoff, check_columns, check_numeric_columns
+from seedmatch._io import local_path
 from seedmatch.errors import InputError
 
 DE_REQUIRED_COLUMNS: Final = ("gene_id", "baseMean", "log2FoldChange", "pvalue", "padj")
@@ -31,7 +31,6 @@ _DESEQ2_COLUMNS: Final = (
 )
 _NUMERIC_COLUMNS: Final = ("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj")
 _FILTER_COLUMNS: Final = ("baseMean", "log2FoldChange", "pvalue", "padj")
-_URL: Final = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 _GZIP_MAGIC: Final = b"\x1f\x8b"
 _BZIP2_MAGIC: Final = b"BZh"
 _XZ_MAGIC: Final = b"\xfd7zXZ\x00"
@@ -72,12 +71,10 @@ def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
     field is missing in a number column.
     """
     shown = os.fspath(path)
-    if _URL.match(shown):
-        message = f"{shown!r}: the path is a URL; expected a local path"
-        raise InputError(message)
+    file = local_path(shown)
     try:
         # pandas gets an open handle and no path, so it cannot open a URL or guess a compression.
-        with _open_text(Path(shown)) as handle, warnings.catch_warnings():
+        with _open_text(file) as handle, warnings.catch_warnings():
             # With index_col=False, pandas drops the extra fields of a row and only warns.
             warnings.simplefilter("error", pd.errors.ParserWarning)
             table = pd.read_csv(

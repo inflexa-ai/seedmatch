@@ -1,0 +1,16 @@
+# generated-by: tools/golden/R/annotation.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# ensembldb: 2.34.0
+# GenomicFeatures: 1.62.0
+# rtracklayer: 1.70.1
+# Rsamtools: 2.26.0
+name	rank	seqnames	start	end	strand
+ENSSYNT00000000001	1	1	64000	64150	+
+ENSSYNT00000000003	1	1	29000	29200	-
+ENSSYNT00000000003	2	1	27202	27400	-
+ENSSYNT00000000007	1	X	1001	1200	+
+ENSSYNT00000000009	1	1	50001	50100	+
+ENSSYNT00000000010	1	1	67150	67300	-
+ENSSYNT00000000012	1	1	80001	80199	+

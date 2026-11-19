@@ -209,10 +209,9 @@ def test_filter_de_names_a_filter_column_that_is_not_numeric(column):
         filter_de(cases)
 
 
-@pytest.mark.parametrize(
-    "url", ["https://example.org/de.tsv", "ftp://example.org/de.tsv", "s3://bucket/de.tsv"]
-)
-def test_read_deseq2_table_refuses_a_url_and_opens_no_connection(monkeypatch, url):
+def test_read_deseq2_table_refuses_a_url_and_opens_no_connection(monkeypatch):
+    url = "https://example.org/de.tsv"
+
     def refuse(*_args, **_kwargs):
         message = "urlopen was called"
         raise AssertionError(message)

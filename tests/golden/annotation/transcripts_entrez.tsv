@@ -1,0 +1,12 @@
+# generated-by: tools/golden/R/annotation.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# ensembldb: 2.34.0
+# GenomicFeatures: 1.62.0
+# rtracklayer: 1.70.1
+# Rsamtools: 2.26.0
+tx_id	gene_id	seqnames	start	end	strand	tx_biotype	tx_cds_seq_start	tx_cds_seq_end	tx_support_level	tx_is_canonical
+ENSSYNT00000000009	ENSSYNG00000000006	1	50001	50600	+	protein_coding	50101	50595	NA	1
+ENSSYNT00000000002	ENSSYNG00000000001	1	64000	66700	+	protein_coding	64151	65200	NA	0
+ENSSYNT00000000001	ENSSYNG00000000001	1	64000	66500	+	protein_coding	64151	65200	1	1

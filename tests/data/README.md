@@ -15,6 +15,25 @@
 - a value below a cutoff
 - a negative fold change
 
+## Annotation fixture
+
+The files in `annotation/` are synthetic. They are not copies of SeedMatchR data. The script `tools/fixtures/annotation.py` writes each file from one specification:
+
+- `synthetic.sqlite`: an EnsDb with schema 2.2
+- `synthetic.2bit` and `synthetic.v1.2bit`: the genome in the 2bit format of version 0 and of version 1
+- `synthetic.fa`: the genome in the FASTA format, with the soft-masked bases in lowercase
+- `synthetic.fa.gz`: the BGZF file of `synthetic.fa`
+- the `.fai` and `.gzi` files: the indexes that `samtools faidx` and `bgzip` write
+- `synthetic.gtf` and `synthetic.gencode.gtf.gz`: the annotation in the Ensembl style and in the GENCODE style
+
+To make the files again, run the script from the repository root. The script runs `bgzip` of htslib and `samtools`, thus they must be on `PATH`:
+
+```bash
+uv run python tools/fixtures/annotation.py
+```
+
+The R golden files in `tests/golden/annotation/` come from these files. `tools/golden/README.md` gives the command.
+
 ## License
 
 SeedMatchR is distributed under the MIT License. Copyright (c) 2025 Eli Lilly and Company. The `LICENSE` file in the repository root holds the full text of the license.

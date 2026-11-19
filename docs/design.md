@@ -43,7 +43,7 @@ The source of truth for behavior is the SeedMatchR repository at commit `2fc0c4f
 - The runtime dependencies come only from the inflexa package-store lock (`../inflexa/images/package-store/lock.amd64.json`):
   - required: `numpy`, `pandas`, `scipy`, `numba`
   - extra `plot`: `matplotlib`
-  - extra `fasta`: `pysam`, to read a BGZF FASTA genome
+- The genome readers use only the standard library (`mmap`, `zlib`, `sqlite3`) and numpy. Thus a BGZF FASTA genome needs no extra.
 - A new runtime dependency needs an entry in the inflexa manifest. Thus, prevent it.
 - The wheel is pure Python. The inflexa build images have no Rust toolchain. Numba compiles the search kernels at run time.
 - The kernels use `@njit(cache=True)`. In the sandbox, the package directory is read-only. Thus numba writes its cache to `NUMBA_CACHE_DIR` or to its user cache. An inflexa warm script can fill this cache later.
@@ -92,7 +92,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 | `seedmatch.sequence` | IUPAC alphabet as 4-bit masks. `SequenceSet`: names, one `uint8` buffer, and offsets. FASTA read and write. |
 | `seedmatch.seed` | `Guide`, `Seed` (enum of the canonical seeds, plus a custom window), and the target derivation. |
 | `seedmatch.search` | Numba kernels and the search API. |
-| `seedmatch.annotation` | EnsDb reader, 2bit reader, GTF reader, BGZF FASTA genome (extra), filters, feature derivation, sequence extraction, `Reference`. |
+| `seedmatch.annotation` | EnsDb reader, GTF reader, 2bit and FASTA genome readers (plain and BGZF), filters, feature derivation, sequence extraction, `Reference`. |
 | `seedmatch.de` | DE table schema, the reader for the GEO DESeq2 files, the filter. |
 | `seedmatch.stats` | KS and Wilcoxon with the R rules, DTS, Wasserstein areas, ECDF test, PR and ROC curves. |
 | `seedmatch.report` | Full search, best match, report. |
@@ -107,7 +107,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 
 - Only `seedmatch.fetch` can import a network module. The ruff rule `TID251` (banned API) bans these modules in all other code: `urllib.request`, `http.client`, `socket`, `ssl`, `urllib3`, `requests`, `httpx`. A per-file ignore lets `src/seedmatch/fetch/**` use them.
 - The same rule bans `seedmatch.fetch` in each module outside `seedmatch.fetch`.
-- `import seedmatch` does not import matplotlib, pysam, or `seedmatch.fetch`.
+- `import seedmatch` does not import matplotlib or `seedmatch.fetch`.
 - A computation function returns data. A plot function takes a result and returns a `matplotlib.figure.Figure`. No function writes a file unless it has an explicit output path parameter.
 - A reader reads only the part of a file that the call needs:
   - The 2bit reader uses `mmap` and decodes only the requested ranges.
@@ -223,41 +223,60 @@ The port copies the algorithm of `R/wass_dist.R:61-81`:
 
 ### EnsDb and 2bit (the parity path)
 
-- The EnsDb is an SQLite file with the ensembldb schema. The reader uses the standard `sqlite3` module in read-only mode (`file:...?mode=ro`, URI open).
-- `TranscriptFilter` has these fields. Their semantics come from `build_annotation_filter` (`R/load_annotations.R:242-339`):
-  - `standard_chromosomes` (R keeps `1` to `22`, `X`, `Y` for each species)
-  - `require_tx_id`
-  - `protein_coding` (gene biotype and transcript biotype)
-  - `canonical` (`tx_is_canonical = 1`)
-  - `support_level`
-  - `gene_ids`, `tx_ids`, `symbols`, `entrez_ids`
+- The EnsDb is an SQLite file with the ensembldb schema. The reader uses the standard `sqlite3` module. It opens the file read-only and immutable (`file:...?mode=ro&immutable=1`, URI open). Thus the reader can open a file in a read-only store.
+- The reader needs the tables `gene`, `tx`, `tx2exon`, and `exon`. A filter that needs an optional column (`tx_is_canonical`, `tx_support_level`) or the `entrezgene` table raises `InputError` if the file does not have it. The message gives the file and the column.
+- The EnsDb `chromosome` table gives the length of each contig. If the genome gives a different length for a contig, `Reference` raises `InputError`. Thus a genome of a different build causes an error.
+- `TranscriptFilter` has these fields. Their semantics come from `build_annotation_filter` (`R/load_annotations.R:242-339`) and from the SQL that ensembldb 2.34.0 runs:
+  - `standard_chromosomes`: `seq_name` is one of `1` to `22`, `X`, and `Y`, for each species, or one of these names with the prefix `chr`
+  - `require_tx_id`: `tx_id != ''`
+  - `protein_coding`: the gene biotype and the transcript biotype are `protein_coding`
+  - `canonical`: `tx_is_canonical = 1`
+  - `support_level`: `tx_support_level` is equal to the value, from 1 to 5, as `TxSupportLevelFilter` does
+  - `gene_ids`, `tx_ids`, `symbols` (`gene_name`), `entrez_ids`: the value is one of the given values
   - `tx_biotypes`, `gene_biotypes` (these replace the free `add.filter`)
-- The feature derivation copies `ensembldb`:
-  - `threeUTRsByTranscript` and `fiveUTRsByTranscript` cut the exons at the CDS boundary, on the correct strand.
-  - `exonsBy(by = "tx")` and `cdsBy(by = "tx")` group the ranges by transcript.
-- The order of the transcripts in each result must be the R order, because it sets the row order of the searches.
-- The sequence extraction copies `GenomicFeatures::extractTranscriptSeqs`. It joins the ranges in the order of the list. On the minus strand, it uses the reverse complement.
-- `longest_utr` copies `.get_longest_utr`: the first transcript with the maximum 3' UTR length for each gene, in the order of the sorted `gene_id` values.
-- `reduce_features` gives the union of the 3' UTR ranges of each gene, as `.reduce_features` does. On the minus strand, `GenomicRanges::reduce` gives the ranges sorted by position, which is not the transcript order. If the R golden shows a wrong join order, the port joins the ranges in transcript order. This is then a divergence.
-- `min_width` removes each sequence that is shorter than the width.
-- Each sequence keeps its transcript ID and its gene ID as two fields of `SequenceSet`. R replaces the names with gene IDs, thus two sequences can have the same name. With `reduce.features`, R gives the name `NA` to each sequence (`R/load_annotations.R:103-107`).
+- The defaults are the defaults of `load_annotations`. Thus `canonical` is true, but the default of `build_annotation_filter` is false.
+- A field with a set of values takes a sequence. A `str` raises `InputError`, because it is one ID and not a set. An empty sequence raises `InputError`, because it keeps no transcript.
+- The feature derivation copies `ensembldb`. The EnsDb CDS includes the stop codon. The rnor7 probe shows this: the 3' UTR starts at `tx_cds_seq_end + 1`.
+  - On the plus strand, the 3' UTR is the part of each exon after `tx_cds_seq_end`. The 5' UTR is the part before `tx_cds_seq_start`. On the minus strand, the two parts change places.
+  - The CDS is the part of each exon from `tx_cds_seq_start` to `tx_cds_seq_end`.
+  - The 5' UTR, 3' UTR, and CDS results have each transcript with a CDS. The exon result has each transcript.
+  - R gives a range of width 0 to a transcript without the feature, for example to 4168 of the 23036 canonical rat 3' UTRs. The port gives such a transcript no range. The sequence is empty in the two cases, thus `min_width` removes it.
+- The order of each result is the R order, because it sets the row order of the searches. The SQL that ensembldb runs shows the order:
+  - Each transcript: the transcripts in the order of `tx_id`. The ranges of a transcript come in the order of `exon_idx`, thus in transcript order.
+  - `Reference.transcripts`: the order of `seq_name`, then of `tx_seq_start`. ensembldb sorts in SQL on these two columns only, thus a tie keeps the scan order of SQLite. The port sorts on 4 keys explicitly: `seq_name`, `tx_seq_start`, the row order of the `gene` table, and the row order of the `tx` table (`D-030`).
+  - The scan order of SQLite depends on the query plan. With the filter on the standard chromosomes, SQLite reads the `gene` table first. Without it, SQLite reads the `tx` table first. An EnsDb from ensembldb has the `tx` rows of each gene in the order of the `gene` rows, thus the two scan orders agree. The rnor7 probe shows this for each tie. The fixture has a tie of two genes whose row orders disagree.
+- The sequence extraction copies `GenomicFeatures::extractTranscriptSeqs`. It joins the ranges in the order of the list. On the minus strand, it uses the reverse complement of each range.
+- `PerGene` selects the transcripts of a gene:
+  - `EACH_TRANSCRIPT` is the default. The result has one sequence for each transcript.
+  - `LONGEST` copies `.get_longest_utr`. The genes come in the order of `gene_id`. For each gene, the result has the first transcript with the maximum length, in the order of `Reference.transcripts`. Only a transcript in the feature result is a candidate (`D-028`).
+  - `UNION` copies `.reduce_features`. The genes come in the order of `gene_id`. The union merges the ranges that overlap or touch. The ranges of the union come in transcript order (`D-027`).
+  - R applies `longest.utr` and `reduce.features` only to the 3' UTR. The port applies `PerGene` to each feature type (`D-029`).
+- `min_width` removes each sequence that is shorter than the width. The default is 8, the default of `min.feature.width`.
+- Each sequence keeps its transcript ID and its gene ID as two fields of `SequenceSet`. With `UNION`, the ID of a sequence is its gene ID. R replaces the names with gene IDs, thus two sequences can have the same name. With `reduce.features`, R gives the name `NA` to each sequence (`R/load_annotations.R:103-107`).
 - A gene-level result uses an explicit rule. A seed count for a gene is the maximum over its sequences. The best match of a gene is the best over its sequences. R uses the first sequence for the counts (`R/SeedMatchR.R:207`), but each sequence for the report (`R/SeedMatchReport.R:85-99`). These are divergences.
 - The rat 2bit file is soft-masked. Biostrings changes lowercase letters to uppercase, thus the reader also does this.
-- The 2bit reader supports the UCSC format, version 0 and version 1 (64-bit offsets). It applies the N blocks.
+- The 2bit reader supports the UCSC format, version 0 and version 1 (64-bit offsets), in each byte order. It applies the N blocks.
 
 ### GTF and FASTA (the catalog path)
 
-- `Reference.from_gtf(gtf, fasta)` reads an Ensembl or GENCODE GTF and a FASTA genome.
-- An Ensembl GTF CDS line excludes the stop codon, but an EnsDb CDS includes it. Thus the 3' UTR derivation from a GTF uses the CDS and the `stop_codon` features together.
-- The canonical flag comes from the `Ensembl_canonical` tag. The support level comes from `transcript_support_level`.
-- GENCODE contig names have the `chr` prefix, but the Ensembl FASTA names do not. The reader makes the names agree, and it stops with an error if no contig name agrees.
+- `Reference.from_gtf(gtf, genome)` reads an Ensembl or GENCODE GTF, plain or compressed. The genome is a 2bit file or a FASTA file.
+- The GTF reader streams the file. It writes the transcripts and the exons into an in-memory SQLite database with the EnsDb tables. Thus the GTF path uses the same filters, feature derivation, and order rules as the EnsDb path. The memory is linear in the number of exon lines.
+- The row order of the in-memory tables is the line order of the GTF.
+- An Ensembl GTF CDS line excludes the stop codon, but an EnsDb CDS includes it. Thus the CDS of a transcript goes from the first base to the last base of its `CDS` and `stop_codon` lines.
+- The canonical flag comes from the `Ensembl_canonical` tag. The support level is the integer at the start of `transcript_support_level`. The biotypes come from `gene_biotype` and `transcript_biotype`, or from the GENCODE attributes `gene_type` and `transcript_type`.
+- A GTF has no Entrez IDs, thus a filter on `entrez_ids` raises `InputError`.
+- The IDs stay as the GTF gives them. Thus a GENCODE ID keeps its version suffix.
+- The FASTA genome reader reads a plain FASTA file with its `.fai` index, or a BGZF file with its `.fai` and `.gzi` indexes. It uses only `zlib` and `mmap`. It decompresses only the blocks of the requested range. A gzip file that is not BGZF raises `InputError`.
+- GENCODE contig names have the prefix `chr`, but the Ensembl FASTA names do not. For each contig, the extraction uses the first genome name that exists: the same name, the name without `chr`, or the name with `chr`. `chrM` and `MT` are the same contig. If no contig name of the annotation agrees with a genome contig, `Reference` raises `InputError`.
 - This path makes no parity claim, because the catalog has a different Ensembl release from SeedMatchR. A consistency test compares this path with the EnsDb path on one Ensembl release.
 
 ### Reference objects
 
-- `Reference.from_paths(ensdb=..., genome=...)` takes explicit paths.
+- `Reference.from_paths(ensdb=..., genome=...)` takes explicit paths. The genome is a 2bit file or a FASTA file. The first bytes of the file show the format.
 - `Reference.from_directory(path)` finds exactly one EnsDb (`*.sqlite`) and one genome (`*.2bit`, or `*.fa.gz` with its indexes). It stops with an error if a file is absent or if there is more than one candidate.
 - This fits the inflexa catalog layout `managed/<id>/<version>/`, which keeps the upstream file names.
+- `Reference.transcripts(transcript_filter)` gives a `DataFrame` of the transcripts, as `ensembldb::transcripts` does. `Reference.features(feature, transcript_filter, per_gene=...)` gives the ranges of each feature. `Reference.sequences(feature, transcript_filter, per_gene=..., min_width=8)` gives a `SequenceSet`.
+- A `Reference` holds an open database and an open genome. `close()` and the `with` statement release them.
 
 ## Resources and fetch
 
@@ -338,6 +357,10 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `SeedMatchReport` | A NaN cutoff gives no off-target. A bool cutoff, a text cutoff, or a text `log2FoldChange` or `padj` column gives a wrong count (`R/SeedMatchReport.R:94-99`). R gives no message. | The report raises `InputError` for these inputs. |
 | `filter_res` | A NaN cutoff keeps no row, and a bool or text cutoff gives a wrong result (`R/filter_res.R:64-70`). R gives no message. A `NULL` cutoff stops with a dplyr error. | `filter_de` raises `InputError` for these cutoffs. |
 | `SeedMatchReport` with `allow_wobbles` | The default `fixed = T` matches the wobble letter `R` only to `R`, thus the wobble finds fewer matches (`R/SeedMatchReport.R:51,55`). The R documentation tells the user to set `fixed` to `FALSE` with wobbles (`R/SeedMatchR.R:37`). | `ReportOptions` and `FullSearchOptions` raise `InputError` for `wobble=True` with `fixed_pattern=True`. With a fixed pattern, `annotate_seed_counts` raises `InputError` for a target with an ambiguity letter. |
+| `.reduce_features` (used by `load_annotations` with `reduce.features`) | `GenomicRanges::reduce` gives the ranges of a gene in the order of the position (`R/load_annotations.R:210`). On the minus strand, `extractTranscriptSeqs` then joins the ranges in the wrong order. The rnor7 probe shows a wrong sequence. | The ranges of the union come in transcript order. |
+| `.get_longest_utr` | A gene without a coding transcript stops the function with `subscript contains invalid names` (`R/load_annotations.R:408-415`), for example with `protein.coding = FALSE`. | Only a transcript with the feature is a candidate. A gene without a candidate has no sequence. |
+| `load_annotations` with `longest.utr` or `reduce.features` | R applies the two options only to the 3' UTR. For the other feature types, it ignores them without a message (`R/load_annotations.R:82-91`). | `PerGene` applies to each feature type. |
+| `ensembldb::transcripts` (used by `load_annotations` for `$gtf`, and by `.get_longest_utr` through `transcriptLengths`) | The SQL sorts on `seq_name` and `tx_seq_start` only. A tie of two genes then gets the scan order of the SQLite query plan, and the plan depends on the filter. The fixture golden gives two orders for one tie. | The order of a tie is the row order of the `gene` table, then of the `tx` table, for each filter. |
 
 ## Tests
 
@@ -372,16 +395,20 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 
 ### Annotation
 
-- Synthetic fixture: a script in `tools/fixtures/` takes a real EnsDb and keeps a small set of genes. It moves each gene region onto a small synthetic contig and writes a matching 2bit file. R reads the same fixture to make the goldens. Thus R also makes sure that the 2bit writer of the script is correct.
+- Synthetic fixture: a Python script in `tools/fixtures/` writes the fixture from one specification: an EnsDb with schema 2.2, a 2bit file, a FASTA file, an Ensembl GTF, and a GENCODE GTF. `bgzip` of htslib and `samtools faidx` write the BGZF file and its indexes. Thus the FASTA reader reads files from an independent writer. R reads the EnsDb, the 2bit file, and the BGZF file to make the goldens. Thus R also makes sure that the 2bit writer of the script is correct.
+- `ensembldb::ensDbFromGtf` does not make the fixture, because it writes schema 1.0 and it downloads the contig lengths.
 - The fixture has these cases:
   - a minus-strand transcript with a 3' UTR across more than one exon
   - a CDS that ends at an exon boundary
+  - a coding transcript without a 3' UTR
   - a non-coding transcript
   - a transcript on a non-standard contig
-  - a gene with more than one transcript
+  - a gene with more than one transcript, with two transcripts that have the same 3' UTR length and the same start
+  - 3' UTRs of one gene that overlap or touch
   - soft-masked bases and N blocks
-- Real references: tests with the marker `refs` read the directory in `SEEDMATCH_TEST_REFS`. They compare the 3' UTR sequences of `rnor7` and `hg38` with R digests: the name, the length, and the SHA-256 of each sequence. If the variable is not set, the tests skip and give the reason.
-- Consistency: for one Ensembl release, the GTF and FASTA path gives the same sequences as the EnsDb and 2bit path.
+  - a range across a BGZF block boundary
+- Real references: tests with the marker `refs` read the directory in `SEEDMATCH_TEST_REFS`. They compare the feature sequences of `rnor7` with R digests: the names, the length, and the first 16 hexadecimal digits of the SHA-256 digest of each sequence. The digest files are gzip TSV files. A later plan adds `hg38`. If the variable is not set, the tests skip and give the reason.
+- Consistency: on the fixture, each GTF gives the same sequences as the EnsDb. On `rnor7`, the Ensembl release 109 GTF gives the same sequences as the EnsDb of release 109.
 
 ### Core without network
 
@@ -453,7 +480,7 @@ Each step ends with ruff, mypy, and the tests of that step.
 
 ### Calls of the designer
 
-- Numba kernels. Runtime dependencies only from the inflexa store lock, with the `plot` and `fasta` extras.
+- Numba kernels. Runtime dependencies only from the inflexa store lock, with the `plot` extra. The genome readers use only the standard library and numpy.
 - R coordinates: 1-based and inclusive.
 - No layer with the R function names.
 - `SequenceSet` keeps the transcript ID and the gene ID. Gene-level results use the maximum count and the best match.

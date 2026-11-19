@@ -7,7 +7,12 @@ from hypothesis import strategies as st
 
 from seedmatch.errors import InputError
 from seedmatch.sequence import reverse_complement
-from seedmatch.sequence.alphabet import MASKS, decode_dna, encode_dna
+from seedmatch.sequence.alphabet import (
+    MASKS,
+    decode_dna,
+    encode_dna,
+    reverse_complement_codes,
+)
 
 IUPAC = "ACGTMRWSYKVHDBN"
 COMPLEMENT_PAIRS = {
@@ -74,6 +79,42 @@ def test_complement_of_a_letter_covers_the_complement_of_each_base_of_the_letter
     bases = [b for b in "ACGT" if MASKS[b] & MASKS[letter]]
     expected = sum(MASKS[COMPLEMENT_PAIRS[b]] for b in bases)
     assert MASKS[reverse_complement(letter)] == expected
+
+
+@pytest.mark.parametrize("letter", IUPAC)
+def test_reverse_complement_codes_of_a_letter_equals_the_code_of_its_reverse_complement(letter):
+    expected = encode_dna(reverse_complement(letter))
+    assert np.array_equal(reverse_complement_codes(encode_dna(letter)), expected)
+
+
+@given(st.text(alphabet=IUPAC))
+def test_reverse_complement_codes_equals_the_codes_of_the_reverse_complement(s):
+    assert np.array_equal(
+        reverse_complement_codes(encode_dna(s)), encode_dna(reverse_complement(s))
+    )
+
+
+def test_reverse_complement_codes_gives_a_new_uint8_array_and_keeps_its_input():
+    codes = encode_dna("ACGTN")
+    result = reverse_complement_codes(codes)
+    assert result.dtype == np.uint8
+    assert result.tolist() == [15, 1, 2, 4, 8]
+    assert codes.tolist() == [1, 2, 4, 8, 15]
+    result[0] = 0
+    assert codes.tolist() == [1, 2, 4, 8, 15]
+
+
+def test_reverse_complement_codes_of_an_empty_array_is_an_empty_uint8_array():
+    result = reverse_complement_codes(np.zeros(0, dtype=np.uint8))
+    assert result.dtype == np.uint8
+    assert result.shape == (0,)
+
+
+def test_reverse_complement_codes_maps_a_value_that_is_not_a_mask_to_zero():
+    result = reverse_complement_codes(np.array([1, 16, 255, 0], dtype=np.uint8))
+    assert result.tolist() == [0, 0, 0, 8]
+    with pytest.raises(InputError, match=r"mask 0 at position 1"):
+        decode_dna(result)
 
 
 def test_reverse_complement_changes_lowercase_to_uppercase():
