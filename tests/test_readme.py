@@ -16,6 +16,8 @@ def python_examples() -> list[str]:
 @pytest.fixture
 def readme_namespace(tmp_path, monkeypatch):
     shutil.copy(DATA / "Test_seqs.fa", tmp_path / "transcripts.fa")
+    shutil.copy(DATA / "annotation" / "synthetic.sqlite", tmp_path / "ensdb.sqlite")
+    shutil.copy(DATA / "annotation" / "synthetic.2bit", tmp_path / "genome.2bit")
     # The test table has a ninth column, mer7m8. read_deseq2_table accepts only 8 columns (D-021).
     sirna_de().drop(columns="mer7m8").to_csv(
         tmp_path / "deseq2_results.tsv", sep="\t", index=False, na_rep="NA"
@@ -43,3 +45,11 @@ def test_readme_example_adds_the_seed_count_column(readme_namespace):
     de = readme_namespace["de"]
     assert de["mer7m8"].dtype == "int64"
     assert de["mer7m8"].sum() > 0
+
+
+def test_readme_annotation_example_gives_the_r_sequences(readme_namespace):
+    utr3 = readme_namespace["utr3"]
+    expected = golden("annotation/utr3_sequences.tsv")
+    assert list(utr3.ids) == expected["name_tx"].tolist()
+    assert [utr3.sequence(i) for i in range(len(utr3))] == expected["sequence"].tolist()
+    assert len(readme_namespace["utr3_counts"]) == len(utr3)

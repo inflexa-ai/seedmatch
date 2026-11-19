@@ -29,6 +29,16 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: A caller who sets `with.indels` or `min.mismatch` expects the ranges to obey them, as the counts do. In R, the ranges and the counts of one call can disagree.
 - Test: `test_ranges_obey_the_indels_flag_D001` and `test_ranges_obey_min_mismatch_D001` in `tests/search/test_api.py`.
 
+## D-002: Each sequence of a gene union keeps its gene ID
+
+- ID: `D-002`
+- R location: `load_annotations` (`R/load_annotations.R:103-107`). `.reduce_features` splits the features by gene (`R/load_annotations.R:207-210`). `get_3UTR_granges` calls it when `reduce.features` is `TRUE` (`R/load_annotations.R:376-378`).
+- R behavior: With `reduce.features = TRUE`, the names of the features are gene IDs. `extractTranscriptSeqs` gives these names to the sequences. `tx.gtf` keeps the transcripts whose `tx_id` is one of these names (`R/load_annotations.R:103`). No transcript ID is a gene ID, thus `tx.gtf` has no row. Then `match` finds no gene ID for the names (`R/load_annotations.R:105-107`), and each sequence gets the name `NA`. This evidence shows the behavior:
+  - `tests/golden/annotation/utr3_union_r_sequences.tsv` comes from the unpatched R. `name_gene` is `NA` in each row, and `name_tx` holds the gene IDs.
+- New behavior: A sequence of `PerGene.UNION` has its gene ID as its ID and as its gene ID. No sequence has the name `NA`.
+- Reason: A result for a gene joins the sequences with the DE table through the gene ID. A sequence with the name `NA` matches no gene.
+- Test: `test_union_sequences_keep_the_gene_id_D002` in `tests/annotation/test_reference.py`.
+
 ## D-003: Gene-level results use the maximum over the sequences of a gene
 
 - ID: `D-003`
@@ -42,6 +52,17 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `annotate_seed_counts` gives each gene the maximum count over the sequences of the gene. A gene without a sequence gets 0. `seed_match_report` counts each gene once, in the class of its best match over the sequences of the gene. This best match is the best match of the maximum of each count column. The `matches` table keeps one row for each sequence.
 - Reason: The count of a gene must not depend on the order of its sequences. In R, the first sequence in the input decides the count. The DE table has one row for each gene. Thus a gene with more than one sequence must count once in the report.
 - Test: `test_gene_count_is_the_maximum_over_its_sequences_D003` and `test_the_maximum_does_not_depend_on_the_order_of_the_sequences_D003` in `tests/report/test_annotate.py`. `test_report_counts_genes_not_sequences_D003` and `test_the_best_match_of_a_gene_is_the_best_over_its_sequences_D003` in `tests/report/test_report.py`.
+
+## D-009: A sequence has its transcript ID, and hg38-old is not a reference
+
+- ID: `D-009`
+- R location: `load_annotations` (`R/load_annotations.R:42`, `:116`) and `load_species_anno_db` (`R/load_annotations.R:144`, `:152-154`).
+- R behavior: The R source and an R probe show these defects:
+  - `hg38-old` is a choice of `reference.name` (`R/load_annotations.R:42`, `:144`). The table `ah.df` has no row for it, and thus no AnnotationHub ID (`R/load_annotations.R:152-154`).
+  - `tx.names` is `features.seqs$names` (`R/load_annotations.R:116`). The probe calls `load_annotations("rnor7", feature.type = "3UTR", canonical = FALSE)` on the fixture with its local EnsDb and 2bit file. It uses SeedMatchR 2.0.0, Biostrings 2.78.0, and S4Vectors 0.48.1. `$seqs` is a `DNAStringSet`. `$tx.names` is `NULL`, and so is `$seqs$names`. `mcols($seqs)` has no column. Thus the list does not give the transcript of each sequence. The names of the sequences are gene IDs by default (`return_gene_name = TRUE`).
+- New behavior: There is no `hg38-old`. `Reference.from_paths` and `Reference.from_directory` take the files of a reference. `Reference.sequences` gives the transcript ID of each sequence in `ids`, and the gene ID in `gene_ids`.
+- Reason: A caller must know the transcript of each sequence, for example to join the sequences with `Reference.transcripts`. A choice without an ID cannot load a reference.
+- Test: `test_sequence_ids_are_the_transcript_ids_D009` in `tests/annotation/test_reference.py`.
 
 ## D-012: The best match uses only the columns that the search made
 

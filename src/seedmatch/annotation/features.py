@@ -1,6 +1,7 @@
 """The ranges of a feature of each transcript, and the selection of the transcripts of a gene."""
 
 from dataclasses import dataclass
+from itertools import compress
 from typing import assert_never
 
 import numpy as np
@@ -80,6 +81,24 @@ class Features:
     def widths(self) -> NDArray[np.int64]:
         """Return the sum of the range widths of each feature, thus the length of its sequence."""
         return np.diff(_running_sum(self.ends - self.starts + 1)[self.offsets])
+
+    def at_least(self, min_width: int) -> "Features":
+        """Return the features whose sequence has at least `min_width` bases, in the same order."""
+        keep = self.widths() >= min_width
+        counts = np.diff(self.offsets)
+        offsets = np.zeros(int(keep.sum()) + 1, dtype=np.int64)
+        np.cumsum(counts[keep], out=offsets[1:])
+        in_kept = np.repeat(keep, counts)
+        selectors = keep.tolist()
+        return Features(
+            ids=tuple(compress(self.ids, selectors)),
+            gene_ids=tuple(compress(self.gene_ids, selectors)),
+            contigs=tuple(compress(self.contigs, selectors)),
+            strands=self.strands[keep],
+            starts=self.starts[in_kept],
+            ends=self.ends[in_kept],
+            offsets=offsets,
+        )
 
     def to_frame(self) -> pd.DataFrame:
         """Return one row for each range, with the rank of the range in its feature from 1."""

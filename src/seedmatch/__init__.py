@@ -1,5 +1,6 @@
 """seedmatch: a Python port of SeedMatchR."""
 
+from seedmatch.annotation import Features, FeatureType, PerGene, Reference, TranscriptFilter
 from seedmatch.de import filter_de, read_deseq2_table
 from seedmatch.errors import InputError, SeedMatchError
 from seedmatch.report import (
@@ -25,10 +26,14 @@ __all__ = [
     "NONSEED_SEEDS",
     "REPORT_CATEGORIES",
     "CustomSeed",
+    "FeatureType",
+    "Features",
     "FullSearchOptions",
     "FullSearchRangesOptions",
     "Guide",
     "InputError",
+    "PerGene",
+    "Reference",
     "ReportOptions",
     "SearchOptions",
     "Seed",
@@ -37,6 +42,7 @@ __all__ = [
     "SeedSpec",
     "SequenceSet",
     "Target",
+    "TranscriptFilter",
     "annotate_seed_counts",
     "best_match",
     "count_matches",

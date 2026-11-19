@@ -2,17 +2,24 @@
 
 import os
 from contextlib import ExitStack
-from typing import Self
+from pathlib import Path
+from typing import Final, Self
 
 import pandas as pd
 
-from seedmatch._checks import shown
+from seedmatch._checks import as_limit, check_not_negative, shown
+from seedmatch._io import local_path
 from seedmatch.annotation.ensdb import AnnotationDb
+from seedmatch.annotation.extract import extract_sequences
 from seedmatch.annotation.features import Features, derive_features
 from seedmatch.annotation.filters import FeatureType, PerGene, TranscriptFilter
 from seedmatch.annotation.genome import Genome, listed_names
 from seedmatch.annotation.genome_file import open_genome
 from seedmatch.errors import InputError
+from seedmatch.sequence.sequence_set import SequenceSet
+
+_ENSDB_SUFFIXES: Final = (".sqlite",)
+_GENOME_SUFFIXES: Final = (".2bit", ".fa.gz")
 
 
 class Reference:
@@ -45,6 +52,31 @@ class Reference:
             reference = cls(annotation, opened)
             stack.pop_all()
         return reference
+
+    @classmethod
+    def from_directory(cls, path: str | os.PathLike[str]) -> Self:
+        """Open the EnsDb and the genome of a directory, as `from_paths` does.
+
+        The directory has one file that ends with `.sqlite`, and one genome file that ends with
+        `.2bit` or `.fa.gz`. The index files of a FASTA file are not candidates, and the reader of
+        the FASTA file raises the error for a missing index. A directory that is absent raises
+        `FileNotFoundError`. A file that is not a directory, and an absent or a repeated candidate,
+        raise `InputError`.
+        """
+        directory = local_path(path)
+        found = os.fspath(directory)
+        if not directory.exists():
+            message = (
+                f"{found!r}: no such directory; expected a directory with an EnsDb and a genome"
+            )
+            raise FileNotFoundError(message)
+        if not directory.is_dir():
+            message = f"{found!r}: not a directory; expected a directory with an EnsDb and a genome"
+            raise InputError(message)
+        names = sorted(entry.name for entry in directory.iterdir() if entry.is_file())
+        ensdb = _only_candidate(directory, names, _ENSDB_SUFFIXES, "EnsDb")
+        genome = _only_candidate(directory, names, _GENOME_SUFFIXES, "genome")
+        return cls.from_paths(ensdb=ensdb, genome=genome)
 
     def transcripts(self, transcript_filter: TranscriptFilter = TranscriptFilter()) -> pd.DataFrame:
         """Return the transcripts that pass the filter, as `AnnotationDb.transcripts` does.
@@ -79,6 +111,27 @@ class Reference:
             transcript_filter, coding_only=feature is not FeatureType.EXONS
         )
         return derive_features(rows, feature, per_gene)
+
+    def sequences(
+        self,
+        feature: FeatureType,
+        transcript_filter: TranscriptFilter = TranscriptFilter(),
+        *,
+        per_gene: PerGene = PerGene.EACH_TRANSCRIPT,
+        min_width: int = 8,
+    ) -> SequenceSet:
+        """Return the sequence of the feature of each transcript or gene that passes the filter.
+
+        The ID of a sequence is its transcript ID, or its gene ID with `PerGene.UNION`. The gene ID
+        of a sequence is the gene of the transcript. A sequence on the minus strand is the reverse
+        complement of the genome. `min_width` removes each sequence that is shorter than the width,
+        also an empty one. The default is the default of `load_annotations`. `InputError` is raised
+        for a contig that the genome lacks.
+        """
+        width = as_limit("min_width", min_width)
+        check_not_negative("min_width", width)
+        features = self.features(feature, transcript_filter, per_gene=per_gene)
+        return extract_sequences(features.at_least(width), self.genome)
 
     def close(self) -> None:
         """Close the annotation and the genome."""
@@ -121,3 +174,24 @@ def _check_agreement(annotation: AnnotationDb, genome: Genome) -> None:
                 f"{length}; expected the same genome build"
             )
             raise InputError(message)
+
+
+def _only_candidate(
+    directory: Path, names: list[str], suffixes: tuple[str, ...], kind: str
+) -> Path:
+    """Return the one file of the directory whose name ends with a suffix, from the sorted names."""
+    candidates = [name for name in names if name.endswith(suffixes)]
+    expected = f"expected one file that ends with {' or '.join(suffixes)}"
+    if not candidates:
+        present = f"these files: {listed_names(names)}" if names else "no files"
+        message = (
+            f"{os.fspath(directory)!r}: no {kind} file; {expected}; the directory has {present}"
+        )
+        raise InputError(message)
+    if len(candidates) > 1:
+        message = (
+            f"{os.fspath(directory)!r}: more than one {kind} file ({', '.join(candidates)}); "
+            f"{expected}"
+        )
+        raise InputError(message)
+    return directory / candidates[0]

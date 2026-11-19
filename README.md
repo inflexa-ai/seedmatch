@@ -59,6 +59,22 @@ matches = report.matches
 
 If a gene has more than one sequence, make the set with `SequenceSet.from_records(records, gene_ids=...)`.
 
+To get the sequences from an annotation, open a `Reference`. A `Reference` joins an EnsDb file and a genome file of the same build. The genome file is a 2bit file, or a FASTA file with its index files.
+
+```python
+from seedmatch import FeatureType, Reference, count_matches
+
+with Reference.from_paths(ensdb="ensdb.sqlite", genome="genome.2bit") as ref:
+    # The 3' UTR of each canonical protein-coding transcript.
+    # The ID of a sequence is its transcript ID.
+    utr3 = ref.sequences(FeatureType.UTR3)
+
+# The number of seed matches in each 3' UTR, with the target of the example above.
+utr3_counts = count_matches(target, utr3)
+```
+
+`Reference.sequences` also takes a `TranscriptFilter` and a `PerGene` option. The defaults are the defaults of `load_annotations` in R. `PerGene.LONGEST` selects, for each gene, the transcript with the longest feature. For `FeatureType.UTR3`, this is the transcript with the longest 3' UTR. `PerGene.UNION` merges the ranges of the transcripts of a gene. `Reference.from_directory(path)` opens the one `.sqlite` file and the one `.2bit` or `.fa.gz` file of a directory.
+
 [`docs/r-map.md`](docs/r-map.md) gives the Python name of each R function, and the changes of the arguments.
 
 ## Differences from SeedMatchR
@@ -69,6 +85,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - A result for a gene uses all the sequences of the gene. R uses the first sequence for the seed count, and it counts each sequence in the report (D-003).
 - `full_search_ranges` gives a result for each input. R stops if each search finds a match, or if no search finds a match (D-022).
 - `wobble=True` with `fixed_pattern=True` raises `InputError`, because a fixed pattern matches the wobble letter R only to the letter R (D-026).
+- A sequence from an annotation keeps its transcript ID and its gene ID. In R, `load_annotations` gives the name `NA` to each sequence of a gene union (D-002), and `tx.names` is `NULL` (D-009).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -78,12 +95,13 @@ This version has the core path:
 - the FASTA reader and the sequence set
 - the seeds and the targets of a guide
 - the search: the counts and the ranges, with mismatches and indels
+- the annotation: the EnsDb file, the 2bit and FASTA genome files, and the feature sequences of a `Reference`
 - the DE table: the reader and the filter
 - the seed counts, `full_search`, `full_search_ranges`, and `seed_match_report`
 
 These parts of SeedMatchR are not in this version:
 
-- the annotation: EnsDb, 2bit, and GTF files, and the feature sequences
+- the annotation from a GTF file
 - the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and the PR and ROC curves
 - the downloads
 - the wobble and bulge search, the 3' compensatory search, the network scores, and the other small analyses

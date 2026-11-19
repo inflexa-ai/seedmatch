@@ -6,9 +6,12 @@ from typing import Any
 import pandas as pd
 
 from seedmatch import (
+    FeatureType,
     Guide,
+    Reference,
     Seed,
     annotate_seed_counts,
+    count_matches,
     filter_de,
     full_search_ranges,
     seed_match_report,
@@ -47,6 +50,12 @@ def run_core_pipeline() -> None:
     annotate_seed_counts(de, seqs, Guide(GUIDE).target(Seed.MER7M8))
     full_search_ranges(Guide(GUIDE), seqs)
     seed_match_report(de, seqs, Guide(GUIDE))
+    annotation = DATA / "annotation"
+    with Reference.from_paths(
+        ensdb=annotation / "synthetic.sqlite", genome=annotation / "synthetic.2bit"
+    ) as ref:
+        utr3 = ref.sequences(FeatureType.UTR3)
+    count_matches(Guide(GUIDE).target(Seed.MER7M8), utr3)
 
 
 # The columns that an R golden file names differently from the Python frames. The column `names` of

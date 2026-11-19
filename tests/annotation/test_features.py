@@ -426,6 +426,52 @@ def test_features_with_parts_that_fit_together_have_their_ranges():
     assert ranges_of(got.to_frame(), "B") == [(20, 30), (40, 50)]
 
 
+# B has no range, C is on the minus strand with its ranges in transcript order, and D has a range
+# of exactly 8 bases.
+AT_LEAST_PARTS = {
+    "ids": ("A", "B", "C", "D"),
+    "gene_ids": ("GA", "GB", "GC", "GD"),
+    "contigs": ("1", "2", "1", "3"),
+    "strands": np.array([1, 1, -1, -1], dtype=np.int8),
+    "starts": np.array([10, 40, 20, 100], dtype=np.int64),
+    "ends": np.array([15, 50, 30, 107], dtype=np.int64),
+    "offsets": np.array([0, 1, 1, 3, 4], dtype=np.int64),
+}
+
+
+@pytest.mark.parametrize(
+    ("min_width", "ids", "starts", "ends", "offsets"),
+    [
+        (0, ("A", "B", "C", "D"), [10, 40, 20, 100], [15, 50, 30, 107], [0, 1, 1, 3, 4]),
+        (7, ("C", "D"), [40, 20, 100], [50, 30, 107], [0, 2, 3]),
+        (8, ("C", "D"), [40, 20, 100], [50, 30, 107], [0, 2, 3]),
+        (9, ("C",), [40, 20], [50, 30], [0, 2]),
+        (23, (), [], [], [0]),
+    ],
+)
+def test_at_least_keeps_the_features_of_that_width_with_their_ranges(
+    min_width, ids, starts, ends, offsets
+):
+    features = Features(**AT_LEAST_PARTS)
+    got = features.at_least(min_width)
+    kept = [AT_LEAST_PARTS["ids"].index(name) for name in ids]
+    assert got.ids == ids
+    assert got.gene_ids == tuple(AT_LEAST_PARTS["gene_ids"][i] for i in kept)
+    assert got.contigs == tuple(AT_LEAST_PARTS["contigs"][i] for i in kept)
+    assert got.strands.tolist() == [int(AT_LEAST_PARTS["strands"][i]) for i in kept]
+    assert got.starts.tolist() == starts
+    assert got.ends.tolist() == ends
+    assert got.offsets.tolist() == offsets
+    assert got.widths().tolist() == [int(features.widths()[i]) for i in kept]
+
+
+def test_at_least_gives_arrays_that_are_read_only():
+    got = Features(**AT_LEAST_PARTS).at_least(8)
+    for array in (got.strands, got.starts, got.ends, got.offsets):
+        with pytest.raises(ValueError, match="read-only"):
+            array[0] = 0
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [

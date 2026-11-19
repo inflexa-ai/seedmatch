@@ -409,7 +409,7 @@ In `test_sequences_match_r`, the configs `utr3_union` and `utr3_union_min0` take
 
 - [ ] **Step 4: Update the documents and the core pipeline.**
   - `run_core_pipeline` also makes the 3' UTR sequences of the fixture and counts a target in them.
-  - `README.md`: an example block with `Reference.from_paths` and `ref.sequences(FeatureType.UTR3)`. Remove the annotation from "not in this version", and add the GTF path to the scope. `test_readme.py` copies `synthetic.sqlite` and `synthetic.2bit` to the names that the example uses.
+  - `README.md`: an example block with `Reference.from_paths` and `ref.sequences(FeatureType.UTR3)`. Remove EnsDb, 2bit, and FASTA from "not in this version", and add them to the scope. Task 7 adds the GTF path, because each task is a separate commit. `test_readme.py` copies `synthetic.sqlite` and `synthetic.2bit` to the names that the example uses.
   - `docs/r-map.md`: rows for `load_annotations`, `load_species_anno_db`, `build_annotation_filter`, `get_3UTR_granges`, `.get_longest_utr`, `.reduce_features`, `ensembldb::transcripts`, `extractTranscriptSeqs`, and `rtracklayer::TwoBitFile`. Record that a transcript without the feature has no range, but a range of width 0 in R. Record that `PerGene` replaces the two flags, and that `Reference.transcripts` replaces `$gtf` for all transcripts of the filter.
   - `docs/divergences.md`: `D-002` and `D-009`.
 
@@ -419,7 +419,7 @@ In `test_sequences_match_r`, the configs `utr3_union` and `utr3_union_min0` take
 
 **Files:**
 - Make: `src/seedmatch/annotation/gtf.py`
-- Modify: `src/seedmatch/_io.py` (move `_decompressed` and `_open_text` from `de.py` as `open_text`), `src/seedmatch/de.py`, `src/seedmatch/annotation/reference.py`
+- Modify: `src/seedmatch/_io.py` (move `_decompressed` and `_open_text` from `de.py` as `open_text`), `src/seedmatch/de.py`, `src/seedmatch/annotation/reference.py`, `README.md` (the GTF path in the scope and in "not in this version")
 - Test: `tests/annotation/test_gtf.py`
 
 **Interfaces:**
