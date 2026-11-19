@@ -189,6 +189,44 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: A wobble search with a fixed pattern loses the matches at each guide `U` without a message. The R documentation gives the rule, but R does not apply it. In `count_matches` and `find_matches`, a fixed ambiguity letter is a valid Biostrings search.
 - Test: `test_the_wobble_with_a_fixed_pattern_causes_an_error_D026` and `test_the_wobble_adds_in_silico_predictions_D026` in `tests/report/test_report.py`, and `test_annotate_rejects_a_wobble_target_with_a_fixed_pattern_D026` in `tests/report/test_annotate.py`.
 
+## D-027: The ranges of a gene union come in transcript order
+
+- ID: `D-027`
+- R location: `.reduce_features` (`R/load_annotations.R:183-213`). `get_3UTR_granges` calls it with `reduce.features = TRUE` (`R/load_annotations.R:376-378`), and `load_annotations` calls `get_3UTR_granges` (`R/load_annotations.R:84-87`).
+- R behavior: `GenomicRanges::reduce` gives the ranges of each gene in ascending order of the position (`R/load_annotations.R:210`). Then `GenomicFeatures::extractTranscriptSeqs` joins the ranges in the order of the list. On the minus strand, the first base of the transcript is in the range with the highest position. Thus the R sequence of a minus-strand gene with more than one range is wrong. This evidence shows the behavior:
+  - The rnor7 probe gives the ranges of a minus-strand gene in ascending order. The R sequence is equal to the join in list order, and it is not equal to the join in transcript order.
+  - `tests/golden/annotation/utr3_union_r_features.tsv` comes from the unpatched R. It gives the ranges of the minus-strand gene `ENSSYNG00000000002` in ascending order.
+  - `tests/golden/annotation/utr3_union_features.tsv` comes from R with the patch `tools/golden/patches/reduce_features.R`. The patch reverses the ranges of each minus-strand gene. The sequence of `ENSSYNG00000000002` in `utr3_union_r_sequences.tsv` is different from its sequence in `utr3_union_sequences.tsv`.
+- New behavior: `PerGene.UNION` merges the ranges of the transcripts of a gene that overlap or touch. The merged ranges come in transcript order: in ascending order on the plus strand, and in descending order on the minus strand.
+- Reason: A sequence must be the transcript sequence from 5' to 3'. The order of the ranges sets the order of the join, thus the R order gives a wrong sequence for a minus-strand gene.
+- Test: `test_union_gives_the_minus_strand_ranges_in_transcript_order_D027` and `test_features_match_r` in `tests/annotation/test_features.py`.
+
+## D-028: The longest transcript of a gene comes from the transcripts with the feature
+
+- ID: `D-028`
+- R location: `.get_longest_utr` (`R/load_annotations.R:406-418`). `get_3UTR_granges` calls it with `longest.utr = TRUE` (`R/load_annotations.R:370-372`).
+- R behavior: `.get_longest_utr` selects the longest transcript of each gene from `GenomicFeatures::transcriptLengths` (`R/load_annotations.R:408-411`). This table holds each transcript of the filter, also a transcript without a CDS. If a gene has no coding transcript, the selected transcript is not in the 3' UTR list. Then the subscript at `R/load_annotations.R:415` stops with "subscript contains invalid names". This evidence shows the behavior:
+  - In the rnor7 probe, `longest.utr = TRUE` with `protein.coding = FALSE` stops with "subscript contains invalid names".
+  - The notes of `tests/golden/annotation/utr3_longest_noncoding_features.tsv` record the same stop of the unpatched R on the fixture. The fixture gene `ENSSYNG00000000003` has only a lncRNA transcript.
+  - The golden comes from R with the patch `tools/golden/patches/get_longest_utr.R`. The patch keeps only the transcripts in the 3' UTR list.
+- New behavior: `PerGene.LONGEST` selects only from the transcripts in the feature result. For the 3' UTR, the 5' UTR, and the CDS, these are the transcripts with a CDS. A gene without such a transcript has no feature.
+- Reason: With `protein_coding=False`, a filter keeps the genes without a coding transcript, and R stops for each such filter. The patched R gives the result of the port.
+- Test: `test_longest_skips_a_gene_without_a_coding_transcript_D028` and `test_features_match_r` in `tests/annotation/test_features.py`.
+
+## D-029: PerGene applies to each feature type
+
+- ID: `D-029`
+- R location: `load_annotations` (`R/load_annotations.R:77-91`).
+- R behavior: `load_annotations` gives `longest.utr` and `reduce.features` only to `get_3UTR_granges`. For `5UTR`, `exons`, and `cds`, R ignores the two options and gives no warning. This evidence shows the behavior:
+  - The R source: the `switch` at `R/load_annotations.R:82-91` calls `ensembldb::fiveUTRsByTranscript`, `ensembldb::exonsBy`, and `ensembldb::cdsBy` without the two options. The message at `R/load_annotations.R:77-79` still says that R keeps the longest UTR of each gene.
+  - The fixture golden `tests/golden/annotation/exons_longest_r_features.tsv` gives the exons with `longest.utr = TRUE`. It is equal to `tests/golden/annotation/exons_all_features.tsv`, the exons without the option.
+- New behavior: `PerGene.LONGEST` and `PerGene.UNION` apply to each `FeatureType`. For the exons, `LONGEST` gives the transcript of each gene with the maximum sum of the exon widths.
+- Reason: An option without an effect and without a warning hides a caller error. The rule for the longest transcript and for the union does not depend on the feature type.
+- Test: these tests in `tests/annotation/test_features.py`:
+  - `test_per_gene_applies_to_the_exons_D029`
+  - `test_longest_and_union_agree_with_the_transcripts_for_each_feature_type_D029`
+  - `test_union_merges_a_range_inside_an_earlier_range_and_keeps_the_genes_apart`
+
 ## D-030: The order of a tie of two genes does not depend on the filter
 
 - ID: `D-030`

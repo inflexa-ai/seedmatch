@@ -6,8 +6,10 @@ from typing import Self
 
 import pandas as pd
 
+from seedmatch._checks import shown
 from seedmatch.annotation.ensdb import AnnotationDb
-from seedmatch.annotation.filters import TranscriptFilter
+from seedmatch.annotation.features import Features, derive_features
+from seedmatch.annotation.filters import FeatureType, PerGene, TranscriptFilter
 from seedmatch.annotation.genome import Genome, listed_names
 from seedmatch.annotation.genome_file import open_genome
 from seedmatch.errors import InputError
@@ -50,6 +52,33 @@ class Reference:
         The default filter is the default of `load_annotations`.
         """
         return self.annotation.transcripts(transcript_filter)
+
+    def features(
+        self,
+        feature: FeatureType,
+        transcript_filter: TranscriptFilter = TranscriptFilter(),
+        *,
+        per_gene: PerGene = PerGene.EACH_TRANSCRIPT,
+    ) -> Features:
+        """Return the ranges of the feature of the transcripts that pass the filter.
+
+        `per_gene` selects the transcripts of each gene. The default filter is the default of
+        `load_annotations`.
+        """
+        for name, value, kind in (
+            ("feature", feature, FeatureType),
+            ("per_gene", per_gene, PerGene),
+        ):
+            if not isinstance(value, kind):
+                message = (
+                    f"{name} {shown(value)} has type {type(value).__name__}; "
+                    f"expected a {kind.__name__}"
+                )
+                raise InputError(message)
+        rows = self.annotation.exon_rows(
+            transcript_filter, coding_only=feature is not FeatureType.EXONS
+        )
+        return derive_features(rows, feature, per_gene)
 
     def close(self) -> None:
         """Close the annotation and the genome."""

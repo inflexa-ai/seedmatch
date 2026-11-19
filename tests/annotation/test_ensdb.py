@@ -7,7 +7,7 @@ import stat
 
 import pandas as pd
 import pytest
-from annotation_cases import ANNOTATION, CASES, fixture_reference
+from annotation_cases import ANNOTATION, CASES, ENSDB, copy_ensdb, fixture_reference
 from helpers import GOLDEN, golden
 
 from seedmatch.annotation.ensdb import AnnotationDb
@@ -17,7 +17,6 @@ from seedmatch.annotation.genome import Genome
 from seedmatch.annotation.reference import Reference
 from seedmatch.errors import InputError
 
-ENSDB = ANNOTATION / "synthetic.sqlite"
 LENGTHS = {"1": 150002, "X": 5003, "SCAF1.1": 2001}
 R_NAMES = {
     "tx_id": "tx_id",
@@ -57,17 +56,6 @@ class StubGenome(Genome):
 
     def close(self):
         self.closed += 1
-
-
-def copy_ensdb(directory, *statements):
-    """Copy the fixture EnsDb, run the statements on the copy, and return its path."""
-    path = directory / "copy.sqlite"
-    shutil.copy(ENSDB, path)
-    with sqlite3.connect(path) as connection:
-        for statement in statements:
-            connection.execute(statement)
-    connection.close()
-    return path
 
 
 def write_genome(directory, lengths):

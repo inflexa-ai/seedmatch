@@ -1,4 +1,4 @@
-"""Checks of one option value or one column, shared by the option classes and the DE functions."""
+"""Checks of the values, columns, and arrays that cross the public API into seedmatch."""
 
 import math
 import operator
@@ -7,6 +7,7 @@ from typing import SupportsIndex
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 from seedmatch.errors import InputError
 
@@ -116,5 +117,42 @@ def check_gene_ids_are_text(de: pd.DataFrame) -> None:
         message = (
             f"'gene_id' has dtype {de['gene_id'].dtype}; expected text values. "
             "Convert the column with astype(str)"
+        )
+        raise InputError(message)
+
+
+def check_vector(name: str, array: NDArray[np.generic], dtype: type[np.generic]) -> None:
+    """Raise `InputError` if the array is not a 1-D array of the dtype."""
+    if array.dtype != dtype:
+        message = f"{name} has dtype {array.dtype}; expected {np.dtype(dtype)}"
+        raise InputError(message)
+    if array.ndim != 1:
+        message = f"{name} has {array.ndim} dimensions; expected a 1-D array"
+        raise InputError(message)
+
+
+def check_offsets(
+    offsets: NDArray[np.int64], count: int, unit: str, end: int, end_name: str
+) -> None:
+    """Raise `InputError` unless item i of the `count` items is `offsets[i]:offsets[i + 1]`.
+
+    The offsets must go from 0 to `end` without a decrease. `unit` names the items, and `end_name`
+    names the value of `end` in the message.
+    """
+    if len(offsets) != count + 1:
+        message = f"offsets has {len(offsets)} entries; expected {count + 1} for {count} {unit}"
+        raise InputError(message)
+    if offsets[0] != 0:
+        message = f"offsets must start at 0; got {offsets[0]}"
+        raise InputError(message)
+    if offsets[-1] != end:
+        message = f"offsets must end at {end}, {end_name}; got {offsets[-1]}"
+        raise InputError(message)
+    decreases = np.flatnonzero(np.diff(offsets) < 0)
+    if decreases.size:
+        i = int(decreases[0]) + 1
+        message = (
+            f"offsets[{i}] {offsets[i]} is less than offsets[{i - 1}] {offsets[i - 1]}; "
+            "expected offsets that do not decrease"
         )
         raise InputError(message)

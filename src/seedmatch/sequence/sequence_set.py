@@ -7,7 +7,7 @@ from typing import Final, Self
 import numpy as np
 from numpy.typing import NDArray
 
-from seedmatch._checks import shown
+from seedmatch._checks import check_offsets, check_vector, shown
 from seedmatch.errors import InputError
 from seedmatch.sequence.alphabet import MASKS, decode_dna, encode_dna
 
@@ -60,35 +60,11 @@ class SequenceSet:
             ("codes", self.codes, np.uint8),
             ("offsets", self.offsets, np.int64),
         ):
-            if array.dtype != dtype:
-                message = f"{name} has dtype {array.dtype}; expected {np.dtype(dtype)}"
-                raise InputError(message)
-            if array.ndim != 1:
-                message = f"{name} has {array.ndim} dimensions; expected a 1-D array"
-                raise InputError(message)
+            check_vector(name, array, dtype)
             if not array.flags.c_contiguous:
                 message = f"{name} is not C-contiguous; expected a C-contiguous array"
                 raise InputError(message)
-        if len(self.offsets) != n + 1:
-            message = f"offsets has {len(self.offsets)} entries; expected {n + 1} for {n} sequences"
-            raise InputError(message)
-        if self.offsets[0] != 0:
-            message = f"offsets must start at 0; got {self.offsets[0]}"
-            raise InputError(message)
-        if self.offsets[-1] != len(self.codes):
-            message = (
-                f"offsets must end at {len(self.codes)}, the length of codes; "
-                f"got {self.offsets[-1]}"
-            )
-            raise InputError(message)
-        decreases = np.flatnonzero(np.diff(self.offsets) < 0)
-        if decreases.size:
-            i = int(decreases[0]) + 1
-            message = (
-                f"offsets[{i}] {self.offsets[i]} is less than offsets[{i - 1}] "
-                f"{self.offsets[i - 1]}; expected offsets that do not decrease"
-            )
-            raise InputError(message)
+        check_offsets(self.offsets, n, "sequences", len(self.codes), "the length of codes")
         _check_masks(self.codes)
         self.codes.flags.writeable = False
         self.offsets.flags.writeable = False

@@ -1,3 +1,5 @@
+import shutil
+import sqlite3
 from typing import NamedTuple
 
 from helpers import DATA
@@ -6,6 +8,7 @@ from seedmatch.annotation.filters import FeatureType, PerGene, TranscriptFilter
 from seedmatch.annotation.reference import Reference
 
 ANNOTATION = DATA / "annotation"
+ENSDB = ANNOTATION / "synthetic.sqlite"
 
 
 class Case(NamedTuple):
@@ -63,6 +66,15 @@ CASES: dict[str, Case] = {
 
 
 def fixture_reference() -> Reference:
-    return Reference.from_paths(
-        ensdb=ANNOTATION / "synthetic.sqlite", genome=ANNOTATION / "synthetic.2bit"
-    )
+    return Reference.from_paths(ensdb=ENSDB, genome=ANNOTATION / "synthetic.2bit")
+
+
+def copy_ensdb(directory, *statements):
+    """Copy the fixture EnsDb, run the statements on the copy, and return its path."""
+    path = directory / "copy.sqlite"
+    shutil.copy(ENSDB, path)
+    with sqlite3.connect(path) as connection:
+        for statement in statements:
+            connection.execute(statement)
+    connection.close()
+    return path

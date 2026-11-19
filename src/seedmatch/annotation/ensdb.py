@@ -3,9 +3,13 @@
 import json
 import os
 import sqlite3
+from array import array
+from dataclasses import dataclass
 from typing import Final, Self
 
+import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 from seedmatch._io import local_path
 from seedmatch.annotation.filters import STANDARD_CHROMOSOMES, TranscriptFilter
@@ -44,6 +48,28 @@ _DTYPES: Final = {
     "canonical": "boolean",
 }
 _STRANDS: Final = {1: "+", -1: "-"}
+
+
+@dataclass(frozen=True, eq=False)
+class ExonRows:
+    """The exons of the transcripts of a filter, one entry of each column for each exon.
+
+    The rows come in the order of `tx_id`, then of `exon_idx`, thus the rows of a transcript are
+    adjacent and in transcript order. `seq_name` and `strand` (1 or -1) are the columns of the gene.
+    `cds_start` and `cds_end` include the stop codon. They are 0 for a transcript without a CDS,
+    because a coordinate starts at 1. `tx_row` is the row order of the `tx` table.
+    """
+
+    tx_id: NDArray[np.object_]
+    gene_id: NDArray[np.object_]
+    seq_name: NDArray[np.object_]
+    strand: NDArray[np.int8]
+    cds_start: NDArray[np.int64]
+    cds_end: NDArray[np.int64]
+    exon_start: NDArray[np.int64]
+    exon_end: NDArray[np.int64]
+    tx_seq_start: NDArray[np.int64]
+    tx_row: NDArray[np.int64]
 
 
 class AnnotationDb:
@@ -186,6 +212,57 @@ class AnnotationDb:
             frames.append(self._frame(rows))
         return pd.concat(frames, ignore_index=True) if frames else self._frame([])
 
+    def exon_rows(self, transcript_filter: TranscriptFilter, *, coding_only: bool) -> ExonRows:
+        """Return the exons of the transcripts that pass the filter, as `ExonRows`.
+
+        With `coding_only`, the rows hold only the transcripts with a CDS.
+        """
+        condition, parameters = self.where(transcript_filter)
+        if coding_only:
+            condition += " AND tx.tx_cds_seq_start IS NOT NULL"
+        # The text holds only fixed names, and each value of the filter is a parameter.
+        sql = (
+            "SELECT tx.tx_id, tx.gene_id, gene.seq_name, gene.seq_strand, "  # noqa: S608
+            "IFNULL(tx.tx_cds_seq_start, 0), IFNULL(tx.tx_cds_seq_end, 0), exon.exon_seq_start, "
+            "exon.exon_seq_end, tx.tx_seq_start, tx.rowid "
+            "FROM tx JOIN gene ON tx.gene_id = gene.gene_id "
+            "JOIN tx2exon ON tx2exon.tx_id = tx.tx_id "
+            "JOIN exon ON exon.exon_id = tx2exon.exon_id "
+            f"WHERE {condition} "
+            "ORDER BY tx.tx_id, tx2exon.exon_idx"
+        )
+        cursor = self._connection.execute(sql, parameters)
+        texts: tuple[list[str], ...] = ([], [], [])
+        numbers = tuple(array("q") for _ in range(7))
+        # The rows of a transcript repeat its text values. One str object for each value keeps the
+        # memory near the size of the integer columns.
+        shared: dict[str, str] = {}
+        while rows := cursor.fetchmany(_CHUNK_ROWS):
+            tx_ids, gene_ids, seq_names, strands, *others = zip(*rows, strict=True)
+            if not set(strands) <= _STRANDS.keys():
+                position = next(i for i, strand in enumerate(strands) if strand not in _STRANDS)
+                raise self._strand_error(tx_ids[position], strands[position])
+            for text, values in zip(texts, (tx_ids, gene_ids, seq_names), strict=True):
+                text.extend(shared.setdefault(value, value) for value in values)
+            for number, values in zip(numbers, (strands, *others), strict=True):
+                number.extend(values)
+        tx_id, gene_id, seq_name = (np.array(text, dtype=object) for text in texts)
+        strand, cds_start, cds_end, exon_start, exon_end, tx_seq_start, tx_row = (
+            np.array(number, dtype=np.int64) for number in numbers
+        )
+        return ExonRows(
+            tx_id=tx_id,
+            gene_id=gene_id,
+            seq_name=seq_name,
+            strand=strand.astype(np.int8),
+            cds_start=cds_start,
+            cds_end=cds_end,
+            exon_start=exon_start,
+            exon_end=exon_end,
+            tx_seq_start=tx_seq_start,
+            tx_row=tx_row,
+        )
+
     def close(self) -> None:
         """Close the connection."""
         self._connection.close()
@@ -204,9 +281,9 @@ class AnnotationDb:
         unknown = strand.isna()
         if unknown.any():
             position = int(unknown.to_numpy().argmax())
-            message = (
-                f"{self.source!r}: transcript {frame['tx_id'].iloc[position]!r} has strand "
-                f"{frame['strand'].iloc[position]}; expected 1 or -1"
-            )
-            raise InputError(message)
+            raise self._strand_error(frame["tx_id"].iloc[position], frame["strand"].iloc[position])
         return frame.assign(strand=strand).astype(_DTYPES)
+
+    def _strand_error(self, tx_id: object, strand: object) -> InputError:
+        message = f"{self.source!r}: transcript {tx_id!r} has strand {strand}; expected 1 or -1"
+        return InputError(message)
