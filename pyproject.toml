@@ -1,7 +1,7 @@
 [project]
 name = "seedmatch"
 version = "0.1.0"
-description = "Python port of SeedMatchR: seed matches of an siRNA guide strand and their effect on differential expression."
+description = "Agent-sandbox-ready Python port of SeedMatchR: seed matches of an siRNA guide strand and their effect on differential expression."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"

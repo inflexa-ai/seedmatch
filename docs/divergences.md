@@ -163,3 +163,28 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `ReportOptions` raises `InputError` for a NaN cutoff, for a cutoff that is a bool or text, and for an int that a float cannot hold. `seed_match_report` raises `InputError` that names the column and the dtype, if `log2FoldChange`, `padj`, or `baseMean` is not numeric. The port does not compare `baseMean`, but `matches` gives it with the type `float64`. A Python int can be too large for a float, thus the port rejects it.
 - Reason: A NaN cutoff gives no off-target, and a bool or text cutoff gives a wrong count. A text `log2FoldChange` or `padj` column also gives a wrong count. R shows none of these in an error, and a table that a caller read as text is a likely cause.
 - Test: `test_a_nan_cutoff_is_an_error_D024`, `test_a_cutoff_that_is_not_an_int_or_a_float_is_an_error_D024`, `test_a_cutoff_that_a_float_cannot_hold_is_an_error_D024`, and `test_a_column_that_is_not_numeric_is_an_error_that_names_the_column_and_the_dtype_D024` in `tests/report/test_report.py`.
+
+## D-025: filter_de rejects a NaN cutoff and a cutoff that is not a number
+
+- ID: `D-025`
+- R location: `filter_res` (`R/filter_res.R:43-74`). `dplyr::filter` compares `padj`, `abs(log2FoldChange)`, and `baseMean` with the cutoffs at `R/filter_res.R:64`, `:67`, and `:70`.
+- R behavior: R does not do a check of the cutoffs. An R probe with SeedMatchR 2.0.0 on a table of 2 genes gives these results for each of the 3 cutoffs:
+  - A `NULL` cutoff stops with the dplyr message `..1 must be of size 2 or 1, not size 0`. The message gives the comparison, for example `padj <= fdr_cutoff`.
+  - A `NaN` cutoff keeps 0 rows, and R gives no message.
+  - A text cutoff compares the numbers as text. For example, `basemean_cutoff = "60"` keeps 0 rows, because the text `100` is less than the text `60`. The number 60 keeps 1 row.
+  - `TRUE` works as the number 1.
+- New behavior: `filter_de` raises `InputError` for a NaN cutoff, and for a cutoff that is a bool, text, or `None`. It also raises `InputError` for an int that a float cannot hold. The message gives the name of the cutoff and the bad value. The checks are the same as the checks of the report cutoffs (`D-024`).
+- Reason: A NaN cutoff removes each row without a message, and a bool or text cutoff gives a wrong result. R shows none of these in an error. The report rejects the same values (`D-024`), thus the two functions agree.
+- Test: `test_filter_de_rejects_a_cutoff_that_is_not_a_number_D025` and `test_filter_de_checks_each_cutoff_D025` in `tests/test_de.py`.
+
+## D-026: The wobble with a fixed pattern causes an error
+
+- ID: `D-026`
+- R location: `SeedMatchReport` (`R/SeedMatchReport.R:51,55`), with the arguments `allow_wobbles` and `fixed = T`. `SeedMatchReport` gives `fixed` to `full_search` without a change (`R/SeedMatchReport.R:64`). The R documentation of `fixed` tells the user to set `fixed` to `FALSE` with wobbles (`R/SeedMatchR.R:37`).
+- R behavior: The wobble target has `R` at each position of a guide `U`. With `fixed = TRUE`, that `R` matches only the letter `R` of a sequence, not `A` or `G`. A transcript has no `R`, thus the wobble finds fewer matches than the search without the wobble. R gives no message. `SeedMatchReport` on the test data (`tests/data/`) gives these counts of in-silico predictions in `Total`:
+  - 125 without the wobble.
+  - 42 with `allow_wobbles = TRUE`.
+  - 161 with `allow_wobbles = TRUE` and `fixed = "subject"` (`tests/golden/seedmatchr/report_wobble.tsv`).
+- New behavior: `ReportOptions` and `FullSearchOptions` raise `InputError` for `wobble=True` with `fixed_pattern=True`. The default of `ReportOptions` keeps `fixed_pattern=True`, as in R, thus `fixed_pattern=False` is necessary for a wobble report. With `options.fixed_pattern`, `annotate_seed_counts` raises `InputError` for a target with an ambiguity letter. The message gives the first such letter. `count_matches` and `find_matches` keep the Biostrings behavior.
+- Reason: A wobble search with a fixed pattern loses the matches at each guide `U` without a message. The R documentation gives the rule, but R does not apply it. In `count_matches` and `find_matches`, a fixed ambiguity letter is a valid Biostrings search.
+- Test: `test_the_wobble_with_a_fixed_pattern_causes_an_error_D026` and `test_the_wobble_adds_in_silico_predictions_D026` in `tests/report/test_report.py`, and `test_annotate_rejects_a_wobble_target_with_a_fixed_pattern_D026` in `tests/report/test_annotate.py`.

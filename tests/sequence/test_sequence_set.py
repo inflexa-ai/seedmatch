@@ -165,7 +165,10 @@ def test_direct_construction_with_consistent_parts_gives_a_read_only_set():
         ({"offsets": np.array([0, 4], dtype=np.int64)}, r"offsets has 2 entries.*3"),
         ({"offsets": np.array([1, 2, 4], dtype=np.int64)}, r"offsets must start at 0"),
         ({"offsets": np.array([0, 2, 3], dtype=np.int64)}, r"offsets must end at 4"),
-        ({"offsets": np.array([0, 5, 4], dtype=np.int64)}, r"offsets must not decrease"),
+        (
+            {"offsets": np.array([0, 5, 4], dtype=np.int64)},
+            r"offsets\[2\] 4 is less than offsets\[1\] 5; expected offsets that do not decrease",
+        ),
     ],
 )
 def test_direct_construction_rejects_parts_that_do_not_fit_together(change, message):
@@ -300,3 +303,23 @@ def test_write_fasta_rejects_an_id_with_white_space(tmp_path, bad_id):
     with pytest.raises(InputError, match=r"id .*white space"):
         write_fasta(seqs, tmp_path / "x.fa")
     assert not (tmp_path / "x.fa").exists()
+
+
+@pytest.mark.parametrize(
+    ("ids", "gene_ids", "message"),
+    [
+        ([1], ["g"], "ids holds 1 of type int; expected a str"),
+        (["a"], [1], "gene_ids holds 1 of type int; expected a str"),
+    ],
+)
+def test_sequence_set_rejects_an_id_that_is_not_text(ids, gene_ids, message):
+    records = [(name, "ACGT") for name in ids]
+    with pytest.raises(InputError, match=re.escape(message)):
+        SequenceSet.from_records(records, gene_ids=gene_ids)
+
+
+def test_from_records_rejects_one_str_as_the_gene_ids():
+    records = [("a", "A"), ("b", "C"), ("c", "G")]
+    message = "gene_ids 'abc' is a str; expected a sequence of str"
+    with pytest.raises(InputError, match=re.escape(message)):
+        SequenceSet.from_records(records, gene_ids="abc")

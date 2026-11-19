@@ -315,3 +315,11 @@ def test_each_range_is_within_the_edit_limit(seqs, options):
         assert row.width == row.end - row.start + 1
         found = distance(PATTERN, text, row.start, row.end, options)
         assert options.min_mismatch <= found <= options.max_mismatch
+
+
+def test_the_pattern_length_limit_of_biostrings():
+    # Biostrings 2.78.0 stops above 20000 letters in each search mode, and counts 10001 here.
+    subject = s(x="A" * 30000)
+    assert count_matches("A" * 20000, subject).tolist() == [10001]
+    with pytest.raises(InputError, match="pattern has 20001 letters; expected at most 20000"):
+        count_matches("A" * 20001, subject)

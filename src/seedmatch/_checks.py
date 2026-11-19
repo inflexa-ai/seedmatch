@@ -2,6 +2,7 @@
 
 import math
 import operator
+from collections.abc import Sequence
 from typing import SupportsIndex
 
 import numpy as np
@@ -78,6 +79,22 @@ def as_cutoff(name: str, value: object) -> float:
         message = f"{name} {shown(value)} is not a number; expected an int or a float, not NaN"
         raise InputError(message)
     return cutoff
+
+
+def check_columns(de: pd.DataFrame, required: Sequence[str]) -> None:
+    """Raise `InputError` that lists the missing columns in sorted order."""
+    missing = sorted(set(required) - set(de.columns))
+    if missing:
+        message = f"DE table has missing columns: {missing}; expected {list(required)}"
+        raise InputError(message)
+
+
+def check_numeric_columns(de: pd.DataFrame, names: Sequence[str]) -> None:
+    """Raise `InputError` that names the first column whose dtype is not numeric."""
+    for name in names:
+        if not pd.api.types.is_numeric_dtype(de[name]):
+            message = f"column {name!r} has dtype {de[name].dtype}; expected a numeric dtype"
+            raise InputError(message)
 
 
 def _is_text(values: pd.Series) -> bool:

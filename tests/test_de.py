@@ -1,4 +1,7 @@
+import bz2
 import gzip
+import lzma
+import re
 
 import pandas as pd
 import pytest
@@ -204,3 +207,61 @@ def test_filter_de_names_a_filter_column_that_is_not_numeric(column):
     cases[column] = cases[column].astype(str)
     with pytest.raises(InputError, match=rf"column '{column}' has dtype (object|str)"):
         filter_de(cases)
+
+
+@pytest.mark.parametrize(
+    "url", ["https://example.org/de.tsv", "ftp://example.org/de.tsv", "s3://bucket/de.tsv"]
+)
+def test_read_deseq2_table_refuses_a_url_and_opens_no_connection(monkeypatch, url):
+    def refuse(*_args, **_kwargs):
+        message = "urlopen was called"
+        raise AssertionError(message)
+
+    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    message = f"{url!r}: the path is a URL; expected a local path"
+    with pytest.raises(InputError, match=re.escape(message)):
+        read_deseq2_table(url)
+
+
+def test_read_deseq2_table_finds_gzip_from_the_content_not_the_suffix(tmp_path):
+    packed = tmp_path / "table.gz"
+    write_table(packed, DESEQ2_COLUMNS)
+    renamed = packed.rename(tmp_path / "table.tsv")
+    assert read_deseq2_table(renamed)["gene_id"].tolist() == ["ENSRNOG1", "ENSRNOG2"]
+
+
+def test_read_deseq2_table_rejects_text_that_is_not_utf8(tmp_path):
+    path = tmp_path / "table.tsv"
+    row = [*ROWS[0][:-1], "Caf\xe9"]
+    text = "\t".join(DESEQ2_COLUMNS) + "\n" + "\t".join(map(str, row)) + "\n"
+    path.write_bytes(text.encode("latin-1"))
+    with pytest.raises(InputError, match=r"table\.tsv': the file is not valid UTF-8 text"):
+        read_deseq2_table(path)
+
+
+@pytest.mark.parametrize(
+    ("cutoff", "message"),
+    [
+        (float("nan"), "fdr_cutoff nan is not a number; expected an int or a float, not NaN"),
+        (None, "fdr_cutoff None has type NoneType; expected an int or a float"),
+        ("0.05", "fdr_cutoff '0.05' has type str; expected an int or a float"),
+    ],
+)
+def test_filter_de_rejects_a_cutoff_that_is_not_a_number_D025(cutoff, message):
+    with pytest.raises(InputError, match=re.escape(message)):
+        filter_de(sirna_de(), fdr_cutoff=cutoff)
+
+
+@pytest.mark.parametrize("name", ["fdr_cutoff", "fc_cutoff", "basemean_cutoff"])
+def test_filter_de_checks_each_cutoff_D025(name):
+    with pytest.raises(InputError, match=f"^{name} nan is not a number"):
+        filter_de(sirna_de(), **{name: float("nan")})
+
+
+@pytest.mark.parametrize("compress", [bz2.compress, lzma.compress], ids=["bzip2", "xz"])
+def test_read_deseq2_table_reads_bzip2_and_xz_from_the_content_as_r_does(tmp_path, compress):
+    plain = tmp_path / "plain.tsv"
+    write_table(plain, DESEQ2_COLUMNS)
+    packed = tmp_path / "table.tsv"
+    packed.write_bytes(compress(plain.read_bytes()))
+    assert read_deseq2_table(packed)["gene_id"].tolist() == ["ENSRNOG1", "ENSRNOG2"]

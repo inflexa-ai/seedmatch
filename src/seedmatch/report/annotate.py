@@ -1,13 +1,22 @@
 """Seed counts as a column of a DE table: `SeedMatchR` of R in `DESEQ2` mode."""
 
+import re
+from typing import Final
+
 import numpy as np
 import pandas as pd
 
-from seedmatch._checks import check_gene_ids_are_text
+from seedmatch._checks import as_flag, check_gene_ids_are_text, shown
 from seedmatch.errors import InputError
 from seedmatch.search import SearchOptions, count_matches
 from seedmatch.seed import Target
 from seedmatch.sequence import SequenceSet
+from seedmatch.sequence.alphabet import MASKS
+
+_AMBIGUITY_LETTER: Final = re.compile(
+    f"[{''.join(letter for letter, mask in MASKS.items() if mask.bit_count() > 1)}]",
+    flags=re.IGNORECASE,
+)
 
 
 # Each keyword-only parameter is an independent option of SeedMatchR, so no parameter object fits.
@@ -27,8 +36,22 @@ def annotate_seed_counts(  # noqa: PLR0913
     The count of a gene is the maximum count over its sequences, and 0 for a gene without a
     sequence. The column is named `column`, or the name of the target. A column with that name is
     replaced in place. With `shared_genes`, the result keeps only the rows whose gene has a
-    sequence, in the order of the input, and has a new index.
+    sequence, in the order of the input, and has a new index. With `options.fixed_pattern`, a target
+    with an ambiguity letter, for example a wobble target, raises `InputError` (`D-026`).
     """
+    shared_genes = as_flag("shared_genes", shared_genes)
+    if column is not None and not isinstance(column, str):
+        message = f"column {shown(column)} has type {type(column).__name__}; expected a str"
+        raise InputError(message)
+    ambiguous = _AMBIGUITY_LETTER.search(target.sequence) if options.fixed_pattern else None
+    if ambiguous is not None:
+        letter = ambiguous.group()
+        message = (
+            f"target {target.name!r} has the ambiguity letter {letter!r}; expected "
+            "fixed_pattern=False in the options, because a fixed pattern matches "
+            f"{letter!r} only to the letter {letter!r}"
+        )
+        raise InputError(message)
     if "gene_id" not in de.columns:
         message = f"DE table has no 'gene_id' column; found {list(de.columns)}"
         raise InputError(message)

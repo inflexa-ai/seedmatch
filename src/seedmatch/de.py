@@ -1,12 +1,20 @@
 """The table of DESeq2 results: the reader for the GEO files and the filter."""
 
+import bz2
+import gzip
+import io
+import lzma
 import os
+import re
 import warnings
-from collections.abc import Sequence
-from typing import Final
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Final, TextIO
 
 import pandas as pd
 
+from seedmatch._checks import as_cutoff, check_columns, check_numeric_columns
 from seedmatch.errors import InputError
 
 DE_REQUIRED_COLUMNS: Final = ("gene_id", "baseMean", "log2FoldChange", "pvalue", "padj")
@@ -23,29 +31,70 @@ _DESEQ2_COLUMNS: Final = (
 )
 _NUMERIC_COLUMNS: Final = ("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj")
 _FILTER_COLUMNS: Final = ("baseMean", "log2FoldChange", "pvalue", "padj")
+_URL: Final = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_GZIP_MAGIC: Final = b"\x1f\x8b"
+_BZIP2_MAGIC: Final = b"BZh"
+_XZ_MAGIC: Final = b"\xfd7zXZ\x00"
+
+
+def _decompressed(
+    raw: io.BufferedReader,
+) -> gzip.GzipFile | bz2.BZ2File | lzma.LZMAFile | io.BufferedReader:
+    """Return a reader of the bytes after the compression that the first bytes show, if any."""
+    head = raw.peek(len(_XZ_MAGIC))
+    if head.startswith(_GZIP_MAGIC):
+        return gzip.GzipFile(fileobj=raw)
+    if head.startswith(_BZIP2_MAGIC):
+        return bz2.BZ2File(raw)
+    if head.startswith(_XZ_MAGIC):
+        return lzma.LZMAFile(raw)
+    return raw
+
+
+@contextmanager
+def _open_text(path: Path) -> Iterator[TextIO]:
+    """Open the file as UTF-8 text. The first bytes, not the suffix, show a compressed file."""
+    with path.open("rb") as raw:
+        binary = _decompressed(raw)
+        # pandas also opens a path with newline="", so its parser gets each line end unchanged.
+        with io.TextIOWrapper(binary, encoding="utf-8", newline="") as text:
+            yield text
 
 
 def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
     """Read a tab-separated DESeq2 table with a header line, and name its columns.
 
-    The file can be gzip. The names replace the header, as `download_parse_file` of R does.
-    `gene_id` and `symbol` are text, and the other columns are `float64`. As in `read.csv` of R,
-    only `NA` is missing in a text column, and `NA` or an empty field is missing in a number
-    column.
+    The path is a local path: a URL raises `InputError`, because the core modules do not use the
+    network. The file is UTF-8 text, or gzip, bzip2, or xz of UTF-8 text. As in `read.csv` of R, the
+    first bytes of the file, not the suffix, show the compression. The names replace the header, as
+    `download_parse_file` of R does. `gene_id` and `symbol` are text, and the other columns are
+    `float64`. As in `read.csv` of R, only `NA` is missing in a text column, and `NA` or an empty
+    field is missing in a number column.
     """
     shown = os.fspath(path)
+    if _URL.match(shown):
+        message = f"{shown!r}: the path is a URL; expected a local path"
+        raise InputError(message)
     try:
-        with warnings.catch_warnings():
+        # pandas gets an open handle and no path, so it cannot open a URL or guess a compression.
+        with _open_text(Path(shown)) as handle, warnings.catch_warnings():
             # With index_col=False, pandas drops the extra fields of a row and only warns.
             warnings.simplefilter("error", pd.errors.ParserWarning)
             table = pd.read_csv(
-                path,
+                handle,
                 sep="\t",
                 index_col=False,
                 dtype=str,
                 na_values=["NA"],
                 keep_default_na=False,
+                compression=None,
             )
+    except UnicodeDecodeError as exc:
+        message = (
+            f"{shown!r}: the file is not valid UTF-8 text ({exc.reason}); "
+            "expected a text or gzip DESeq2 table"
+        )
+        raise InputError(message) from exc
     except pd.errors.EmptyDataError as exc:
         message = f"{shown!r}: the file has no header line; expected a header line and rows"
         raise InputError(message) from exc
@@ -73,22 +122,6 @@ def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
     return table
 
 
-def check_columns(de: pd.DataFrame, required: Sequence[str]) -> None:
-    """Raise `InputError` that lists the missing columns in sorted order."""
-    missing = sorted(set(required) - set(de.columns))
-    if missing:
-        message = f"DE table has missing columns: {missing}; expected {list(required)}"
-        raise InputError(message)
-
-
-def check_numeric_columns(de: pd.DataFrame, names: Sequence[str]) -> None:
-    """Raise `InputError` that names the first column whose dtype is not numeric."""
-    for name in names:
-        if not pd.api.types.is_numeric_dtype(de[name]):
-            message = f"column {name!r} has dtype {de[name].dtype}; expected a numeric dtype"
-            raise InputError(message)
-
-
 def filter_de(
     de: pd.DataFrame,
     *,
@@ -100,15 +133,19 @@ def filter_de(
 
     A row needs a `padj`, a `pvalue`, and a `log2FoldChange`. It also needs `padj` at most
     `fdr_cutoff`, `abs(log2FoldChange)` at least `fc_cutoff`, and `baseMean` at least
-    `basemean_cutoff`. The result has a new index.
+    `basemean_cutoff`. The result has a new index. A cutoff is an int or a float: a bool, text,
+    `None`, and NaN raise `InputError` (`D-025`).
     """
+    fdr = as_cutoff("fdr_cutoff", fdr_cutoff)
+    fc = as_cutoff("fc_cutoff", fc_cutoff)
+    basemean = as_cutoff("basemean_cutoff", basemean_cutoff)
     check_columns(de, DE_REQUIRED_COLUMNS)
     check_numeric_columns(de, _FILTER_COLUMNS)
     # A missing baseMean fails its comparison, as in R, so the row drops without a separate test.
     keep = (
         de[["padj", "pvalue", "log2FoldChange"]].notna().all(axis=1)
-        & (de["padj"] <= fdr_cutoff)
-        & (de["log2FoldChange"].abs() >= fc_cutoff)
-        & (de["baseMean"] >= basemean_cutoff)
+        & (de["padj"] <= fdr)
+        & (de["log2FoldChange"].abs() >= fc)
+        & (de["baseMean"] >= basemean)
     )
     return de.loc[keep].reset_index(drop=True)

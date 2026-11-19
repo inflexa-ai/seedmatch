@@ -135,6 +135,7 @@ class FullSearchOptions:
     `NONSEED_SEEDS`, and `seed_edit_distances` applies to the other seeds. The distances are the
     `max_mismatch` of the searches. `fixed_pattern` and `fixed_subject` are the entries `pattern`
     and `subject` of the `fixed` argument of R. Each field is checked when the object is made.
+    `wobble=True` needs `fixed_pattern=False` (`D-026`).
     """
 
     seeds: tuple[Seed, ...] = DEFAULT_SEEDS
@@ -162,6 +163,12 @@ class FullSearchOptions:
         )
         for name in ("indels", "wobble", "fixed_pattern", "fixed_subject"):
             set_field(self, name, as_flag(name, getattr(self, name)))
+        if self.wobble and self.fixed_pattern:
+            message = (
+                "wobble=True needs fixed_pattern=False: "
+                "a fixed pattern matches the wobble letter R only to the letter R"
+            )
+            raise InputError(message)
 
 
 @dataclass(frozen=True)

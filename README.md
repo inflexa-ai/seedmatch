@@ -4,13 +4,19 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/inflexa-ai/seedmatch/badge)](https://scorecard.dev/viewer/?uri=github.com/inflexa-ai/seedmatch)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-seedmatch is a Python port of the R package [SeedMatchR](https://github.com/tacazares/SeedMatchR). It finds the seed matches of an siRNA guide strand in transcript sequences. It then joins the matches with the results of a differential expression (DE) analysis. Thus you can see which genes with a seed match go down.
+seedmatch is a Python port of the R package [SeedMatchR](https://github.com/tacazares/SeedMatchR), ready for AI agent sandboxes. It finds the seed matches of an siRNA guide strand in transcript sequences. It then joins the matches with the results of a differential expression (DE) analysis. Thus you can see which genes with a seed match go down.
 
 The output is the same as the output of SeedMatchR on the core paths. R golden files in `tests/golden/` keep this true. Each change of behavior from R has an entry in [`docs/divergences.md`](docs/divergences.md).
 
-## Offline use
+## A part of an agentic toolchain for bioinformatics
 
-The core modules never use the network. Each function reads its input from a path or an object that you give. Thus seedmatch runs in a sandbox without network access. A later version adds a separate module that downloads the resources.
+Inflexa, Inc. builds an agentic toolchain for bioinformatics. The toolchain ports existing tools to languages and architectures that an agent sandbox can run. An example of such a sandbox is the sandbox of [Inflexa](https://github.com/inflexa-ai/inflexa). seedmatch is a tool of this toolchain.
+
+A sandbox such as the Inflexa sandbox has no network egress, and an agent corrects its calls from the error messages. Thus seedmatch obeys these rules:
+
+- **No network in the core.** The core modules never use the network. Each function reads its input from a path or an object that you give. A later version adds a separate module that downloads the resources.
+- **Python only.** The package is pure Python on numpy, pandas, and numba. It does not use R or a system library.
+- **Errors that an agent can use.** Each `InputError` names the bad value and the expected value. Thus an agent can correct the call.
 
 ## Example
 
@@ -62,6 +68,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - The ranges of a search obey the same rules as the counts. In R, `vmatchPattern2` uses the indel algorithm also when `with.indels` is `FALSE`, if the pattern is longer than `max.mismatch`. Thus the ranges and the counts do not agree (D-001).
 - A result for a gene uses all the sequences of the gene. R uses the first sequence for the seed count, and it counts each sequence in the report (D-003).
 - `full_search_ranges` gives a result for each input. R stops if each search finds a match, or if no search finds a match (D-022).
+- `wobble=True` with `fixed_pattern=True` raises `InputError`, because a fixed pattern matches the wobble letter R only to the letter R (D-026).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -84,7 +91,7 @@ These parts of SeedMatchR are not in this version:
 
 ## Installation
 
-seedmatch needs Python 3.12 or later. Install it from GitHub:
+Python 3.12 or later is necessary. Install seedmatch from GitHub:
 
 ```bash
 uv pip install git+https://github.com/inflexa-ai/seedmatch.git

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import seedmatch
 from seedmatch.errors import InputError, SeedMatchError
 
 DIVERGENCES = Path(__file__).parents[1] / "docs" / "divergences.md"
@@ -50,3 +51,10 @@ def test_input_error_is_caught_as_value_error_and_as_package_error(base):
     error = InputError("bad value 'X'")
     with pytest.raises(base, match="bad value 'X'"):
         raise error
+
+
+# The README and the docstrings of the options name these, so a user imports them from seedmatch.
+@pytest.mark.parametrize("name", ["InputError", "SeedMatchError", "DEFAULT_SEEDS", "NONSEED_SEEDS"])
+def test_a_name_that_the_documentation_uses_is_in_the_top_level_package(name):
+    assert name in seedmatch.__all__
+    assert hasattr(seedmatch, name)

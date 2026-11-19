@@ -5,6 +5,7 @@ from the same kernel, so they agree.
 """
 
 from dataclasses import dataclass
+from typing import Final
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,10 @@ from seedmatch.search.compat import compat_table
 from seedmatch.seed import Target
 from seedmatch.sequence import SequenceSet
 from seedmatch.sequence.alphabet import encode_dna
+
+# Biostrings 2.78.0 stops for a longer pattern in each search mode. The limit also bounds the cost
+# of a search with a large max_mismatch.
+_MAX_PATTERN_LENGTH: Final = 20000
 
 
 @dataclass(frozen=True)
@@ -60,6 +65,9 @@ class SearchOptions:
 
 def _encode_pattern(pattern: str | Target) -> NDArray[np.uint8]:
     text = pattern.sequence if isinstance(pattern, Target) else pattern
+    if len(text) > _MAX_PATTERN_LENGTH:
+        message = f"pattern has {len(text)} letters; expected at most {_MAX_PATTERN_LENGTH}"
+        raise InputError(message)
     masks = encode_dna(text)
     if masks.size == 0:
         message = "empty pattern; expected a pattern of one letter or more"

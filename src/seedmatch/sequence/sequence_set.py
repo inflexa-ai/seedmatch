@@ -7,6 +7,7 @@ from typing import Final, Self
 import numpy as np
 from numpy.typing import NDArray
 
+from seedmatch._checks import shown
 from seedmatch.errors import InputError
 from seedmatch.sequence.alphabet import MASKS, decode_dna, encode_dna
 
@@ -23,11 +24,20 @@ def _check_masks(codes: NDArray[np.uint8]) -> None:
     raise InputError(message)
 
 
+def _check_text(field: str, values: tuple[str, ...]) -> None:
+    """Raise for the first value that is not a str, because a DE `gene_id` is text."""
+    for value in values:
+        if not isinstance(value, str):
+            message = f"{field} holds {shown(value)} of type {type(value).__name__}; expected a str"
+            raise InputError(message)
+
+
 @dataclass(frozen=True, eq=False)
 class SequenceSet:
     """Sequences as masks in one buffer. Sequence i is codes[offsets[i]:offsets[i + 1]].
 
-    The sequences of one gene share a gene ID. The arrays are read-only.
+    The sequences of one gene share a gene ID. Each ID and each gene ID is a `str`. The arrays are
+    read-only.
     """
 
     ids: tuple[str, ...]
@@ -44,6 +54,8 @@ class SequenceSet:
                 f"expected one for each of the {n} sequences"
             )
             raise InputError(message)
+        _check_text("ids", self.ids)
+        _check_text("gene_ids", self.gene_ids)
         for name, array, dtype in (
             ("codes", self.codes, np.uint8),
             ("offsets", self.offsets, np.int64),
@@ -69,8 +81,13 @@ class SequenceSet:
                 f"got {self.offsets[-1]}"
             )
             raise InputError(message)
-        if (np.diff(self.offsets) < 0).any():
-            message = "offsets must not decrease"
+        decreases = np.flatnonzero(np.diff(self.offsets) < 0)
+        if decreases.size:
+            i = int(decreases[0]) + 1
+            message = (
+                f"offsets[{i}] {self.offsets[i]} is less than offsets[{i - 1}] "
+                f"{self.offsets[i - 1]}; expected offsets that do not decrease"
+            )
             raise InputError(message)
         _check_masks(self.codes)
         self.codes.flags.writeable = False
@@ -83,6 +100,9 @@ class SequenceSet:
         gene_ids: Sequence[str] | None = None,
     ) -> Self:
         """Encode (ID, DNA text) records. Without gene_ids, the gene ID of a sequence is its ID."""
+        if isinstance(gene_ids, str):
+            message = f"gene_ids {shown(gene_ids)} is a str; expected a sequence of str"
+            raise InputError(message)
         ids: list[str] = []
         ends: list[int] = []
         # One growing buffer keeps the peak memory near the size of the result.

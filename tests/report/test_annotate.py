@@ -233,3 +233,29 @@ def test_a_target_named_gene_id_cannot_name_the_count_column():
     target = Guide(GUIDE).target(seedmatch.CustomSeed("gene_id", 2, 8))
     with pytest.raises(InputError, match=r"column 'gene_id' would overwrite the gene IDs"):
         annotate_seed_counts(de, seqs_with(("g", "CTCTATA")), target)
+
+
+def test_annotate_rejects_a_shared_genes_flag_that_is_not_a_bool():
+    with pytest.raises(InputError, match="shared_genes 'no' has type str; expected a bool"):
+        annotate_seed_counts(sirna_de(), sirna_seqs(), MER7M8, shared_genes="no")
+
+
+def test_annotate_rejects_a_column_name_that_is_not_text():
+    with pytest.raises(InputError, match="column 5 has type int; expected a str"):
+        annotate_seed_counts(sirna_de(), sirna_seqs(), MER7M8, column=5)
+
+
+def test_annotate_rejects_a_wobble_target_with_a_fixed_pattern_D026():
+    wobble = Guide(GUIDE).target(Seed.MER7M8, wobble=True)
+    message = "target 'mer7m8' has the ambiguity letter 'R'; expected fixed_pattern=False"
+    with pytest.raises(InputError, match=message):
+        annotate_seed_counts(sirna_de(), sirna_seqs(), wobble)
+
+
+def test_annotate_counts_a_wobble_target_with_a_pattern_that_is_not_fixed_D026():
+    wobble = Guide(GUIDE).target(Seed.MER7M8, wobble=True)
+    options = SearchOptions(indels=True, fixed_pattern=False)
+    got = annotate_seed_counts(sirna_de(), sirna_seqs(), wobble, options=options)["mer7m8"]
+    plain = annotate_seed_counts(sirna_de(), sirna_seqs(), MER7M8)["mer7m8"]
+    assert (got.to_numpy() >= plain.to_numpy()).all()
+    assert got.sum() > plain.sum()
