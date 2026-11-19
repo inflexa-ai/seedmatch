@@ -20,7 +20,8 @@ write_golden <- function(df, path, script, notes = character(0)) {
   df[] <- lapply(df, function(col) if (is.double(col) && !is.object(col)) double_to_string(col) else col)
   out <- file.path(GOLDEN_DIR, path)
   dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)
-  con <- file(out, "w")
+  # The gzip header of gzfile has no time stamp and no file name, thus each run writes the same bytes.
+  con <- if (endsWith(out, ".gz")) gzfile(out, "w") else file(out, "w")
   on.exit(close(con))
   writeLines(c(
     paste0("# generated-by: tools/golden/R/", script),

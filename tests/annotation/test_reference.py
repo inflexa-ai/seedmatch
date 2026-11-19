@@ -35,7 +35,8 @@ def test_sequences_match_r(config):
             case.feature, case.transcript_filter, per_gene=case.per_gene, min_width=case.min_width
         )
     expected = golden(f"annotation/{config}_sequences.tsv")
-    # R gives NA to each name_gene of a union (D-002), so the gene IDs are the names of the genes.
+    # For a union, R puts the gene ID in name_tx and NA in name_gene (D-002), so the gene IDs come
+    # from name_tx.
     gene_names = "name_tx" if case.per_gene is PerGene.UNION else "name_gene"
     assert list(got.ids) == expected["name_tx"].tolist()
     assert list(got.gene_ids) == expected[gene_names].tolist()

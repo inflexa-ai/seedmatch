@@ -30,6 +30,7 @@
 - The rnor7 files are in `~/Development/refs/seedmatch/rnor7/`:
   - `EnsDb.Rnorvegicus.v109.sqlite`: 179650560 bytes, SHA-256 `2453c59e1054157798df5a4114650911d046b5f7795af91a6a2171614ba0289b`
   - `Rattus_norvegicus.mRatBN7.2.dna_sm.toplevel.2bit`: 661989722 bytes, SHA-256 `73eacccd66a8843cced837d0cb0a272b42b7214b4a7c62a3c48963509ea914f3`
+  - `Rattus_norvegicus.mRatBN7.2.109.gtf.gz`: 18029537 bytes, SHA-256 `ff7d5ecd69ed7df5e641ec90383e5de9e10e9d82316a0570c71fa80a98e8edca` (Task 8 Step 1)
 - Documents use ASD-STE100. Code comments obey the admission test of the project rules. The word "seam" does not occur.
 - Git: an implementer does no `git add` and no commit. Each task ends with a checkpoint. The controller commits only with the consent of the user.
 
@@ -478,7 +479,7 @@ def test_support_level_is_the_leading_integer(): ...  # "1 (assigned to previous
 
 The R script reads `file.path(Sys.getenv("SEEDMATCH_TEST_REFS"), "rnor7")` and stops if the variable is not set. It uses the replacement of `load_species_anno_db` of Task 1 and the patch of `.reduce_features`. Configs: `utr3`, `utr5`, `exons`, `cds`, `utr3_longest`, and `utr3_union`, with the R arguments of Task 1. Each file has the columns `name_tx`, `name_gene`, `width`, and `digest`: the first 16 hexadecimal digits of `openssl::sha256` of the sequence.
 
-- [ ] **Step 1: Download the Ensembl GTF.** Run `curl -fsSL -o ~/Development/refs/seedmatch/rnor7/Rattus_norvegicus.mRatBN7.2.109.gtf.gz https://ftp.ensembl.org/pub/release-109/gtf/rattus_norvegicus/Rattus_norvegicus.mRatBN7.2.109.gtf.gz`. Record its size and SHA-256 in the report.
+- [x] **Step 1: Download the Ensembl GTF.** (Done by the controller; the size and the digest are in the Global Constraints.) Run `curl -fsSL -o ~/Development/refs/seedmatch/rnor7/Rattus_norvegicus.mRatBN7.2.109.gtf.gz https://ftp.ensembl.org/pub/release-109/gtf/rattus_norvegicus/Rattus_norvegicus.mRatBN7.2.109.gtf.gz`. Record its size and SHA-256 in the report.
 
 - [ ] **Step 2: Run the R script.** Run `SEEDMATCH_TEST_REFS=~/Development/refs/seedmatch tools/golden/run.sh tools/golden/R/annotation_rnor7.R`. Expected: 6 files. The `utr3` file has fewer than 23036 rows, because `min.feature.width` removes the 4168 sequences of width 0 and the sequences of width 1 to 7.
 
