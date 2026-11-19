@@ -1,0 +1,19 @@
+# generated-by: tools/golden/R/de_and_counts.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+fdr_cutoff	fc_cutoff	basemean_cutoff	gene_id
+1	0	30	g01_plain
+1	0	30	g06_padj_is_1
+1	0	30	g07_padj_is_0.05
+1	0	30	g08_log2fc_is_0.5
+1	0	30	g09_basemean_is_30
+1	0	30	g11_negative_log2fc
+1	0	30	g13_log2fc_is_0.2
+0.050000000000000003	0.5	10	g01_plain
+0.050000000000000003	0.5	10	g07_padj_is_0.05
+0.050000000000000003	0.5	10	g08_log2fc_is_0.5
+0.050000000000000003	0.5	10	g09_basemean_is_30
+0.050000000000000003	0.5	10	g10_basemean_is_29.999
+0.050000000000000003	0.5	10	g11_negative_log2fc
+0.050000000000000003	0.5	10	g12_basemean_is_10

@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a defect, for example a wrong result, an error, or a result that is different from SeedMatchR.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not put private data or secrets in the report. For a security vulnerability, obey [`SECURITY.md`](https://github.com/inflexa-ai/seedmatch/blob/main/SECURITY.md) and do not use this form.
+  - type: checkboxes
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched the [issues](../../issues) and found no duplicate.
+          required: true
+        - label: I read [`docs/divergences.md`](https://github.com/inflexa-ai/seedmatch/blob/main/docs/divergences.md). The difference from SeedMatchR is not a recorded divergence.
+          required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the defect and its effect.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The smallest Python code that shows the defect, with a small input.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: If SeedMatchR gives a different result, give the R code and its output.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: seedmatch version
+      description: The output of `python -c "import importlib.metadata as m; print(m.version('seedmatch'))"`, or the commit SHA.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Python version, operating system, and CPU architecture
+      placeholder: Python 3.12, Linux, arm64
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: The complete traceback, if there is one.
+      render: shell
+    validations:
+      required: false

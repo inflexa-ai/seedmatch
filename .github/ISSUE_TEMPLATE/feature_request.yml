@@ -1,0 +1,31 @@
+name: Feature request
+description: Ask for a new capability, or for a SeedMatchR function that seedmatch does not have.
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched the [issues](../../issues) and found no duplicate.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What do you want to do, and what stops you now?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What must seedmatch do?
+    validations:
+      required: false
+  - type: input
+    id: r-function
+    attributes:
+      label: SeedMatchR function
+      description: If the request is a port of a SeedMatchR function, give its name.
+    validations:
+      required: false

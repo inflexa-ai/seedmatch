@@ -1,0 +1,121 @@
+[project]
+name = "seedmatch"
+version = "0.1.0"
+description = "Python port of SeedMatchR: seed matches of an siRNA guide strand and their effect on differential expression."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "numba>=0.60",
+]
+
+[project.urls]
+Homepage = "https://github.com/inflexa-ai/seedmatch"
+Issues = "https://github.com/inflexa-ai/seedmatch/issues"
+Changelog = "https://github.com/inflexa-ai/seedmatch/releases"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.100",
+    "pytest-socket>=0.7",
+    "mypy>=1.13",
+    "pandas-stubs>=2.2",
+    "ruff>=0.15",
+]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.10"]
+build-backend = "uv_build"
+
+[tool.uv]
+# The development environment uses the versions of the sandbox lock (../inflexa/images/package-store).
+# The pandas-stubs line matches the pandas 2.3 API, so that mypy checks against the runtime API.
+constraint-dependencies = [
+    "numpy==2.5.2",
+    "pandas==2.3.3",
+    "numba==0.67.0",
+    "llvmlite==0.49.0",
+    "pandas-stubs==2.3.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# ruff also formats the Python blocks of Markdown files. The design and plan documents hold
+# illustrative snippets, and tmp/ holds scratch copies, so none of them is formatted code.
+extend-exclude = ["tmp", "docs/design.md", "docs/plans"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "CPY001", # the license is in LICENSE, not in a header of each file
+    "D203",   # conflicts with D211 (no blank line before a class docstring)
+    "D213",   # conflicts with D212 (the summary starts on the first docstring line)
+    "COM812", # conflicts with the formatter
+    "ISC001", # conflicts with the formatter
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# Each options class is a frozen dataclass, so it is safe as the default value of a parameter.
+extend-immutable-calls = [
+    "seedmatch.search.SearchOptions",
+    "seedmatch.search.api.SearchOptions",
+    "seedmatch.FullSearchOptions",
+    "seedmatch.FullSearchRangesOptions",
+    "seedmatch.report.FullSearchOptions",
+    "seedmatch.report.FullSearchRangesOptions",
+    "seedmatch.report.grid.FullSearchOptions",
+    "seedmatch.report.grid.FullSearchRangesOptions",
+    "seedmatch.ReportOptions",
+    "seedmatch.report.ReportOptions",
+    "seedmatch.report.report.ReportOptions",
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"urllib.request".msg = "Network access belongs only in seedmatch.fetch."
+"http.client".msg = "Network access belongs only in seedmatch.fetch."
+"socket".msg = "Network access belongs only in seedmatch.fetch."
+"ssl".msg = "Network access belongs only in seedmatch.fetch."
+"urllib3".msg = "Network access belongs only in seedmatch.fetch."
+"requests".msg = "Network access belongs only in seedmatch.fetch."
+"httpx".msg = "Network access belongs only in seedmatch.fetch."
+"seedmatch.fetch".msg = "Network access belongs only in seedmatch.fetch."
+
+[tool.ruff.lint.per-file-ignores]
+"src/seedmatch/fetch/**" = ["TID251"]
+# Numba cannot compile a dataclass argument, so each kernel takes its arrays and scalars one by one.
+"src/seedmatch/search/kernels.py" = ["PLR0913", "PLR0917"]
+# A test name can carry a divergence ID such as D001, and N802 requires a lowercase function name.
+"tests/**" = ["S101", "PLR2004", "D", "ANN", "INP001", "N802"]
+"tools/**" = ["T201", "INP001", "D"]
+
+[tool.mypy]
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = "numba.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "seedmatch.search.kernels"
+disallow_untyped_decorators = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+addopts = "--disable-socket --strict-markers -ra"
+markers = ["refs: needs SEEDMATCH_TEST_REFS"]
+
+[tool.coverage.run]
+branch = true
+source = ["seedmatch"]
+omit = ["*/seedmatch/plot/*"]
+
+[tool.coverage.report]
+fail_under = 95

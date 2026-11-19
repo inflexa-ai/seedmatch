@@ -1,0 +1,8 @@
+# generated-by: tools/golden/R/full_search.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# vmatchPattern2 is the patched function of tools/golden/patches/vmatchPattern2.R
+seqnames	start	end	width
+ENSRNOG00000016275	73	79	7
+ENSRNOG00000016275	62	79	18

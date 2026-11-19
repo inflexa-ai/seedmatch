@@ -1,0 +1,125 @@
+import math
+from functools import cache
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+
+from seedmatch import (
+    Guide,
+    Seed,
+    annotate_seed_counts,
+    filter_de,
+    full_search_ranges,
+    seed_match_report,
+)
+from seedmatch.sequence import SequenceSet, read_fasta
+
+DATA = Path(__file__).parent / "data"
+GOLDEN = Path(__file__).parent / "golden"
+GUIDE = "UUAUAGAGCAAGAACACUGUUUU"
+
+
+def golden(path: str) -> pd.DataFrame:
+    return pd.read_csv(GOLDEN / path, sep="\t", comment="#", dtype=str, keep_default_na=False)
+
+
+# The field names of each tuple are the columns of the golden file, so no static type can name them.
+def golden_rows(path: str) -> list[Any]:
+    return list(golden(path).itertuples(index=False))
+
+
+# A SequenceSet is immutable, so each test can share the one set.
+@cache
+def sirna_seqs() -> SequenceSet:
+    return read_fasta(DATA / "Test_seqs.fa")
+
+
+# The file has a mer7m8 column, so this reader keeps it. read_deseq2_table would reject the file.
+# A DataFrame is mutable, so each call reads the file again.
+def sirna_de() -> pd.DataFrame:
+    return pd.read_csv(DATA / "DESEQ2_results.tsv", sep="\t")
+
+
+def run_core_pipeline() -> None:
+    seqs = read_fasta(DATA / "Test_seqs.fa")
+    de = filter_de(sirna_de(), basemean_cutoff=0)
+    annotate_seed_counts(de, seqs, Guide(GUIDE).target(Seed.MER7M8))
+    full_search_ranges(Guide(GUIDE), seqs)
+    seed_match_report(de, seqs, Guide(GUIDE))
+
+
+# The columns that an R golden file names differently from the Python frames. The column `names` of
+# a vmatchPattern2 result repeats `seqnames`, so the comparison drops it.
+R_COLUMNS = {
+    "seqs": "seq_id",
+    "seqnames": "seq_id",
+    "Category": "category",
+    "Group": "group",
+    "best.match": "best_match",
+    "TargetSeq": "target_seq",
+    "EditDistance": "edit_distance",
+    "AllowIndels": "indels",
+    "IN.DESEQ2": "detected",
+}
+_R_BOOLEANS = {"TRUE": True, "FALSE": False, "Detected": True, "Undetected": False}
+_R_MISSING = "NA"
+_FLOAT_RELATIVE_TOLERANCE = 1e-9
+
+
+def _kind(column: pd.Series) -> str:
+    if pd.api.types.is_bool_dtype(column):
+        return "bool"
+    if pd.api.types.is_integer_dtype(column):
+        return "int"
+    if pd.api.types.is_float_dtype(column):
+        return "float"
+    return "str"
+
+
+_READERS = {"bool": _R_BOOLEANS.__getitem__, "int": int, "float": float, "str": str}
+
+
+# The kind comes from the dtype of the frame, so a text column that holds digits stays text.
+def _equal(value: object, text: str, kind: str) -> bool:
+    missing = bool(pd.isna(value))
+    if text == _R_MISSING or missing:
+        return text == _R_MISSING and missing
+    try:
+        expected = _READERS[kind](text)
+    except (KeyError, ValueError):
+        return False
+    if kind == "float":
+        return math.isclose(float(value), expected, rel_tol=_FLOAT_RELATIVE_TOLERANCE)
+    return value == expected
+
+
+def assert_frame_matches_golden(got: pd.DataFrame, path: str) -> None:
+    """Fail at the first row and column where `got` differs from the golden file.
+
+    The comparison reads only the columns of the golden file, under their Python names, so `got` can
+    have more columns. An integer, a boolean, and a string must be equal. A float must agree within
+    a relative tolerance of 1e-9.
+    """
+    expected = golden(path).drop(columns=["names"], errors="ignore").rename(columns=R_COLUMNS)
+    if len(got) != len(expected):
+        message = f"{path}: the frame has {len(got)} rows, expected {len(expected)}"
+        raise AssertionError(message)
+    for name in expected.columns:
+        if name not in got.columns:
+            columns = list(got.columns)
+            message = f"{path}: the frame has no column {name!r}; its columns are {columns}"
+            raise AssertionError(message)
+    first: tuple[int, int, str, object, str, str] | None = None
+    for position, name in enumerate(expected.columns):
+        kind = _kind(got[name])
+        for row, (value, text) in enumerate(zip(got[name], expected[name], strict=True)):
+            if not _equal(value, text, kind):
+                if first is None or (row, position) < first[:2]:
+                    first = (row, position, name, value, text, kind)
+                break
+    if first is not None:
+        row, _, name, value, text, kind = first
+        shown = repr(text) if kind == "str" else text
+        message = f"{path}: row {row} (0-based) column {name!r}: got {value!r}, expected {shown}"
+        raise AssertionError(message)
