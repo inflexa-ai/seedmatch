@@ -73,7 +73,7 @@ with Reference.from_paths(ensdb="ensdb.sqlite", genome="genome.2bit") as ref:
 utr3_counts = count_matches(target, utr3)
 ```
 
-`Reference.sequences` also takes a `TranscriptFilter` and a `PerGene` option. The defaults are the defaults of `load_annotations` in R. `PerGene.LONGEST` selects, for each gene, the transcript with the longest feature. For `FeatureType.UTR3`, this is the transcript with the longest 3' UTR. `PerGene.UNION` merges the ranges of the transcripts of a gene. `Reference.from_directory(path)` opens the one `.sqlite` file and the one `.2bit` or `.fa.gz` file of a directory.
+`Reference.sequences` also takes a `TranscriptFilter` and a `PerGene` option. The defaults are the defaults of `load_annotations` in R. `PerGene.LONGEST` selects, for each gene, the transcript with the longest feature. For `FeatureType.UTR3`, this is the transcript with the longest 3' UTR. `PerGene.UNION` merges the ranges of the transcripts of a gene. `Reference.from_directory(path)` opens the one `.sqlite` file and the one `.2bit` or `.fa.gz` file of a directory. `Reference.from_gtf(gtf, genome)` reads a GTF file instead of an EnsDb file.
 
 [`docs/r-map.md`](docs/r-map.md) gives the Python name of each R function, and the changes of the arguments.
 
@@ -95,13 +95,12 @@ This version has the core path:
 - the FASTA reader and the sequence set
 - the seeds and the targets of a guide
 - the search: the counts and the ranges, with mismatches and indels
-- the annotation: the EnsDb file, the 2bit and FASTA genome files, and the feature sequences of a `Reference`
+- the annotation: the EnsDb file or an Ensembl or GENCODE GTF file, the 2bit and FASTA genome files, and the feature sequences of a `Reference`
 - the DE table: the reader and the filter
 - the seed counts, `full_search`, `full_search_ranges`, and `seed_match_report`
 
 These parts of SeedMatchR are not in this version:
 
-- the annotation from a GTF file
 - the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and the PR and ROC curves
 - the downloads
 - the wobble and bulge search, the 3' compensatory search, the network scores, and the other small analyses

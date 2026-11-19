@@ -1,4 +1,8 @@
+import bz2
+import gzip
+import lzma
 import math
+import zlib
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -21,6 +25,28 @@ from seedmatch.sequence import SequenceSet, read_fasta
 DATA = Path(__file__).parent / "data"
 GOLDEN = Path(__file__).parent / "golden"
 GUIDE = "UUAUAGAGCAAGAACACUGUUUU"
+
+
+COMMENT_LINES = "".join(f"# comment {i}\n" for i in range(5000)).encode()
+
+
+def damaged_compressed_files() -> dict[str, tuple[bytes, type[Exception]]]:
+    """Map the name of a damaged file to its bytes and to the exception of its decompressor.
+
+    The file holds 5000 comment lines, which a GTF reader skips, so a reader reaches the damage.
+    """
+    gzipped, bzipped, xzipped = (
+        pack(COMMENT_LINES) for pack in (gzip.compress, bz2.compress, lzma.compress)
+    )
+    return {
+        "truncated gzip": (gzipped[: len(gzipped) // 2], EOFError),
+        "gzip with a bad header": (b"\x1f\x8b" + bytes(30), gzip.BadGzipFile),
+        "gzip with a bad block": (gzipped[:10] + b"\xff" * 40, zlib.error),
+        "truncated bzip2": (bzipped[: len(bzipped) // 2], EOFError),
+        "bzip2 with a bad block": (b"BZh9" + b"\xff" * 40, OSError),
+        "truncated xz": (xzipped[: len(xzipped) // 2], EOFError),
+        "xz with a bad block": (b"\xfd7zXZ\x00" + b"\xff" * 40, lzma.LZMAError),
+    }
 
 
 def golden(path: str) -> pd.DataFrame:

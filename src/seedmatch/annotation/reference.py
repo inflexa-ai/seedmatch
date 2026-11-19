@@ -1,6 +1,7 @@
 """A reference: one annotation and one genome that agree."""
 
 import os
+from collections.abc import Callable
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Final, Self
@@ -15,6 +16,7 @@ from seedmatch.annotation.features import Features, derive_features
 from seedmatch.annotation.filters import FeatureType, PerGene, TranscriptFilter
 from seedmatch.annotation.genome import Genome, listed_names
 from seedmatch.annotation.genome_file import open_genome
+from seedmatch.annotation.gtf import load_gtf
 from seedmatch.errors import InputError
 from seedmatch.sequence.sequence_set import SequenceSet
 
@@ -44,14 +46,17 @@ class Reference:
         If a file does not open, or if the two do not agree, the function closes what it opened
         and raises the error.
         """
-        with ExitStack() as stack:
-            annotation = AnnotationDb.open(ensdb)
-            stack.callback(annotation.close)
-            opened = open_genome(genome)
-            stack.callback(opened.close)
-            reference = cls(annotation, opened)
-            stack.pop_all()
-        return reference
+        return cls._open(AnnotationDb.open, ensdb, genome)
+
+    @classmethod
+    def from_gtf(cls, gtf: str | os.PathLike[str], genome: str | os.PathLike[str]) -> Self:
+        """Read an Ensembl or GENCODE GTF file and open the genome file (2bit or FASTA).
+
+        The GTF has no contig lengths, so the check of `Reference` covers only the contig names.
+        The errors and the closing are those of `from_paths`. `load_gtf` describes what the reader
+        takes from the GTF.
+        """
+        return cls._open(load_gtf, gtf, genome)
 
     @classmethod
     def from_directory(cls, path: str | os.PathLike[str]) -> Self:
@@ -77,6 +82,22 @@ class Reference:
         ensdb = _only_candidate(directory, names, _ENSDB_SUFFIXES, "EnsDb")
         genome = _only_candidate(directory, names, _GENOME_SUFFIXES, "genome")
         return cls.from_paths(ensdb=ensdb, genome=genome)
+
+    @classmethod
+    def _open(
+        cls,
+        read_annotation: Callable[[str | os.PathLike[str]], AnnotationDb],
+        annotation: str | os.PathLike[str],
+        genome: str | os.PathLike[str],
+    ) -> Self:
+        with ExitStack() as stack:
+            opened_annotation = read_annotation(annotation)
+            stack.callback(opened_annotation.close)
+            opened_genome = open_genome(genome)
+            stack.callback(opened_genome.close)
+            reference = cls(opened_annotation, opened_genome)
+            stack.pop_all()
+        return reference
 
     def transcripts(self, transcript_filter: TranscriptFilter = TranscriptFilter()) -> pd.DataFrame:
         """Return the transcripts that pass the filter, as `AnnotationDb.transcripts` does.

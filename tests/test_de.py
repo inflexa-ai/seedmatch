@@ -5,7 +5,7 @@ import re
 
 import pandas as pd
 import pytest
-from helpers import DATA, golden_rows, sirna_de
+from helpers import DATA, damaged_compressed_files, golden_rows, sirna_de
 
 import seedmatch
 from seedmatch.de import DE_REQUIRED_COLUMNS, filter_de, read_deseq2_table
@@ -264,3 +264,19 @@ def test_read_deseq2_table_reads_bzip2_and_xz_from_the_content_as_r_does(tmp_pat
     packed = tmp_path / "table.tsv"
     packed.write_bytes(compress(plain.read_bytes()))
     assert read_deseq2_table(packed)["gene_id"].tolist() == ["ENSRNOG1", "ENSRNOG2"]
+
+
+@pytest.mark.parametrize("name", damaged_compressed_files())
+def test_read_deseq2_table_names_the_file_of_a_damaged_compressed_table(tmp_path, name):
+    path = tmp_path / "table.tsv"
+    path.write_bytes(damaged_compressed_files()[name][0])
+    prefix = f"{str(path)!r}: the compressed data is damaged or truncated ("
+    with pytest.raises(InputError, match=re.escape(prefix)) as raised:
+        read_deseq2_table(path)
+    assert str(raised.value).endswith("); expected a complete gzip, bzip2, or xz file")
+
+
+def test_read_deseq2_table_names_the_path_of_a_directory(tmp_path):
+    message = f"{str(tmp_path)!r}: the path is a directory; expected a file"
+    with pytest.raises(InputError, match=re.escape(message)):
+        read_deseq2_table(tmp_path)

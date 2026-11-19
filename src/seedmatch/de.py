@@ -1,20 +1,13 @@
 """The table of DESeq2 results: the reader for the GEO files and the filter."""
 
-import bz2
-import gzip
-import io
-import lzma
 import os
 import warnings
-from collections.abc import Iterator
-from contextlib import contextmanager
-from pathlib import Path
-from typing import Final, TextIO
+from typing import Final
 
 import pandas as pd
 
 from seedmatch._checks import as_cutoff, check_columns, check_numeric_columns
-from seedmatch._io import local_path
+from seedmatch._io import local_path, open_text
 from seedmatch.errors import InputError
 
 DE_REQUIRED_COLUMNS: Final = ("gene_id", "baseMean", "log2FoldChange", "pvalue", "padj")
@@ -31,33 +24,6 @@ _DESEQ2_COLUMNS: Final = (
 )
 _NUMERIC_COLUMNS: Final = ("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj")
 _FILTER_COLUMNS: Final = ("baseMean", "log2FoldChange", "pvalue", "padj")
-_GZIP_MAGIC: Final = b"\x1f\x8b"
-_BZIP2_MAGIC: Final = b"BZh"
-_XZ_MAGIC: Final = b"\xfd7zXZ\x00"
-
-
-def _decompressed(
-    raw: io.BufferedReader,
-) -> gzip.GzipFile | bz2.BZ2File | lzma.LZMAFile | io.BufferedReader:
-    """Return a reader of the bytes after the compression that the first bytes show, if any."""
-    head = raw.peek(len(_XZ_MAGIC))
-    if head.startswith(_GZIP_MAGIC):
-        return gzip.GzipFile(fileobj=raw)
-    if head.startswith(_BZIP2_MAGIC):
-        return bz2.BZ2File(raw)
-    if head.startswith(_XZ_MAGIC):
-        return lzma.LZMAFile(raw)
-    return raw
-
-
-@contextmanager
-def _open_text(path: Path) -> Iterator[TextIO]:
-    """Open the file as UTF-8 text. The first bytes, not the suffix, show a compressed file."""
-    with path.open("rb") as raw:
-        binary = _decompressed(raw)
-        # pandas also opens a path with newline="", so its parser gets each line end unchanged.
-        with io.TextIOWrapper(binary, encoding="utf-8", newline="") as text:
-            yield text
 
 
 def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
@@ -74,7 +40,7 @@ def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
     file = local_path(shown)
     try:
         # pandas gets an open handle and no path, so it cannot open a URL or guess a compression.
-        with _open_text(file) as handle, warnings.catch_warnings():
+        with open_text(file) as handle, warnings.catch_warnings():
             # With index_col=False, pandas drops the extra fields of a row and only warns.
             warnings.simplefilter("error", pd.errors.ParserWarning)
             table = pd.read_csv(
