@@ -14,17 +14,17 @@ if (seedmatchr != "2.0.0" || !startsWith(biostrings, "2.78.")) {
   stop("SeedMatchR ", seedmatchr, " and Biostrings ", biostrings, ", expected 2.0.0 and 2.78.x")
 }
 
-# The annotation goldens (annotation.R) need these versions.
-annotation <- c(
+# The annotation goldens (annotation.R) and the network goldens (network.R) need these versions.
+pinned <- c(
   ensembldb = "2.34.", GenomicFeatures = "1.62.", rtracklayer = "1.70.", Rsamtools = "2.26.",
-  AnnotationFilter = "1.34."
+  AnnotationFilter = "1.34.", igraph = "2.3.", Matrix = "1.7.", DBI = "1.3.", RSQLite = "3.53."
 )
-installed <- vapply(names(annotation), function(p) as.character(packageVersion(p)), character(1))
-wrong <- !startsWith(installed, annotation)
+installed <- vapply(names(pinned), function(p) as.character(packageVersion(p)), character(1))
+wrong <- !startsWith(installed, pinned)
 if (any(wrong)) {
   stop(
-    paste(names(annotation)[wrong], installed[wrong], collapse = ", "), ", expected ",
-    paste0(names(annotation)[wrong], " ", annotation[wrong], "x", collapse = ", ")
+    paste(names(pinned)[wrong], installed[wrong], collapse = ", "), ", expected ",
+    paste0(names(pinned)[wrong], " ", pinned[wrong], "x", collapse = ", ")
   )
 }
 

@@ -53,6 +53,10 @@ class Transcript:
         return f"ENSSYNT{self.number:011d}"
 
     @property
+    def protein_id(self) -> str:
+        return f"ENSSYNP{self.number:011d}"
+
+    @property
     def span(self) -> Span:
         return min(s for s, _ in self.exons), max(e for _, e in self.exons)
 
@@ -137,8 +141,9 @@ METADATA = (
     ("species", "synthetic_organism"),
 )
 
-# The tables and indexes of schema 2.2, copied from EnsDb.Rnorvegicus.v109.sqlite, without the
-# protein tables.
+# The tables and indexes of schema 2.2, copied from EnsDb.Rnorvegicus.v109.sqlite. The file has the
+# protein table, but not the uniprot and protein_domain tables. Thus hasProteinData of ensembldb is
+# FALSE, and its queries do not change.
 SCHEMA = """
 CREATE TABLE `metadata` (
   `name` TEXT,
@@ -190,6 +195,7 @@ CREATE TABLE `tx2exon` (
   `exon_id` TEXT,
   `exon_idx` INTEGER
 );
+CREATE TABLE `protein` (`tx_id` TEXT, `protein_id` TEXT, `protein_sequence` TEXT);
 """
 INDEXES = """
 CREATE UNIQUE INDEX chromosome_seq_name_idx on chromosome (seq_name);
@@ -204,6 +210,8 @@ CREATE INDEX tx2exon_exon_id_idx on tx2exon (exon_id);
 CREATE INDEX entrezgene_gene_id_idx on entrezgene (gene_id);
 CREATE INDEX entrezgene_entrezid_idx on entrezgene (entrezid);
 CREATE INDEX tx2exon_exon_idx_idx on tx2exon (exon_idx);
+CREATE INDEX protein_tx_id_idx on protein (tx_id);
+CREATE INDEX protein_protein_id_idx on protein (protein_id);
 """
 
 TWOBIT_MAGIC = 0x1A412743
@@ -609,6 +617,11 @@ def write_ensdb(path: Path) -> None:
         for k, x in enumerate(tx.exons, 1)
     ]
     entrez_rows = [(g.gene_id, e) for g in sorted(GENES, key=lambda g: g.number) for e in g.entrez]
+    protein_rows = [
+        (tx.tx_id, tx.protein_id, None)
+        for number in TX_ROW_ORDER
+        if (tx := tx_of(number)).cds is not None
+    ]
     with sqlite3.connect(path) as db:
         db.executescript(SCHEMA)
         db.executemany("INSERT INTO metadata VALUES (?, ?)", METADATA)
@@ -618,6 +631,7 @@ def write_ensdb(path: Path) -> None:
         db.executemany("INSERT INTO tx VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", tx_rows)
         db.executemany("INSERT INTO exon VALUES (?, ?, ?)", [(i, *x) for i, x in exon_rows.items()])
         db.executemany("INSERT INTO tx2exon VALUES (?, ?, ?)", tx2exon_rows)
+        db.executemany("INSERT INTO protein VALUES (?, ?, ?)", protein_rows)
         db.executescript(INDEXES)
     db.close()
 

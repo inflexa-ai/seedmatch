@@ -1,0 +1,45 @@
+# generated-by: tools/golden/R/network.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# igraph: 2.3.3, Matrix: 1.7.5, DBI: 1.3.0, RSQLite: 3.53.3
+# repeated: create_graph warns with: number of items to replace is not a multiple of replacement length. It keeps the first count of a gene
+# repeated_graph: igraph::is_directed TRUE, igraph::ecount 24, and the neighbors of ENSSYNG00000000001 are ENSSYNG00000000004 ENSSYNG00000000004
+# no_counts: create_graph(ppi, data.frame(gene_id = "ENSSYNG00000000001")), a res without the column overall_matches for a gene of the network, stops with: replacement has length zero
+case	name	feature
+repeated	ENSSYNG00000000001	2
+repeated	ENSSYNG00000000002	1
+repeated	ENSSYNG00000000004	0
+repeated	ENSSYNG00000000005	0
+repeated	ENSSYNG00000000006	0
+repeated	ENSSYNG00000000007	0
+repeated	ENSSYNG00000000008	0
+repeated	ENSSYNP00000000098	0
+repeated	ENSSYNP00000000099	0
+na_count	ENSSYNG00000000001	0
+na_count	ENSSYNG00000000002	0
+na_count	ENSSYNG00000000004	0
+na_count	ENSSYNG00000000005	0
+na_count	ENSSYNG00000000006	NA
+na_count	ENSSYNG00000000007	0
+na_count	ENSSYNG00000000008	0
+na_count	ENSSYNP00000000098	0
+na_count	ENSSYNP00000000099	0
+bad_counts	ENSSYNG00000000001	-1
+bad_counts	ENSSYNG00000000002	0
+bad_counts	ENSSYNG00000000004	Inf
+bad_counts	ENSSYNG00000000005	0
+bad_counts	ENSSYNG00000000006	0
+bad_counts	ENSSYNG00000000007	0
+bad_counts	ENSSYNG00000000008	0
+bad_counts	ENSSYNP00000000098	0
+bad_counts	ENSSYNP00000000099	0
+none_in_network	ENSSYNG00000000001	0
+none_in_network	ENSSYNG00000000002	0
+none_in_network	ENSSYNG00000000004	0
+none_in_network	ENSSYNG00000000005	0
+none_in_network	ENSSYNG00000000006	0
+none_in_network	ENSSYNG00000000007	0
+none_in_network	ENSSYNG00000000008	0
+none_in_network	ENSSYNP00000000098	0
+none_in_network	ENSSYNP00000000099	0

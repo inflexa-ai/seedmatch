@@ -1,0 +1,21 @@
+# generated-by: tools/golden/R/network.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# igraph: 2.3.3, Matrix: 1.7.5, DBI: 1.3.0, RSQLite: 3.53.3
+# header_true: the call of R/get_network_matches.R:25 on trrust_sample.tsv gives 9 rows, and the names before :30 are TFA | GA | Repression | X1001
+# quote: the same call on a file with the lines TF1\tG1\tRepression\t1 | TF'2\tG2\tActivation\t2 | TF3\tG3\tUnknown\t3 | TF4\tG'4\tActivation\t4 stops with: line 1 did not have 4 elements
+# hash: the same call on a file with the lines TF1\tG1\tRepression\t1 | TF#2\tG2\tActivation\t2 | TF3\tG3\tUnknown\t3 stops with: line 1 did not have 4 elements
+# three_fields: the same call on a file with the lines TF1\tG1\tRepression\t1 | TF2\tG2\tActivation | TF3\tG3\tUnknown\t3 stops with: line 1 did not have 4 elements
+# na_text: the same call on a file with the lines TF1\tG1\tRepression\t1 | NA\tG2\tActivation\t2 | TF3\tNA\tUnknown\t3 gives the value NA, not the text: source NA in data row 1 and target NA in data row 2
+source	target	edge_type	evidence
+TFA	GA	Repression	1001
+TFA	GB	Activation	1002
+TFB	GA	Activation	1003
+TFB	GC	Unknown	1004
+GA	TFA	Repression	1005
+TFA	GA	Activation	1006
+TFC	GB	Repression	1007
+TFC	TFC	Activation	1008
+TFA	GB	Activation	1009;1010
+TFB	GD	Repression	1011

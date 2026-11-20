@@ -1,0 +1,13 @@
+# generated-by: tools/golden/R/network.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# igraph: 2.3.3, Matrix: 1.7.5, DBI: 1.3.0, RSQLite: 3.53.3
+# subgraph_edges: igraph 2.3.3 warns with: `subgraph.edges()` was deprecated in igraph 2.1.0.
+# percentile_1: get_stringPPI_to_stringGGI with p = 1 stops with: non-character argument, because no edge is above the cutoff 900
+# percentile_1_2: stats::quantile(edge.scores, 1.2) stops with: 'probs' outside [0,1]
+# percentile_na: stats::quantile(edge.scores, NA) gives NA, and get_stringPPI_to_stringGGI with p = NA stops with: Unknown edge selected
+case	percentile	cutoff	n_above	n_equal
+p0	0	400	20	2
+p50	0.5	650	10	2
+p95	0.94999999999999996	897.49999999999989	2	0

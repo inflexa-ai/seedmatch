@@ -369,6 +369,108 @@ The comment lines of `wobble_bulge_r.tsv` give the version of `gtools` and these
 - `formals_get_target_bulged_guides`: the names of the formals of `.get_target_bulged_guides`, in their order.
 - `check_bulges_nt`: `check_bulges_nt(RNAStringSet(c("CNUCUAUA", "CUCUANUA", "CUCNUAUA")), 3)` keeps `CUCUANUA` and `CUCNUAUA`.
 
+## Golden files of the network functions
+
+The script `network.R` writes the golden files in `tests/golden/network/`. They give the R results of `get_network_matches`, `get_stringPPI_to_stringGGI`, `create_graph`, and `stats::quantile`:
+
+```bash
+tools/golden/run.sh tools/golden/R/network.R
+```
+
+The script reads `trrust_sample.tsv` and `string_links_sample.txt` from `tests/data/`. It also reads the synthetic EnsDb `tests/data/annotation/synthetic.sqlite`. If the fixture changes, run `tools/fixtures/annotation.py` first.
+
+The script draws no random numbers, thus the second run writes the same bytes as the first run. For each case, the script makes sure that the R result has the value that the script expects. If a result differs, the script stops.
+
+igraph is a Suggests of SeedMatchR, thus `install.R` installs it apart from the Imports. It installs igraph into `tools/golden/.rlib` only if the library path has no igraph 2.3.x. DBI and RSQLite read the EnsDb, and they are dependencies of ensembldb. `check_env.R` stops unless igraph is 2.3.x, Matrix is 1.7.x, DBI is 1.3.x, and RSQLite is 3.53.x. The comment lines of each file give the versions of igraph, Matrix, DBI, and RSQLite.
+
+### Replacement of STRINGdb and biomaRt
+
+`get_stringPPI_to_stringGGI` calls STRINGdb and biomaRt. These packages are not installed, and they read from the internet. The script takes the text of the function with `deparse`. It replaces the calls below with local functions and evaluates the text again. Before each replacement, it makes sure that the call occurs the expected number of times. The environment of the new function is the environment of the script.
+
+- `STRINGdb::STRINGdb$new` becomes `local_stringdb_new`. Its `get_graph` (`R/rstring.R:692` of STRINGdb 2.22.0) reads `string_links_sample.txt` with the `read.table` call of `load` (`:1032`, call at `:1064`). That call has `sep = " "`, `header = TRUE`, `stringsAsFactors = FALSE`, and `fill = TRUE`.
+- `get_graph` keeps the rows with `combined_score >= 400` (`:1067`), the default threshold (`:109-110`). It returns `igraph::graph_from_data_frame(rows, FALSE)` (`graph.data.frame` at `:1073`). The graph is undirected, and each row is an edge. Thus the row A-B and the row B-A are parallel edges.
+- `biomaRt::useMart` becomes `local_use_mart`. It returns `NULL`.
+- `biomaRt::getBM` becomes `local_get_bm`. It reads the tables `protein` and `tx` of the synthetic EnsDb with DBI and RSQLite, read-only. It returns the columns `ensembl_gene_id` and `ensembl_peptide_id` for the protein IDs in `values`.
+
+STRINGdb has the GPL-2 license. The script states the behavior of STRINGdb 2.22.0 in its own code. It does not copy the source of STRINGdb.
+
+### TRRUST
+
+`trrust_rows.tsv` has the columns `source`, `target`, `edge_type`, and `evidence`. These are the rows that `read_trrust` must give. The script reads `trrust_sample.tsv` with `header = FALSE`, `colClasses = "character"`, `quote = ""`, and `comment.char = ""`.
+
+The comment lines of `trrust_rows.tsv` give the results of the call of `R/get_network_matches.R:25`. This call is `read.table(..., header = TRUE, sep = "\t", stringsAsFactors = FALSE)`:
+
+- `header_true`: the call on `trrust_sample.tsv` loses line 1, because R takes the line as the names. The note gives the number of rows and the names.
+- `quote`, `hash`, and `three_fields`: the call stops with `line 1 did not have 4 elements`. The synthetic file has a `'` in a regulator and in a target, a `#` in a regulator, or a line of 3 fields.
+- `na_text`: the text `NA` in a regulator or in a target becomes the value `NA`.
+
+Each synthetic file starts with the line `TF1\tG1\tRepression\t1`. The note shows the lines of the file, with `\t` for a tab.
+
+`trrust_matches.tsv` has the columns `case`, `ENSG`, `repression_matches`, and `activation_matches`. They come from `get_network_matches(seeds, organism = "human", aggregator = ..., network_data = ...)`. The rows of a case are in the order of the vertices of the graph. The cases:
+
+- `mean` and `degree_importance`: the seeds `TFA`, `GC`, and `TFC`, and the rows of `trrust_rows.tsv`.
+- `mean_header_true` and `degree_importance_header_true`: the same seeds, and the rows of the `header = TRUE` call with the names of `R/get_network_matches.R:30`. These rows do not have line 1 of the fixture.
+- `mean_no_seed`: the seeds `ENSG00000000001` and `ENSG00000000002`, which are not genes of the table. Each value is 0.
+
+The comment lines of `trrust_matches.tsv` give these R results:
+
+- `out_neighbors_tfa`: `names(igraph::neighbors(g, "TFA"))` for the graph of `R/get_network_matches.R:35`. The default mode of `neighbors` is `out`, thus a gene gets its messages from its targets.
+- `median`: for an aggregator that is not `mean` or `degree_importance`, no branch of `message_passing` runs. Thus each value is the seed flag.
+- `organism_missing`: the error of a call without `organism`.
+
+### Quantiles
+
+`r_quantiles.tsv` has the columns `case`, `values`, `probability`, and `quantile`. The column `values` holds the values with a comma between them. The column `quantile` is `stats::quantile(values, probability, names = FALSE)`.
+
+The cases `seq21_p95`, `ties_p30`, `one_p95`, `ties_high_p95`, `two_third`, and `seq10_p10` are small inputs of the rule of type 7. The case `max_p100` has the probability 1. The cases `links_p0`, `links_p50`, and `links_p95` use the scores of 400 or more of `string_links_sample.txt`, in file order, at the probabilities 0, 0.5, and 0.95.
+
+R and `np.quantile` differ in the last bit for `links_p95`. R gives `897.49999999999989`, and `np.quantile` gives `897.5`.
+
+### STRING
+
+The cases are `p0`, `p50`, and `p95`. Each case is a call of the replaced function `get_stringPPI_to_stringGGI(32630, p = p, sp = "rat")` with `p` equal to 0, 0.5, and 0.95. The files:
+
+- `string_cutoffs.tsv`: the columns `case`, `percentile`, `cutoff`, `n_above`, and `n_equal`. The cutoff is `stats::quantile(igraph::E(g)$combined_score, p)`, as `R/get_stringPPI_to_stringGGI.R:18-19` takes it. The counts are the edges above the cutoff and the edges equal to it.
+- `string_links.tsv`: the columns `case`, `protein1`, `protein2`, and `combined_score`. These are the rows with a score above the cutoff, in the order of the file. The script makes sure that their number is the `igraph::ecount` of the subgraph of `R/get_stringPPI_to_stringGGI.R:22-23`.
+- `string_nodes.tsv`: the columns `case`, `position`, and `name`. These are the row names of the result, in order. A protein without a gene keeps its protein ID without the taxon, for example `ENSSYNP00000000098`.
+- `string_ppi.tsv`: the columns `case`, `gene1`, `gene2`, and `value`. These are the entries above 0 of the result, from `Matrix::summary`, in the order of the row and then of the column. Each value is 2, because the file has the rows A-B and B-A.
+
+The comment lines of `string_cutoffs.tsv` give these R results:
+
+- `subgraph_edges`: the deprecation warning of `igraph::subgraph.edges` in igraph 2.3.3.
+- `percentile_1`: the function stops with `non-character argument` for `p = 1`, because no edge is above the cutoff.
+- `percentile_1_2`: `stats::quantile` stops with `'probs' outside [0,1]` for `p = 1.2`.
+- `percentile_na`: `stats::quantile` gives `NA` for `p = NA`, and the function stops with `Unknown edge selected`.
+
+The comment lines of `string_links.tsv` give the `read.table` call of STRINGdb (`R/rstring.R:1064`) on a file of `tempdir()`. The file has the header, the good rows `9.A 9.B 500` and `9.B 9.A 500`, and then the lines of a case. A late case has more good rows before the lines of the case.
+
+Each note gives the class of `combined_score`, the rows that `read.table` returns after the good rows, and the rows that the subset `combined_score >= 400` keeps (`:1067`). A row with an `NA` score becomes a row of `NA` values in the subset. The R result depends on the position of the bad line. The late cases show the result for a bad line far after the first lines of the file.
+
+- `read_text_score`: the scores `abc`, `1000`, and `99`. The column is text, and R compares text. The subset keeps `abc` and `99`, but not `1000`.
+- `read_two_fields` and `read_hash`: a line with 2 fields, or a line with a `#`. `read.table` returns a row with an `NA` score.
+- `read_quote_pair`: a pair of lines with a `'`. The second `'` closes the quote of the first. `read.table` returns one row with parts of both lines and an `NA` score.
+- `read_quote_single`: one line with a `'` that no later line closes. The call reads no row, and it warns.
+- `read_quote_unclosed_late`: the same line after the good rows, and then a good line. `read.table` keeps the good rows and returns one garbled row for the rest of the file. It warns `EOF within quoted string`.
+- `read_four_fields`: a line with 4 fields moves the columns. The row name is `9.C`, and the score is `9.E`.
+- `read_four_fields_late`: the same line after the good rows, and then a good line. The columns do not move. The fourth field `9.E` becomes a row of its own with an `NA` score.
+- `read_negative_and_large`: the scores -5 and 5000. R keeps 5000.
+- `read_decimal`: the score 450.5. R keeps it.
+
+### Seed counts
+
+`string_features.tsv` has the columns `case`, `name`, and `feature`. They come from `create_graph(ppi, res)`. The matrix `ppi` is the result of the case `p0`, and `res` has the columns `gene_id` and `overall_matches`. The file has a row for each node, in the order of the vertices. A node without a count has the feature 0. The cases:
+
+- `repeated`: the counts G1 2, G2 1, G2 3, and `ENSSYNG00000000099` 5. R keeps the first count of G2. The gene `ENSSYNG00000000099` is not a node.
+- `na_count`: the count `NA` for G6. The feature stays `NA`.
+- `bad_counts`: the counts -1 for G1 and `Inf` for G4. R keeps each count.
+- `none_in_network`: the count 4 for `ENSSYNG00000000099`, which is not a node. Each feature is 0.
+
+The comment lines of `string_features.tsv` give these R results:
+
+- `repeated`: the warning `number of items to replace is not a multiple of replacement length`.
+- `repeated_graph`: `igraph::is_directed`, `igraph::ecount`, and the neighbors of G1 for the graph of `repeated`.
+- `no_counts`: the error of `create_graph` for a `res` that has a gene of the network and no column `overall_matches`.
+
 ## Patch of vmatchPattern2
 
 `vmatchPattern2` of SeedMatchR ignores `with.indels` and `min.mismatch` (`docs/divergences.md`, `D-001`). The file `tools/golden/patches/vmatchPattern2.R` defines a patched function with the same arguments and the same data frame. `full_search.R` puts it into the SeedMatchR namespace with `assignInNamespace`. As a result, the ranges in the golden files obey the same rules as the counts. A script that needs the original function does not source the patch.

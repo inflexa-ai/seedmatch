@@ -44,6 +44,15 @@ if (length(still_missing) > 0) {
   stop("Imports not installed: ", paste(still_missing, collapse = ", "))
 }
 
+# igraph is a Suggests of SeedMatchR, and the network goldens call it, thus the Imports list does not hold it.
+# check_env.R stops unless the version is 2.3.x.
+igraph_found <- "igraph" %in% rownames(installed.packages()) &&
+  startsWith(as.character(packageVersion("igraph")), "2.3.")
+cat("igraph 2.3.x on the library path:", if (igraph_found) "yes" else "no", "\n")
+if (!igraph_found) {
+  install.packages("igraph", lib = lib)
+}
+
 # PRROC is a Suggests of SeedMatchR, and benchmark_preds calls it. The goldens pin PRROC 1.4 by its digest.
 prroc_md5 <- "229140aa270cdad059daf08783b083bb"
 if (!("PRROC" %in% rownames(installed.packages(lib.loc = lib))) ||

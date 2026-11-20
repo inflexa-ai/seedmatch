@@ -73,7 +73,7 @@ The R golden files in `tests/golden/noncanonical/` come from these files. `tools
 
 The files in `annotation/` are synthetic. They are not copies of SeedMatchR data. The script `tools/fixtures/annotation.py` writes each file from one specification:
 
-- `synthetic.sqlite`: an EnsDb with schema 2.2
+- `synthetic.sqlite`: an EnsDb with schema 2.2, with the table `protein` (see below)
 - `synthetic.2bit` and `synthetic.v1.2bit`: the genome in the 2bit format of version 0 and of version 1
 - `synthetic.fa`: the genome in the FASTA format, with the soft-masked bases in lowercase
 - `synthetic.fa.gz`: the BGZF file of `synthetic.fa`
@@ -87,6 +87,34 @@ uv run python tools/fixtures/annotation.py
 ```
 
 The R golden files in `tests/golden/annotation/` come from these files. `tools/golden/README.md` gives the command.
+
+The table `protein` has the columns of the table in `EnsDb.Rnorvegicus.v109.sqlite`: `tx_id`, `protein_id`, and `protein_sequence`. The column `protein_sequence` is `NULL`. The EnsDb has no `uniprot` table and no `protein_domain` table. Thus `hasProteinData` of ensembldb is `FALSE`, and the queries of ensembldb do not change.
+
+Each transcript with a CDS has one protein. The protein ID is `ENSSYNP<n>` for the transcript number n, and n has 11 digits. The lncRNA transcript 5 has no protein. The genes 1, 2, 5, and 7 have more than one protein.
+
+## Fixtures of the network functions
+
+`trrust_sample.tsv` and `string_links_sample.txt` are synthetic. They are not copies of TRRUST data or of STRING data. Each line ends with a newline.
+
+`trrust_sample.tsv` has the format of the TRRUST file. It has no header, and a tab separates the fields. The fields are the regulator, the target, the mode, and the PubMed IDs. The rows cover these cases:
+
+- Line 1 is an edge that R loses with `header = TRUE`.
+- `TFA` represses and activates `GA` (lines 1 and 6).
+- Lines 2 and 9 give the same edge with other PubMed IDs.
+- `TFB` regulates `GC` with the mode `Unknown`.
+- `GA` is a target and a regulator (line 5), and `TFC` regulates itself (line 8).
+
+`string_links_sample.txt` has the format of the STRING file. It has a header line, and a space separates the fields. The proteins are the proteins of the synthetic EnsDb, with its taxon 32630. The proteins 98 and 99 are not in the EnsDb. Each pair has a row for each order. The rows are in the order of `protein1`, as in the rat file.
+
+Let Pn be `32630.ENSSYNP<n>` and Gn be `ENSSYNG<n>`, each with 11 digits. The cases:
+
+- P1 and P2 are proteins of G1, thus the link P1-P2 joins G1 with itself.
+- The links P2-P7 of G1, P4-P12 of G2, and P11-P12 of G7 come from a second protein of a gene.
+- P6-P99 and P98-P99 have a protein without a gene.
+- The scores 400 and 399 are at the default threshold of STRINGdb 2.22.0 (`R/rstring.R:109-110`) and below it. The score 150 is the lowest score of the rat file.
+- The scores of 400 or more give the cutoff 400 at the percentile 0, 650 at 0.5, and 897.4999999999999 at 0.95.
+
+The R golden files in `tests/golden/network/` come from these files and from the table `protein`. `tools/golden/README.md` gives the command.
 
 ## License
 

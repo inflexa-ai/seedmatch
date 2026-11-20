@@ -1,0 +1,44 @@
+# generated-by: tools/golden/R/network.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# igraph: 2.3.3, Matrix: 1.7.5, DBI: 1.3.0, RSQLite: 3.53.3
+# out_neighbors_tfa: names(igraph::neighbors(g, "TFA")) for the graph of R/get_network_matches.R:35 gives GA GA GB GB
+# median: get_network_matches(seeds, organism = "human", aggregator = "median", network_data = ...) runs no branch, thus each value is the seed flag: TFA 1, TFB 0, GA 0, TFC 1, GB 0, GC 1, GD 0
+# organism_missing: get_network_matches without organism stops with: argument "organism" is missing, with no default
+case	ENSG	repression_matches	activation_matches
+mean	TFA	0	0
+mean	TFB	0	0
+mean	GA	1	0
+mean	TFC	0	1
+mean	GB	0	0
+mean	GC	1	1
+mean	GD	0	0
+degree_importance	TFA	0.20000000000000001	0.040000000000000001
+degree_importance	TFB	0	0
+degree_importance	GA	0.20000000000000001	0.050000000000000003
+degree_importance	TFC	0.33333333333333331	0.44444444444444442
+degree_importance	GB	0	0
+degree_importance	GC	1	1
+degree_importance	GD	0	0
+mean_header_true	TFA	0	0
+mean_header_true	TFB	0	0
+mean_header_true	GA	1	0
+mean_header_true	TFC	0	1
+mean_header_true	GB	0	0
+mean_header_true	GC	1	1
+mean_header_true	GD	0	0
+degree_importance_header_true	TFA	0.25	0.0625
+degree_importance_header_true	TFB	0	0
+degree_importance_header_true	GA	0.25	0.083333333333333329
+degree_importance_header_true	TFC	0.33333333333333331	0.44444444444444442
+degree_importance_header_true	GB	0	0
+degree_importance_header_true	GC	1	1
+degree_importance_header_true	GD	0	0
+mean_no_seed	TFA	0	0
+mean_no_seed	TFB	0	0
+mean_no_seed	GA	0	0
+mean_no_seed	TFC	0	0
+mean_no_seed	GB	0	0
+mean_no_seed	GC	0	0
+mean_no_seed	GD	0	0
