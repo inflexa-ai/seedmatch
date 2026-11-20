@@ -1,6 +1,8 @@
 """Helpers that read a table file in chunks of lines, shared by the readers of the text tables."""
 
-from collections.abc import Iterable, Iterator, Mapping
+import csv
+import io
+from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from functools import partial
 from itertools import chain, compress, islice, repeat
 from typing import Any, Final, TextIO
@@ -95,6 +97,37 @@ def data_bytes(chunk: list[str], is_data: NDArray[np.bool_], first: int, source:
     # Bytes, not a StringIO: pandas holds a text buffer in 4-byte characters, and the peak
     # memory of a chunk is then twice as large.
     return text.encode()
+
+
+def parse_data_lines(  # noqa: PLR0913
+    chunk: list[str],
+    is_data: NDArray[np.bool_],
+    first: int,
+    source: str,
+    *,
+    separator: str,
+    names: Sequence[str],
+    dtype: str
+    | type[str]
+    | np.dtype[Any]
+    | Mapping[Hashable, str | type[str] | np.dtype[Any]] = str,
+) -> pd.DataFrame:
+    """Return the data lines of the chunk as a table with the columns `names`.
+
+    A quote character, `#`, and the text `NA` are text, and a field keeps its spaces. `dtype`
+    goes to `pandas.read_csv` as it is. A NUL character raises `InputError` (see `data_bytes`).
+    `first` is the number of the first line of the chunk, and `field_lines` must have made
+    `is_data` for the same `separator` and the number of `names`.
+    """
+    return pd.read_csv(
+        io.BytesIO(data_bytes(chunk, is_data, first, source)),
+        sep=separator,
+        header=None,
+        names=list(names),
+        dtype=dtype,
+        quoting=csv.QUOTE_NONE,
+        na_filter=False,
+    )
 
 
 def not_utf8(source: str, error: UnicodeDecodeError, kind: str) -> InputError:

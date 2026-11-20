@@ -25,7 +25,9 @@ from seedmatch import (
     full_search_ranges,
     kmer_counts,
     match_distances,
+    read_trrust,
     seed_match_report,
+    trrust_scores,
     wobble_bulge_matches,
 )
 from seedmatch.sequence import SequenceSet, read_fasta
@@ -170,6 +172,7 @@ def run_core_pipeline() -> None:
     count_matches(Guide(GUIDE).target(Seed.MER7M8), utr3)
     wobble_bulge_matches(Guide(GUIDE), seqs)
     compensatory_sites(Guide(GUIDE), seqs)
+    trrust_scores(read_trrust(DATA / "trrust_sample.tsv"), ["TFA"])
 
 
 # The columns that an R golden file names differently from the Python frames. The column `names` of

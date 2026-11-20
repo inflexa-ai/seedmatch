@@ -4,7 +4,15 @@ import re
 import numpy as np
 import pytest
 
-from seedmatch._lines import LINE_LIMIT, data_bytes, field_lines, frame_of, not_utf8, read_chunks
+from seedmatch._lines import (
+    LINE_LIMIT,
+    data_bytes,
+    field_lines,
+    frame_of,
+    not_utf8,
+    parse_data_lines,
+    read_chunks,
+)
 from seedmatch.errors import InputError
 
 DESCRIBED = "x, y, and z"
@@ -226,3 +234,44 @@ def test_read_chunks_cut_a_long_first_line_at_the_limit_plus_two_with_the_mark_i
     assert not rest
     assert len(chunk[0]) == LINE_LIMIT + 2 - len(mark)
     assert not chunk[0].endswith("\n")
+
+
+def tab_lines(chunk, first=1):
+    return field_lines(chunk, first, "f", separator="\t", fields=3, described=DESCRIBED)
+
+
+def test_parse_data_lines_keep_hash_quote_and_na_as_text():
+    chunk = ["a#1\t'b\t\"c\n", "\n", 'NA\t"d\tNA\n', "e\t\t#\r\n", "'f\t\"g\th'\n"]
+    frame = parse_data_lines(chunk, tab_lines(chunk), 1, "f", separator="\t", names=["x", "y", "z"])
+    assert frame.to_dict("list") == {
+        "x": ["a#1", "NA", "e", "'f"],
+        "y": ["'b", '"d', "", '"g'],
+        "z": ['"c', "NA", "#", "h'"],
+    }
+    assert [str(dtype) for dtype in frame.dtypes] == ["object"] * 3
+
+
+def test_parse_data_lines_give_the_dtype_to_the_parser():
+    chunk = ["a\t5\t1.5\n", "b\t6\t2\n"]
+    frame = parse_data_lines(
+        chunk,
+        tab_lines(chunk),
+        1,
+        "f",
+        separator="\t",
+        names=["x", "y", "z"],
+        dtype={"x": str, "y": np.int64, "z": np.float64},
+    )
+    assert [str(dtype) for dtype in frame.dtypes] == ["object", "int64", "float64"]
+    assert frame["y"].tolist() == [5, 6]
+
+
+def test_parse_data_lines_name_the_line_of_a_nul_character():
+    chunk = ["a\tb\tc\n", "\n", "d\te\tf\x00\n"]
+    message = (
+        "'f': line 13: the line has a NUL character (U+0000); expected text without NUL characters"
+    )
+    with pytest.raises(InputError, match=failure(message)):
+        parse_data_lines(
+            chunk, tab_lines(chunk, 11), 11, "f", separator="\t", names=["x", "y", "z"]
+        )

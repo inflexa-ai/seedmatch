@@ -24,6 +24,7 @@ from seedmatch._checks import (
     check_integer_columns,
     check_not_negative,
     check_numeric_columns,
+    check_text_columns,
     check_type,
     check_unique_columns,
     column_values,
@@ -322,6 +323,42 @@ def test_as_data_frame_ends_the_message_with_the_expected_text_of_the_caller():
     message = "null has type list; expected a pandas.DataFrame with one row for each gene"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         as_data_frame([1, 2], name="null", expected="a pandas.DataFrame with one row for each gene")
+
+
+@pytest.mark.parametrize(
+    "dtype", ["object", "string", "category"], ids=["object", "string", "category"]
+)
+def test_check_text_columns_accept_text_columns(dtype):
+    table = pd.DataFrame({"a": pd.Series(["x", "y"], dtype=dtype), "b": ["x", "z"], "c": [1, 2]})
+    check_text_columns(table, ["a", "b"], label="T")
+    check_text_columns(table, [], label="T")
+    check_text_columns(table.iloc[:0], ["a", "b"], label="T")
+
+
+def test_check_text_columns_name_the_first_value_that_is_not_text():
+    table = pd.DataFrame({"a": ["x", "y", "z"], "b": ["x", 5, 6], "c": ["x", 7, 8]})
+    message = "T column 'b' holds 5 in row 1; expected a str in each row"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_text_columns(table, ["a", "b", "c"], label="T")
+    message = "T column 'c' holds 7 in row 1; expected a str in each row"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_text_columns(table, ["c", "b"], label="T")
+
+
+@pytest.mark.parametrize(
+    ("column", "shown_value"),
+    [
+        (pd.Series(["x", "y", None]), "None"),
+        (pd.Series(["x", "y", math.nan]), "nan"),
+        (pd.Series(["x", "y", pd.NA], dtype="string"), "<NA>"),
+        (pd.Series(["x", "y", None], dtype="category"), "nan"),
+    ],
+    ids=["None", "NaN", "NA", "category"],
+)
+def test_check_text_columns_reject_a_missing_value(column, shown_value):
+    message = f"T column 'a' holds {shown_value} in row 2; expected a str in each row"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_text_columns(pd.DataFrame({"a": column}), ["a"], label="T")
 
 
 def test_column_values_returns_a_float_array_with_nan_for_a_missing_value():

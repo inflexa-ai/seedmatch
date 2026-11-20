@@ -215,6 +215,26 @@ print(site_result.p_value)
 
 A region is dropped if a longer region of the same seed match contains it (D-053). The seed match can have `max_seed_mismatch` mismatches, and the region can have `max_region_mismatch`. R returns no row for each input (D-004). `workers` sets the width of the thread pool. The function takes the fields above as a `CompensatoryOptions` object, in the third position.
 
+`read_trrust` reads the TRRUST table of regulators and their targets. This is the file that `seedmatch-fetch trrust` downloads, and it has no header. `trrust_scores` gives each gene of the table a repression score and an activation score. This example scores the genes of a list.
+
+```python
+from seedmatch import read_trrust, trrust_scores
+
+# The columns: source, target, edge_type, and evidence.
+trrust = read_trrust("trrust_rawdata.human.tsv")
+
+# TRRUST names a gene by its symbol, not by its Ensembl gene ID.
+# Replace the symbols of the example with the symbols of your seed genes.
+trrust_result = trrust_scores(trrust, ["TFA", "GC", "TFC"])
+print(trrust_result.head())
+```
+
+An edge goes from a regulator to its target. A `Repression` edge is in the repression channel, and an `Activation` edge is in the activation channel. An `Unknown` edge is in no channel. The score of a gene in a channel is the sum of two terms, divided by 2. The terms are the mean of the seed flags of its regulators, and its own seed flag.
+
+A gene of `seed_genes` has the flag 1, and each other gene has the flag 0. A gene without a regulator in a channel has the score NaN, because the mean of no value is not defined. The columns `repressors` and `activators` give the number of regulators. `aggregator=Aggregator.DEGREE_IMPORTANCE` divides the flag of a regulator by the number of its targets. Import `Aggregator` from `seedmatch`. R takes the messages from the targets, not from the regulators (D-007).
+
+`read_trrust` keeps line 1 as an edge, because the file has no header. R loses this edge. The reader keeps `#`, quote characters, and the text `NA` as text (D-057). If no gene of `seed_genes` is a gene of the table, `trrust_scores` warns with `SeedMatchWarning` (D-058).
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -245,7 +265,7 @@ seedmatch-fetch list
 
 If `DEST` is absent, the command makes it. For each file, it prints the path, a tab, and `downloaded` or `present` on standard output. Before a download, it prints the file name and the size on standard error. The exit status is 0 for success and 1 for an error. An error prints `seedmatch-fetch: <message>` on standard error. Ctrl-C ends the command with status 130. A usage error exits with status 2. A key that the registry does not have gives a message that lists the valid keys.
 
-Use one `DEST` for each reference build. `Reference.from_directory(DEST)` opens the one `.sqlite` file and the one `.2bit` file of the directory. A directory with the EnsDb files of different builds has more than one `.sqlite` file, and `from_directory` raises `InputError`. `read_deseq2_table` reads each table of `example sirna` from `DEST`, because it accepts the gzip format. `read_mirdb` reads the miRDB file from `DEST`. No function of this version reads the TRRUST and STRING files.
+Use one `DEST` for each reference build. `Reference.from_directory(DEST)` opens the one `.sqlite` file and the one `.2bit` file of the directory. A directory with the EnsDb files of different builds has more than one `.sqlite` file, and `from_directory` raises `InputError`. `read_deseq2_table` reads each table of `example sirna` from `DEST`, because it accepts the gzip format. `read_mirdb` reads the miRDB file from `DEST`. `read_trrust` reads the TRRUST file.
 
 ## Differences from SeedMatchR
 
@@ -262,6 +282,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - `alignment_text` shows the full guide, from g1 to the last base. In R, the guide line of `plotAlignment` has no g1, and the function stops for the default positions (D-045).
 - The wobble and bulge search runs. In R, each call of `run_wobble_bulges_pipeline` stops with an error. The port counts each distinct start of a site one time, and a bulge is a run of extra target bases (D-005).
 - The 3' compensatory search runs. R returns 0 rows for each input. Without the early return, its code stops at the first site. The port gives each pair of a seed match and a region (D-004).
+- `trrust_scores` takes the messages of a gene from its regulators. R takes them from the targets of the gene (D-007).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -284,11 +305,12 @@ This version has the core path:
 - the reader of the miRDB table of predicted miRNA targets
 - the wobble and bulge search: the sites with G:U pairs or a bulge, their count for each gene, and the null of this count
 - the 3' compensatory search: the sites with a seed match and, before it in the sequence, a match of a 3' region of the guide
+- the TRRUST network scores
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:
 
-- the network scores
+- the STRING network scores
 - the plots and the HTML report
 
 ## Installation

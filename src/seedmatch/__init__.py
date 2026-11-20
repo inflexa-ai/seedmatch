@@ -8,6 +8,7 @@ from seedmatch.errors import InputError, SeedMatchError, SeedMatchWarning
 from seedmatch.evalue import e_value_null, e_values
 from seedmatch.kmers import KmerCounts, kmer_counts, kmer_gene_counts
 from seedmatch.mirdb import read_mirdb
+from seedmatch.network import Aggregator, read_trrust, trrust_scores
 from seedmatch.noncanonical import (
     CompensatoryOptions,
     WobbleBulgeOptions,
@@ -55,6 +56,7 @@ __all__ = [
     "DEFAULT_SEEDS",
     "NONSEED_SEEDS",
     "REPORT_CATEGORIES",
+    "Aggregator",
     "Alternative",
     "Benchmark",
     "CompensatoryOptions",
@@ -108,9 +110,11 @@ __all__ = [
     "read_deseq2_table",
     "read_fasta",
     "read_mirdb",
+    "read_trrust",
     "reverse_complement",
     "roc_curve",
     "seed_match_report",
+    "trrust_scores",
     "wasserstein_areas",
     "wobble_bulge_matches",
     "wobble_bulge_null",

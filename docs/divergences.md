@@ -95,6 +95,24 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: A cutoff without an effect gives a wrong gold standard. The ROC area of R does not measure the predictions.
 - Test: `test_the_padj_cutoff_applies_D006` and `test_the_roc_curve_uses_the_labels_D006` in `tests/stats/test_benchmark.py`. `test_benchmark_matches_r` in the same file compares the areas and the curves with the golden files of the patched R function (`tools/golden/patches/benchmark_preds.R`).
 
+## D-007: trrust_scores and string_scores take the messages from the regulators
+
+- ID: `D-007`
+- R location: `message_passing` (`R/get_network_matches.R:51-122`), called by `get_network_matches` (`:35-39`).
+- R behavior: The case `mean` of `tests/golden/network/trrust_matches.tsv` and R probes give the evidence for the defects below.
+  - `igraph::neighbors(graph, v)` has the default mode `out`, thus the messages of a gene come from its targets (`:59`).
+  - `mean(aggregated_message_rep, as.numeric(features_rep[v]))` gives the own flag of the gene as the argument `trim`, thus R ignores the flag (`:84-85`). The probes `mean(3, 1)` = 3 and `mean(0, 1)` = 0 show this. `length(neighbors != 0)` is the number of neighbors (`:61`).
+  - The mode of a message comes from each TRRUST row whose target is the neighbor. `Repression` wins over `Activation` (`:71-79`). `features_act` reads `features_rep[v]` after its change (`:85`, `:110`).
+  - `degree_importance` divides by `igraph::degree`, the total degree with each row (`:99`, `:103`, `:109-110`).
+  - R gives `GA` the repression value 1, because its target `TFA` is a seed.
+- New behavior: `trrust_scores` takes the messages of a gene from its regulators.
+  - The score of a gene in a channel is the sum of two terms, divided by 2. The terms are the mean of the weighted seed flags of its regulators in the channel, and its own seed flag.
+  - The mode of an edge selects its channel. An `Unknown` edge is in no channel. A gene without a regulator in a channel has the score NaN.
+  - With `Aggregator.DEGREE_IMPORTANCE`, the weight of a regulator is 1 divided by the number of its distinct targets, over each mode.
+  - `string_scores` takes the messages from the neighbors of the gene.
+- Reason: A TRRUST edge goes from a regulator to its target. A seed match in a regulator can change the expression of its targets, not of its regulators.
+- Test: `test_trrust_scores_use_the_regulators_D007`, `test_trrust_scores_give_the_degree_importance_D007`, and `test_trrust_scores_count_an_unknown_edge_in_the_out_degree_D007` in `tests/network/test_trrust.py`.
+
 ## D-008: e_values has no default null, and genes match by gene_id
 
 - ID: `D-008`
@@ -674,3 +692,23 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: The default region starts after the seed window, at g9 for `Seed.MER7M8` and at g8 for `Seed.MER6`. `first_position=8` gives the R region.
 - Reason: One guide base pairs with one target base.
 - Test: `test_the_region_starts_after_the_seed_D056`, `test_the_default_region_start_follows_the_seed_window_D056`, and `test_the_default_region_starts_after_a_custom_seed_D056` in `tests/noncanonical/test_compensatory.py`.
+
+## D-057: read_trrust keeps the first line of the TRRUST file
+
+- ID: `D-057`
+- R location: `get_network_matches` (`R/get_network_matches.R:25`, `:27`).
+- R behavior: `read.table(..., header = TRUE, sep = "\t")` reads line 1 as the column names, but the TRRUST file has no header.
+  - A planner probe with R 4.5.3 on the human file gives 9395 rows, not 9396. R loses the edge `AATF BAX Repression 22909821`.
+  - A `'` or a `#` stops R with `line 1 did not have 4 elements`. The text `NA` becomes the value `NA`. The notes of `tests/golden/network/trrust_rows.tsv` give the evidence.
+- New behavior: Each line is an edge. The fields keep quote characters, `#`, and `NA` as text. A bad mode, an empty gene, another number of fields, a NUL character, and a line of more than 1024 characters raise `InputError`.
+- Reason: Line 1 is an edge of the data. A gene symbol is text, and the TRRUST format has no quotes and no comments. The limit bounds the memory of a chunk.
+- Test: `test_read_trrust_keeps_the_first_line_D057`, `test_read_trrust_keeps_quote_hash_and_na_text_D057`, `test_read_trrust_keeps_a_double_quote_character_D057`, and `test_read_trrust_rejects_a_bad_line_D057` in `tests/network/test_trrust.py`.
+
+## D-058: trrust_scores warns if no seed gene is in the network
+
+- ID: `D-058`
+- R location: `get_network_matches` (`R/get_network_matches.R:36-37`), and the call of the vignette (`vignettes/articles/SeedMatchR_build_PPI_network.Rmd:28-30`).
+- R behavior: If no gene of `ENSG_Genelist` is a vertex, each value is 0, and R gives no message. The vignette gives `res$gene_id`, the Ensembl gene IDs, but TRRUST names each gene by its symbol. The case `mean_no_seed` of `tests/golden/network/trrust_matches.tsv` gives the evidence.
+- New behavior: `trrust_scores` warns with `SeedMatchWarning`. The message names the first gene of the network as an example.
+- Reason: IDs of another type give scores that look valid. The function warns and does not raise an error, because a valid list of genes can have no gene of the network.
+- Test: `test_trrust_scores_warn_without_a_seed_gene_in_the_network_D058` in `tests/network/test_trrust.py`.

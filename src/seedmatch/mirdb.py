@@ -1,7 +1,5 @@
 """The reader of the miRDB table of predicted miRNA targets."""
 
-import csv
-import io
 import os
 import re
 from dataclasses import dataclass, field
@@ -14,10 +12,10 @@ from numpy.typing import NDArray
 from seedmatch._checks import concatenate_and_clear, shown
 from seedmatch._io import local_path, open_text
 from seedmatch._lines import (
-    data_bytes,
     field_lines,
     frame_of,
     not_utf8,
+    parse_data_lines,
     read_chunks,
     shared_texts,
     vocabulary_codes,
@@ -130,15 +128,7 @@ class _Rows:
         numbers = first + np.flatnonzero(is_data)
         if not numbers.size:
             return
-        frame = pd.read_csv(
-            io.BytesIO(data_bytes(chunk, is_data, first, source)),
-            sep="\t",
-            header=None,
-            names=list(_FIELDS),
-            dtype=str,
-            quoting=csv.QUOTE_NONE,
-            na_filter=False,
-        )
+        frame = parse_data_lines(chunk, is_data, first, source, separator="\t", names=_FIELDS)
         scores = _parse_scores(frame["target_score"].tolist(), numbers, source)
         self.data_lines += len(frame)
         if wanted is not None:

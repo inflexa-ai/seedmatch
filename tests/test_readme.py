@@ -29,6 +29,7 @@ def readme_namespace(tmp_path, monkeypatch):
     (tmp_path / "miRDB_v6.0_prediction_result.txt.gz").write_bytes(
         gzip.compress((DATA / "mirdb_sample.txt").read_bytes())
     )
+    shutil.copy(DATA / "trrust_sample.tsv", tmp_path / "trrust_rawdata.human.tsv")
     monkeypatch.chdir(tmp_path)
     namespace: dict[str, object] = {}
     for number, code in enumerate(python_examples(), start=1):
@@ -137,3 +138,9 @@ def test_readme_compensatory_example_gives_the_sites(readme_namespace):
     assert len(sites) == 96
     assert sites["gene_id"].nunique() == 51
     assert 0 <= readme_namespace["site_result"].p_value <= 1
+
+
+def test_readme_trrust_example_gives_the_scores(readme_namespace):
+    scores = readme_namespace["trrust_result"].set_index("gene")
+    assert scores.loc["GA", "repression_score"] == 0.5
+    assert scores.loc["GA", "activation_score"] == 0.25

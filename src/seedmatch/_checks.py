@@ -228,6 +228,27 @@ def check_unique_columns(
             raise InputError(message)
 
 
+def check_text_columns(table: pd.DataFrame, names: Sequence[str], *, label: str) -> None:
+    """Raise `InputError` for the first value of the columns `names` that is not a `str`.
+
+    The columns come in the order of `names`, and the row is the position. `None`, NaN, and
+    `pd.NA` are not a `str`. The time is O(n) for each column of n rows. The table must have the
+    columns, and `label` names the table in the message.
+    """
+    for name in names:
+        column = table[name]
+        if pd.api.types.infer_dtype(column, skipna=False) == "string" and not column.hasnans:
+            continue
+        values = column.to_numpy(dtype=object)
+        bad = next((row for row, value in enumerate(values) if not isinstance(value, str)), None)
+        if bad is not None:
+            message = (
+                f"{label} column {name!r} holds {shown(values[bad])} in row {bad}; "
+                "expected a str in each row"
+            )
+            raise InputError(message)
+
+
 def number_text(value: float) -> str:
     """Return the value for a message: NaN as `NaN`, and a whole number without a decimal point."""
     if math.isnan(value):
