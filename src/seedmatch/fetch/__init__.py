@@ -1,12 +1,7 @@
 """The download of the registry resources. Only this package uses the network."""
 
 from seedmatch.errors import FetchError
-from seedmatch.fetch.download import (
-    DEFAULT_FETCH_OPTS,
-    FetchOpts,
-    fetch_entry,
-    fetch_resource,
-)
+from seedmatch.fetch.download import DEFAULT_FETCH_OPTS, FetchOpts, fetch_resource
 from seedmatch.fetch.http import HttpResponse, open_url
 
 __all__ = [
@@ -14,7 +9,6 @@ __all__ = [
     "FetchError",
     "FetchOpts",
     "HttpResponse",
-    "fetch_entry",
     "fetch_resource",
     "open_url",
 ]

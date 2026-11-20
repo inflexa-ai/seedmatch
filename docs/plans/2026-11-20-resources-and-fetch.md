@@ -152,7 +152,6 @@ class FetchOpts:
 DEFAULT_FETCH_OPTS: Final[FetchOpts]  # open_url sends a GET with urllib.request
 
 def fetch_resource(resource: Resource, dest: str | os.PathLike[str], *, opts: FetchOpts = DEFAULT_FETCH_OPTS) -> Path: ...
-def fetch_entry(entry: Entry, dest: str | os.PathLike[str], *, opts: FetchOpts = DEFAULT_FETCH_OPTS) -> tuple[Path, ...]: ...
 ```
 
 - `FetchError(SeedMatchError)` goes into `seedmatch/errors.py`.
@@ -166,7 +165,7 @@ Rules of `fetch_resource`:
 - At the end of the body, a size or a digest that differs raises `FetchError` with the URL, the expected value, and the actual value.
 - On each error, and on an `OSError` or a `KeyboardInterrupt` during the transfer, delete the `.part` file, close the response, and raise again. An `OSError` becomes a `FetchError` that names the URL and the received byte count, with the `OSError` as its cause.
 - When the size and the digest agree, `os.replace` the `.part` file to `final`, and return `final`.
-- `fetch_entry` fetches each resource of the entry in order, and returns the paths.
+- The final review removed `fetch_entry`: the command calls `fetch_resource` for each resource, and no document named it.
 
 Rules of the default client (`http.py`):
 - `open_url` sends a GET with an opener of `urllib.request` whose redirect handler does not go to the target of a redirect. A 3xx `HTTPError` becomes a response with its status and its headers. Another `HTTPError` also becomes a response with its status, thus `fetch_resource` gives the message.
@@ -186,7 +185,6 @@ Rules of the default client (`http.py`):
   - `test_an_http_url_is_an_error_before_a_request`: `requests` is empty.
   - `test_a_redirect_to_https_is_followed`, `test_a_relative_redirect_is_resolved`, `test_a_redirect_to_http_is_an_error_before_the_request`, and `test_too_many_redirects_is_an_error`.
   - `test_a_404_is_an_error_with_the_status`.
-  - `test_fetch_entry_returns_the_paths_in_order`.
   - `tests/fetch/test_http.py` uses an opener whose `https` handler serves canned responses. For a redirect, `open_url` gives the status 302 and the `Location`, with no request to the target. For a 404, it gives the status 404. It sends the `User-Agent` header, and it reads the body.
 - [ ] **Step 3: Run the tests.** Run `uv run pytest tests/fetch -q`. Expected: FAIL with `ModuleNotFoundError: No module named 'seedmatch.fetch'`.
 - [ ] **Step 4: Write `errors.py`, `http.py`, `download.py`, and `__init__.py`.**

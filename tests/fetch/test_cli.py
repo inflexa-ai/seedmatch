@@ -1,6 +1,9 @@
 import hashlib
 import importlib
+import os
 import runpy
+import signal
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -10,10 +13,11 @@ from helpers import DATA
 from memory_client import MemoryClient, Route
 
 from seedmatch import FeatureType, Reference
-from seedmatch.fetch import FetchOpts
+from seedmatch.fetch import FetchOpts, cli
 from seedmatch.fetch.cli import main
 from seedmatch.resources import REGISTRY, Entry, Group, Resource
 
+FETCH_TESTS = Path(__file__).parent
 PYPROJECT = Path(__file__).parents[2] / "pyproject.toml"
 ANNOTATION = DATA / "annotation"
 URL_PREFIX = "https://example.org/syn/"
@@ -195,6 +199,30 @@ def test_an_input_error_returns_1_with_the_message(tmp_path, capsys):
     assert client.requests == []
 
 
+def test_a_keyboard_interrupt_returns_130_with_a_message(tmp_path, capsys):
+    entry, routes = synthetic_entry()
+    first = MemoryClient(routes)
+
+    def interrupting(url):
+        if len(first.requests) == 1:
+            raise KeyboardInterrupt
+        return first(url)
+
+    code = main(
+        ["reference", "syn", str(tmp_path)], opts=FetchOpts(open_url=interrupting), registry=[entry]
+    )
+
+    out, err = capsys.readouterr()
+    assert code == 130
+    assert out == f"{tmp_path / 'synthetic.2bit'}\tdownloaded\n"
+    assert err == (
+        downloading("synthetic.2bit")
+        + downloading("synthetic.sqlite")
+        + "seedmatch-fetch: interrupted\n"
+    )
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["synthetic.2bit"]
+
+
 def test_a_final_path_that_cannot_be_accessed_returns_1_with_the_message(
     tmp_path, capsys, monkeypatch
 ):
@@ -238,6 +266,43 @@ def test_a_redirect_prints_one_downloading_line(tmp_path, capsys):
     assert out == reported(tmp_path, "downloaded", "downloaded")
     assert err == downloading("synthetic.2bit") + downloading("synthetic.sqlite")
     assert client.requests == [first, moved, URL_PREFIX + "synthetic.sqlite"]
+
+
+PIPED_COMMAND = """
+import hashlib, sys
+from memory_client import MemoryClient, Route
+from seedmatch.fetch import FetchOpts
+from seedmatch.fetch.cli import main
+from seedmatch.resources import Entry, Group, Resource
+
+bodies = {f"https://example.org/syn/f{number}.bin": bytes([number]) * 1000 for number in range(3)}
+resources = tuple(
+    Resource(url, len(body), hashlib.sha256(body).hexdigest()) for url, body in bodies.items()
+)
+client = MemoryClient({url: Route(body=body) for url, body in bodies.items()})
+entry = Entry(Group.REFERENCE, "syn", "synthetic test files", resources)
+sys.exit(main(["reference", "syn", sys.argv[1]], opts=FetchOpts(open_url=client), registry=[entry]))
+"""
+
+
+def test_a_path_line_comes_before_the_next_download_line_in_a_pipe(tmp_path):
+    # The arguments are the interpreter path and a constant script, so no input reaches the command.
+    done = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", PIPED_COMMAND, str(tmp_path)],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=FETCH_TESTS,
+        env=os.environ | {"PYTHONPATH": str(FETCH_TESTS), "PYTHONUNBUFFERED": ""},
+    )
+    assert done.returncode == 0, done.stdout
+    expected = "".join(
+        f"seedmatch-fetch: downloading f{number}.bin (1000 bytes)\n"
+        f"{tmp_path / f'f{number}.bin'}\tdownloaded\n"
+        for number in range(3)
+    )
+    assert done.stdout == expected
 
 
 GROUP_CHOICES = "{reference,example,mirdb,trrust,string,list}"
@@ -287,9 +352,31 @@ def test_the_help_of_a_key_points_to_the_list_command(capsys, group):
 
 def test_the_script_is_declared():
     declared = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]["scripts"]
-    assert declared["seedmatch-fetch"] == "seedmatch.fetch.cli:main"
+    assert declared["seedmatch-fetch"] == "seedmatch.fetch.cli:run"
     module, _, name = declared["seedmatch-fetch"].partition(":")
-    assert getattr(importlib.import_module(module), name) is main
+    assert getattr(importlib.import_module(module), name) is cli.run
+
+
+@pytest.mark.parametrize("status", [0, 1, 2])
+def test_run_exits_with_the_status_of_main(monkeypatch, status):
+    monkeypatch.setattr(cli, "main", lambda: status)
+    with pytest.raises(SystemExit) as caught:
+        cli.run()
+    assert caught.value.code == status
+
+
+def test_run_ends_by_sigint_after_an_interrupt(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "main", lambda: 130)
+    monkeypatch.setattr(signal, "signal", lambda *args: calls.append(("signal", *args)))
+    monkeypatch.setattr(os, "kill", lambda *args: calls.append(("kill", *args)))
+    with pytest.raises(SystemExit) as caught:
+        cli.run()
+    assert calls == [
+        ("signal", signal.SIGINT, signal.SIG_DFL),
+        ("kill", os.getpid(), signal.SIGINT),
+    ]
+    assert caught.value.code == 130
 
 
 def test_python_m_runs_the_command(capsys, monkeypatch):

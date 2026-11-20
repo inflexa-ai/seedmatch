@@ -1,9 +1,12 @@
 """The download of one registry resource into a directory."""
 
 import contextlib
+import errno
+import fcntl
 import hashlib
 import os
-from collections.abc import Callable
+import stat
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from http.client import HTTPException
 from pathlib import Path
@@ -13,10 +16,11 @@ from urllib.parse import urljoin
 from seedmatch._checks import as_limit, check_at_least, check_not_negative
 from seedmatch.errors import FetchError, InputError
 from seedmatch.fetch.http import HttpResponse, check_https, open_url
-from seedmatch.resources import Entry, Resource
+from seedmatch.resources import Resource
 
 _OK: Final = 200
 _REDIRECTS: Final = frozenset({301, 302, 303, 307, 308})
+_LOCK_ATTEMPTS: Final = 8
 
 
 @dataclass(frozen=True)
@@ -53,8 +57,10 @@ def fetch_resource(
     `dest` is a directory, made with its parents if it is absent. A file at the final path with the
     size and the digest of the resource is not downloaded again. A file with another digest raises
     `FetchError`, and stays. The body goes to `<name>.part`, and the file gets its final name only
-    when its size and its digest agree with the resource. Each failure removes the `.part` file. A
-    `.part` path that is not a regular file raises `FetchError` before the request.
+    when its size and its digest agree with the resource. Each failure after the lock removes the
+    `.part` file. A `.part` path that is not a regular file raises `FetchError` before the request.
+    So does a `.part` file that another run holds: that run downloads the same file into the same
+    `dest`, and this run leaves its file alone.
     """
     directory = _make_directory(dest)
     final = directory / resource.name
@@ -62,26 +68,22 @@ def fetch_resource(
         _check_present(final, resource)
         return final
     part = directory / f"{resource.name}.part"
-    _check_part(part)
-    try:
-        _transfer(resource, part, opts)
-        part.replace(final)
-    except BaseException:
-        # The next run replaces a .part file that stays, and the caller needs the first error.
-        with contextlib.suppress(OSError):
-            part.unlink(missing_ok=True)
-        raise
+    # The lock comes before the request. The rename and the delete happen while the run holds the
+    # lock, so no run writes, renames, or deletes the .part file of another run.
+    with _locked_part(part) as fd:
+        try:
+            # The run that held the lock before can have made the final file.
+            if _exists(final):
+                _remove_held(part, fd)
+            else:
+                _transfer(resource, fd, opts)
+                _rename(part, final)
+                return final
+        except BaseException:
+            _remove_held(part, fd)
+            raise
+    _check_present(final, resource)
     return final
-
-
-def fetch_entry(
-    entry: Entry,
-    dest: str | os.PathLike[str],
-    *,
-    opts: FetchOpts = DEFAULT_FETCH_OPTS,
-) -> tuple[Path, ...]:
-    """Fetch each resource of the entry in order, and return the paths."""
-    return tuple(fetch_resource(resource, dest, opts=opts) for resource in entry.resources)
 
 
 def _make_directory(dest: str | os.PathLike[str]) -> Path:
@@ -114,13 +116,105 @@ def _exists(final: Path) -> bool:
         raise FetchError(message) from error
 
 
-def _check_part(part: Path) -> None:
-    if part.is_symlink() or (part.exists() and not part.is_file()):
+def _not_regular(part: Path) -> str:
+    return (
+        f"{os.fspath(part)!r} is not a regular file; expected a regular file or no file. "
+        "Remove it to download again"
+    )
+
+
+def _open_part(part: Path) -> int:
+    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
+    try:
+        fd = os.open(part, flags, 0o644)
+    except OSError as error:
+        if error.errno in {errno.ELOOP, errno.EISDIR}:
+            raise FetchError(_not_regular(part)) from error
         message = (
-            f"{os.fspath(part)!r} is not a regular file; expected a regular file or no file. "
-            "Remove it to download again"
+            f"{os.fspath(part)!r} cannot be opened: {error!r}; expected a file that can be written"
         )
-        raise FetchError(message)
+        raise FetchError(message) from error
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise FetchError(_not_regular(part))
+    return fd
+
+
+def _lock(fd: int, part: Path) -> None:
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        message = (
+            f"{os.fspath(part)!r} is locked by another run that downloads the file into the same "
+            "dest; expected one run for each file in a dest. Run again when the other run ends"
+        )
+        raise FetchError(message) from error
+    except OSError as error:
+        message = (
+            f"{os.fspath(part)!r} cannot be locked: {error!r}; "
+            "expected a file system that supports locks"
+        )
+        raise FetchError(message) from error
+
+
+def _is_named(part: Path, fd: int) -> bool:
+    try:
+        named = part.lstat()
+    except FileNotFoundError:
+        return False
+    held = os.fstat(fd)
+    return (named.st_dev, named.st_ino) == (held.st_dev, held.st_ino)
+
+
+def _open_locked(part: Path) -> int:
+    for _ in range(_LOCK_ATTEMPTS):
+        fd = _open_part(part)
+        try:
+            _lock(fd, part)
+            named = _is_named(part, fd)
+        except BaseException:
+            os.close(fd)
+            raise
+        if named:
+            return fd
+        # The run that held the lock deleted or renamed this file before the lock came. That lock
+        # protects nothing, because the path now names another file or none.
+        os.close(fd)
+    message = (
+        f"{os.fspath(part)!r} names another file after each lock; "
+        "expected one run for each file in a dest"
+    )
+    raise FetchError(message)
+
+
+@contextlib.contextmanager
+def _locked_part(part: Path) -> Iterator[int]:
+    """Yield the descriptor of the `.part` file with an exclusive lock. The close ends the lock."""
+    fd = _open_locked(part)
+    try:
+        yield fd
+    finally:
+        os.close(fd)
+
+
+def _remove_held(part: Path, fd: int) -> None:
+    # After the rename, the path can name the .part file of another run, so only the file of the
+    # held lock is deleted. The next run replaces a .part file that stays, and the caller needs the
+    # first error.
+    with contextlib.suppress(OSError):
+        if _is_named(part, fd):
+            part.unlink()
+
+
+def _rename(part: Path, final: Path) -> None:
+    try:
+        part.replace(final)
+    except OSError as error:
+        message = (
+            f"{os.fspath(part)!r} cannot be renamed to {os.fspath(final)!r}: {error!r}; "
+            "expected a directory that can be written"
+        )
+        raise FetchError(message) from error
 
 
 def _check_present(final: Path, resource: Resource) -> None:
@@ -186,15 +280,33 @@ def _resolve(url: str, location: str) -> str:
     return target
 
 
-def _transfer(resource: Resource, part: Path, opts: FetchOpts) -> None:
-    """Write the body to `part`, and make sure that its size and its digest agree."""
+def _check_length(response: HttpResponse, url: str, size: int) -> None:
+    """Raise `FetchError` if a Content-Length header is not the size. No header is no error."""
+    value = response.header("Content-Length")
+    if value is None:
+        return
+    text = value.strip()
+    if not (text.isascii() and text.isdigit()):
+        message = f"{url!r} sent Content-Length {value!r}; expected a decimal number"
+        raise FetchError(message)
+    # The text is not converted to an int, because int() raises ValueError for a very long number.
+    if (text.lstrip("0") or "0") != str(size):
+        message = f"{url!r} announced {text} bytes in Content-Length; expected {size}"
+        raise FetchError(message)
+
+
+def _transfer(resource: Resource, fd: int, opts: FetchOpts) -> None:
+    """Write the body to the file of `fd`, and make sure that its size and its digest agree."""
     url, size = resource.url, resource.size
     digest = hashlib.sha256()
     received = 0
     try:
+        os.ftruncate(fd, 0)
         response = _open_body(url, opts)
         try:
-            with part.open("wb") as stream:
+            _check_length(response, url, size)
+            # closefd=False: the caller owns the descriptor, and its close ends the lock.
+            with os.fdopen(fd, "wb", closefd=False) as stream:
                 # The read stops at 1 byte above the size: that byte shows a body that is too long.
                 while chunk := response.read(min(opts.chunk_size, size + 1 - received)):
                     received += len(chunk)

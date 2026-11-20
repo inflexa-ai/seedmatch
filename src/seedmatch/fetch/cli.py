@@ -1,11 +1,13 @@
 """The command `seedmatch-fetch`: download the files of the registry into a directory."""
 
 import argparse
+import os
+import signal
 import sys
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Final, assert_never
+from typing import Final, NoReturn, assert_never
 
 from seedmatch.errors import FetchError, InputError
 from seedmatch.fetch.download import DEFAULT_FETCH_OPTS, FetchOpts, fetch_resource
@@ -14,6 +16,7 @@ from seedmatch.resources import REGISTRY, Entry, Group, Resource, lookup
 
 _PROG: Final = "seedmatch-fetch"
 _LIST: Final = "list"
+_INTERRUPTED: Final = 130  # 128 + SIGINT, the status of a shell for a process that Ctrl-C ends
 
 
 def main(
@@ -22,7 +25,7 @@ def main(
     opts: FetchOpts = DEFAULT_FETCH_OPTS,
     registry: Sequence[Entry] = REGISTRY,
 ) -> int:
-    """Run the command and return its exit status: 0 for success and 1 for an error.
+    """Run the command and return its exit status: 0 for success, 1 for an error, 130 for Ctrl-C.
 
     A usage error ends with `SystemExit(2)`, as `argparse` does it.
     """
@@ -39,7 +42,23 @@ def main(
     except (InputError, FetchError) as error:
         sys.stderr.write(f"{_PROG}: {error}\n")
         return 1
+    except KeyboardInterrupt:
+        sys.stderr.write(f"{_PROG}: interrupted\n")
+        return _INTERRUPTED
     return 0
+
+
+def run() -> NoReturn:
+    """Run `main` as the script `seedmatch-fetch`, and exit with its status.
+
+    After Ctrl-C, the process ends by SIGINT, as the shell expects.
+    """
+    status = main()
+    if status == _INTERRUPTED:
+        # A shell stops a loop only for a process that SIGINT ends, not for the exit status 130.
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGINT)
+    sys.exit(status)
 
 
 def _key_name(group: Group) -> str | None:
@@ -97,6 +116,8 @@ def _fetch(entry: Entry, dest: str, opts: FetchOpts) -> None:
     for resource in entry.resources:
         path, requested = _fetch_one(resource, dest, opts)
         sys.stdout.write(f"{path}\t{'downloaded' if requested else 'present'}\n")
+        # A pipe block-buffers stdout, and a kill would lose the line of a file that is complete.
+        sys.stdout.flush()
 
 
 def _fetch_one(resource: Resource, dest: str, opts: FetchOpts) -> tuple[Path, bool]:

@@ -123,7 +123,7 @@ seedmatch-fetch list
 
 `python -m seedmatch.fetch` runs the same command. The files of a reference are large, and `seedmatch-fetch list` gives the size of each file.
 
-If `DEST` is absent, the command makes it. For each file, it prints the path, a tab, and `downloaded` or `present` on standard output. Before a download, it prints the file name and the size on standard error. The exit status is 0 for success and 1 for an error. An error prints `seedmatch-fetch: <message>` on standard error. A usage error exits with status 2. A key that the registry does not have gives a message that lists the valid keys.
+If `DEST` is absent, the command makes it. For each file, it prints the path, a tab, and `downloaded` or `present` on standard output. Before a download, it prints the file name and the size on standard error. The exit status is 0 for success and 1 for an error. An error prints `seedmatch-fetch: <message>` on standard error. Ctrl-C ends the command with status 130. A usage error exits with status 2. A key that the registry does not have gives a message that lists the valid keys.
 
 Use one `DEST` for each reference build. `Reference.from_directory(DEST)` opens the one `.sqlite` file and the one `.2bit` file of the directory. A directory with the EnsDb files of different builds has more than one `.sqlite` file, and `from_directory` raises `InputError`. `read_deseq2_table` reads each table of `example sirna` from `DEST`, because it accepts the gzip format. No function of this version reads the miRDB, TRRUST, and STRING files.
 

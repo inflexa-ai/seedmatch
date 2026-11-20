@@ -1,19 +1,24 @@
+import errno
+import fcntl
 import hashlib
 import http.client
 import os
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 from memory_client import MemoryClient, Route
 
 from seedmatch.errors import FetchError, InputError, SeedMatchError
-from seedmatch.fetch import DEFAULT_FETCH_OPTS, FetchOpts, fetch_entry, fetch_resource
+from seedmatch.fetch import DEFAULT_FETCH_OPTS, FetchOpts, fetch_resource
 from seedmatch.fetch.http import open_url
-from seedmatch.resources import Entry, Group, Resource
+from seedmatch.resources import Resource
 
 URL = "https://example.org/data/file.bin"
 BODY = bytes(range(256)) * 8
+TIMEOUT = 10
 
 
 def digest_of(body):
@@ -39,8 +44,6 @@ def test_fetch_error_is_a_package_error():
 
 def test_the_default_opts_use_the_default_client():
     assert DEFAULT_FETCH_OPTS.open_url is open_url
-    assert DEFAULT_FETCH_OPTS.chunk_size == 1 << 20
-    assert DEFAULT_FETCH_OPTS.max_redirects == 5
 
 
 @pytest.mark.parametrize(
@@ -238,6 +241,39 @@ def test_a_long_body_stops_at_the_size_plus_one_byte(tmp_path, chunk_size):
     assert client.closed == 1
 
 
+@pytest.mark.parametrize("length", [len(BODY) - 1, len(BODY) + 1, 0])
+def test_a_content_length_that_differs_from_the_size_is_an_error_before_the_read(tmp_path, length):
+    client = MemoryClient({URL: Route(headers={"content-length": str(length)}, body=BODY)})
+    message = f"{URL!r} announced {length} bytes in Content-Length; expected {len(BODY)}"
+    with pytest.raises(FetchError) as caught:
+        fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert str(caught.value) == message
+    assert client.bytes_read == 0
+    assert client.closed == 1
+    assert names(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "value", ["abc", "", "-2048", "2048.0", "2,048", "\u0662\u0660\u0664\u0668"]
+)
+def test_a_content_length_that_is_not_a_number_is_an_error_before_the_read(tmp_path, value):
+    client = MemoryClient({URL: Route(headers={"Content-Length": value}, body=BODY)})
+    message = f"{URL!r} sent Content-Length {value!r}; expected a decimal number"
+    with pytest.raises(FetchError) as caught:
+        fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert str(caught.value) == message
+    assert client.bytes_read == 0
+    assert client.closed == 1
+    assert names(tmp_path) == []
+
+
+@pytest.mark.parametrize("value", [str(len(BODY)), f" {len(BODY)} ", f"00{len(BODY)}"])
+def test_a_content_length_that_agrees_with_the_size_is_downloaded(tmp_path, value):
+    client = MemoryClient({URL: Route(headers={"Content-Length": value}, body=BODY)})
+    path = fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert path.read_bytes() == BODY
+
+
 @pytest.mark.parametrize(
     "error",
     [ConnectionResetError("connection reset by peer"), http.client.IncompleteRead(b"abc", 7)],
@@ -310,7 +346,7 @@ def test_a_stale_part_file_is_replaced(tmp_path):
     assert names(tmp_path) == ["file.bin"]
 
 
-@pytest.mark.parametrize("kind", ["directory", "link"])
+@pytest.mark.parametrize("kind", ["directory", "link", "pipe"])
 def test_a_part_path_that_is_not_a_file_is_an_error_before_a_request(tmp_path, kind):
     dest = tmp_path / "dest"
     dest.mkdir()
@@ -319,6 +355,8 @@ def test_a_part_path_that_is_not_a_file_is_an_error_before_a_request(tmp_path, k
     part = dest / "file.bin.part"
     if kind == "directory":
         part.mkdir()
+    elif kind == "pipe":
+        os.mkfifo(part)
     else:
         part.symlink_to(outside)
     client = MemoryClient({URL: Route(body=BODY)})
@@ -466,29 +504,288 @@ def test_a_status_other_than_200_is_an_error_with_the_status(tmp_path, status):
     assert client.closed == 1
 
 
-def test_fetch_entry_returns_the_paths_in_order(tmp_path):
-    second = b"second file"
-    url_second = "https://example.org/data/second.bin"
-    client = MemoryClient({URL: Route(body=BODY), url_second: Route(body=second)})
-    entry = Entry(
-        Group.EXAMPLE,
-        "pair",
-        "two files",
-        (resource_of(second, url_second), resource_of()),
-    )
-    paths = fetch_entry(entry, tmp_path, opts=opts_of(client))
-    assert paths == (tmp_path / "second.bin", tmp_path / "file.bin")
-    assert [path.read_bytes() for path in paths] == [second, BODY]
-    assert client.requests == [url_second, URL]
+def paused(client, reached, release):
+    """Wrap the client: the first read tells `reached`, then it waits until `release` is set."""
+
+    def open_url(url):
+        response = client(url)
+        read = response.read
+
+        def read_when_released(size):
+            reached.set()
+            if not release.wait(TIMEOUT):
+                message = "the test did not release the read"
+                raise TimeoutError(message)
+            return read(size)
+
+        response.read = read_when_released
+        return response
+
+    return open_url
 
 
-def test_fetch_entry_stops_at_the_first_error(tmp_path):
-    url_second = "https://example.org/data/second.bin"
-    client = MemoryClient({URL: Route(status=404), url_second: Route(body=b"x")})
-    entry = Entry(
-        Group.EXAMPLE, "pair", "two files", (resource_of(), resource_of(b"x", url_second))
+def locked_message(part):
+    return (
+        f"{os.fspath(part)!r} is locked by another run that downloads the file into the same dest; "
+        "expected one run for each file in a dest. Run again when the other run ends"
     )
-    with pytest.raises(FetchError) as caught:
-        fetch_entry(entry, tmp_path, opts=opts_of(client))
-    assert str(caught.value) == f"{URL!r} answered with status 404; expected 200"
+
+
+def test_two_runs_into_one_dest_give_one_file_and_one_error(tmp_path):
+    reached, release = threading.Event(), threading.Event()
+    first_client = MemoryClient({URL: Route(body=BODY)})
+    second_client = MemoryClient({URL: Route(body=BODY)})
+    first_opts = opts_of(paused(first_client, reached, release))
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(fetch_resource, resource_of(), tmp_path, opts=first_opts)
+        try:
+            assert reached.wait(TIMEOUT)
+            with pytest.raises(FetchError) as caught:
+                fetch_resource(resource_of(), tmp_path, opts=opts_of(second_client))
+            assert names(tmp_path) == ["file.bin.part"]
+        finally:
+            release.set()
+        path = first.result(timeout=TIMEOUT)
+    assert str(caught.value) == locked_message(tmp_path / "file.bin.part")
+    assert isinstance(caught.value.__cause__, BlockingIOError)
+    assert second_client.requests == []
+    assert path == tmp_path / "file.bin"
+    assert path.read_bytes() == BODY
+    assert names(tmp_path) == ["file.bin"]
+
+
+def test_a_part_file_locked_by_another_run_is_an_error_and_stays(tmp_path):
+    part = tmp_path / "file.bin.part"
+    client = MemoryClient({URL: Route(body=BODY)})
+    holder = os.open(part, os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.write(holder, b"bytes of the other run")
+        with pytest.raises(FetchError) as caught:
+            fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+        assert part.read_bytes() == b"bytes of the other run"
+        assert names(tmp_path) == ["file.bin.part"]
+    finally:
+        os.close(holder)
+    assert str(caught.value) == locked_message(part)
+    assert client.requests == []
+
+    path = fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert path.read_bytes() == BODY
+    assert names(tmp_path) == ["file.bin"]
+
+
+def test_a_final_file_made_before_the_lock_is_returned_with_no_request(tmp_path, monkeypatch):
+    final = tmp_path / "file.bin"
+    flock = fcntl.flock
+
+    def flock_after_the_other_run(fd, operation):
+        final.write_bytes(BODY)
+        flock(fd, operation)
+
+    client = MemoryClient({URL: Route(body=b"other")})
+    with monkeypatch.context() as patch:
+        patch.setattr(fcntl, "flock", flock_after_the_other_run)
+        path = fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert path == final
+    assert path.read_bytes() == BODY
+    assert client.requests == []
+    assert names(tmp_path) == ["file.bin"]
+
+
+def test_a_final_file_with_another_digest_made_before_the_lock_is_an_error(tmp_path, monkeypatch):
+    final = tmp_path / "file.bin"
+    other = bytes(reversed(BODY))
+    flock = fcntl.flock
+
+    def flock_after_the_other_run(fd, operation):
+        final.write_bytes(other)
+        flock(fd, operation)
+
+    client = MemoryClient({URL: Route(body=BODY)})
+    with monkeypatch.context() as patch:
+        patch.setattr(fcntl, "flock", flock_after_the_other_run)
+        with pytest.raises(FetchError) as caught:
+            fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert str(caught.value) == (
+        f"{os.fspath(final)!r} has {len(BODY)} bytes and sha256 {digest_of(other)}; "
+        f"expected {len(BODY)} bytes and sha256 {digest_of(BODY)}. "
+        "Remove the file to download it again"
+    )
+    assert client.requests == []
+    assert final.read_bytes() == other
+    assert names(tmp_path) == ["file.bin"]
+
+
+def test_a_part_path_that_changes_after_each_lock_is_an_error(tmp_path, monkeypatch):
+    part = tmp_path / "file.bin.part"
+    lstat = Path.lstat
+
+    def lstat_of_another_file(self):
+        result = lstat(self)
+        if self != part:
+            return result
+        return os.stat_result((*result[:1], result.st_ino + 1, *result[2:]))
+
+    client = MemoryClient({URL: Route(body=BODY)})
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "lstat", lstat_of_another_file)
+        with pytest.raises(FetchError) as caught:
+            fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert str(caught.value) == (
+        f"{os.fspath(part)!r} names another file after each lock; "
+        "expected one run for each file in a dest"
+    )
+    assert client.requests == []
+
+
+def test_an_interrupt_after_the_rename_keeps_the_part_file_of_another_run(tmp_path, monkeypatch):
+    part = tmp_path / "file.bin.part"
+    replace = Path.replace
+
+    def replace_then_another_run_starts(self, target):
+        replace(self, target)
+        part.write_bytes(b"part file of another run")
+        raise KeyboardInterrupt
+
+    client = MemoryClient({URL: Route(body=BODY)})
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "replace", replace_then_another_run_starts)
+        with pytest.raises(KeyboardInterrupt):
+            fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert (tmp_path / "file.bin").read_bytes() == BODY
+    assert part.read_bytes() == b"part file of another run"
+
+
+@pytest.mark.parametrize(
+    "replacement", [b"bytes of a third run", None], ids=["replaced", "deleted"]
+)
+def test_a_part_file_gone_before_the_lock_is_opened_again(tmp_path, monkeypatch, replacement):
+    part = tmp_path / "file.bin.part"
+    flock = fcntl.flock
+    locked = []
+
+    def flock_after_another_run_replaced_the_file(fd, operation):
+        if not locked:
+            part.unlink()
+            if replacement is not None:
+                part.write_bytes(replacement)
+        locked.append(fd)
+        flock(fd, operation)
+
+    client = MemoryClient({URL: Route(body=BODY)})
+    with monkeypatch.context() as patch:
+        patch.setattr(fcntl, "flock", flock_after_another_run_replaced_the_file)
+        path = fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert len(locked) == 2
+    assert path.read_bytes() == BODY
     assert client.requests == [URL]
+    assert names(tmp_path) == ["file.bin"]
+
+
+def test_a_part_file_that_cannot_be_locked_is_an_error_before_a_request(tmp_path, monkeypatch):
+    part = tmp_path / "file.bin.part"
+    error = OSError(errno.ENOLCK, "No locks available")
+
+    def failing_flock(_fd, _operation):
+        raise error
+
+    client = MemoryClient({URL: Route(body=BODY)})
+    message = (
+        f"{os.fspath(part)!r} cannot be locked: {error!r}; "
+        "expected a file system that supports locks"
+    )
+    with monkeypatch.context() as patch:
+        patch.setattr(fcntl, "flock", failing_flock)
+        with pytest.raises(FetchError) as caught:
+            fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert str(caught.value) == message
+    assert caught.value.__cause__ is error
+    assert client.requests == []
+
+
+def test_a_part_file_that_cannot_be_opened_is_an_error_before_a_request(tmp_path, monkeypatch):
+    part = tmp_path / "file.bin.part"
+    error = PermissionError(13, "Permission denied")
+    original_open = os.open
+
+    def failing_open(path, *args, **kwargs):
+        if Path(path) == part:
+            raise error
+        return original_open(path, *args, **kwargs)
+
+    client = MemoryClient({URL: Route(body=BODY)})
+    message = (
+        f"{os.fspath(part)!r} cannot be opened: {error!r}; expected a file that can be written"
+    )
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "open", failing_open)
+        with pytest.raises(FetchError) as caught:
+            fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert str(caught.value) == message
+    assert caught.value.__cause__ is error
+    assert client.requests == []
+    assert names(tmp_path) == []
+
+
+def test_an_error_at_the_rename_is_a_fetch_error_and_leaves_no_file(tmp_path, monkeypatch):
+    part = tmp_path / "file.bin.part"
+    final = tmp_path / "file.bin"
+    error = PermissionError(13, "Permission denied")
+
+    def failing_replace(_self, _target):
+        raise error
+
+    client = MemoryClient({URL: Route(body=BODY)})
+    message = (
+        f"{os.fspath(part)!r} cannot be renamed to {os.fspath(final)!r}: {error!r}; "
+        "expected a directory that can be written"
+    )
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "replace", failing_replace)
+        with pytest.raises(FetchError) as caught:
+            fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert str(caught.value) == message
+    assert caught.value.__cause__ is error
+    assert client.requests == [URL]
+    assert names(tmp_path) == []
+
+
+class FullDisk:
+    """A stream that writes its first chunk and raises `error` at the second."""
+
+    def __init__(self, stream, error):
+        self.stream = stream
+        self.error = error
+        self.writes = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exception):
+        self.stream.close()
+
+    def write(self, chunk):
+        self.writes += 1
+        if self.writes == 2:
+            raise self.error
+        return self.stream.write(chunk)
+
+
+def test_a_write_error_during_the_transfer_is_a_fetch_error_and_leaves_no_file(
+    tmp_path, monkeypatch
+):
+    error = OSError(errno.ENOSPC, "No space left on device")
+    fdopen = os.fdopen
+    client = MemoryClient({URL: Route(body=BODY)})
+    message = f"{URL!r} failed after 200 of {len(BODY)} bytes: {error!r}"
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            os, "fdopen", lambda *args, **kwargs: FullDisk(fdopen(*args, **kwargs), error)
+        )
+        with pytest.raises(FetchError) as caught:
+            fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert str(caught.value) == message
+    assert caught.value.__cause__ is error
+    assert names(tmp_path) == []
+    assert client.closed == 1

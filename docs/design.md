@@ -105,7 +105,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 
 ### Rules
 
-- Only `seedmatch.fetch` can import a network module. The ruff rule `TID251` (banned API) bans these modules in all other code: `urllib.request`, `http.client`, `socket`, `ssl`, `urllib3`, `requests`, `httpx`. A per-file ignore lets `src/seedmatch/fetch/**` use them.
+- Only `seedmatch.fetch` can import a network module. The ruff rule `TID251` (banned API) bans these modules in all other code: `urllib.request`, `http.client`, `socket`, `ssl`, `urllib3`, `requests`, `httpx`. A per-file ignore lets `src/seedmatch/fetch/**` and `tests/fetch/**` use them.
 - The same rule bans `seedmatch.fetch` in each module outside `seedmatch.fetch`.
 - `import seedmatch` does not import matplotlib or `seedmatch.fetch`.
 - A computation function returns data. A plot function takes a result and returns a `matplotlib.figure.Figure`. No function writes a file unless it has an explicit output path parameter.
@@ -360,12 +360,20 @@ The unrounded areas of R depend on the platform. R 4.5.3 on arm64 macOS uses a f
 ### Fetch behavior
 
 - The fetch module uses `urllib.request` from the standard library. It adds no dependency.
+- The fetch module uses `fcntl.flock` for its lock, thus it runs only on POSIX systems. The CI runs on Linux.
 - It streams each file in chunks to `<dest>/<name>.part`. The option `chunk_size` (default 1 MiB) limits the memory. The read stops at the registry size plus 1 byte. Thus a server that sends more bytes, or that sends no `Content-Length` header, cannot make the read longer. Then it makes sure that the size and the SHA-256 digest agree with the registry. Then it renames the file to its final name.
+- If the response has a `Content-Length` header that is not the registry size, it raises `FetchError` before it reads the body. The message names the URL, the header value, and the registry size. A header that is not a decimal number raises `FetchError` too.
+- It locks the `.part` file with `fcntl.flock` before the request. The run keeps the lock until the file gets its final name or the run deletes the file.
+- If another run holds the lock, this run raises `FetchError` that names the `.part` path. This run sends no request. It does not delete the file of the other run.
+- After it gets the lock, it does a second check of the final path. The rules for a present file apply to a file that the other run made.
+- If the run cannot make, open, or lock the `.part` file, it raises `FetchError` before the request. The message names the `.part` path. A file system without `flock` support thus stops the download.
 - If the final file is present with the size and the digest of the registry, it sends no request.
 - If the final file is present with another size or digest, it raises `FetchError`. The message names the path, the two sizes, and the two digests. The file stays, and the message tells the user to remove the file before the next download.
 - It refuses a URL that is not `https`.
-- It follows a redirect itself, a maximum of `max_redirects` times (default 5). The default client (`open_url`) follows no redirect. The module makes sure that the target is `https` before it sends a request to the target. A redirect to `http` raises `FetchError`, and the `http` URL gets no request.
-- A failed or interrupted download leaves no final file and no `.part` file. The `FetchError` names the URL and the count of received bytes. A `.part` path that is not a regular file raises `FetchError` before the request.
+- It goes to the target of a redirect itself, a maximum of `max_redirects` times (default 5). The default client (`open_url`) does not go to the target of a redirect. The module makes sure that the target is `https` before it sends a request to the target. A redirect to `http` raises `FetchError`, and the `http` URL gets no request.
+- A failed download leaves no final file. An interrupted transfer raises `FetchError` that names the URL and the count of received bytes.
+- An error or Ctrl-C removes the `.part` file while the run holds the lock. If the run cannot delete the `.part` file, the file stays, and the next run replaces it. If a signal kills the process, the next run also replaces the `.part` file.
+- A `.part` path that is not a regular file raises `FetchError` before the request.
 - The command `seedmatch-fetch` has a subcommand for each resource group. Examples:
   - `seedmatch-fetch reference rnor7 DEST`
   - `seedmatch-fetch example sirna DEST`
@@ -373,7 +381,7 @@ The unrounded areas of R depend on the platform. R 4.5.3 on arm64 macOS uses a f
   - `seedmatch-fetch string 10116 DEST`
   - `seedmatch-fetch mirdb DEST`
   - `seedmatch-fetch list`
-- The command prints the path of each file with the word `present` or `downloaded`. An `InputError` or a `FetchError` gives exit status 1 and the message on standard error.
+- The command prints the path of each file with the word `present` or `downloaded`. An `InputError` or a `FetchError` gives exit status 1 and the message on standard error. Ctrl-C prints the message `seedmatch-fetch: interrupted`. Then the process ends by SIGINT, thus a shell gives the status 130 and stops a loop. The command flushes standard output after each path line.
 
 ## Divergences (defect fixes)
 
@@ -492,6 +500,8 @@ A change of behavior that has no entry is a defect of the port. The builder adds
   - a digest mismatch leaves no final file
   - an interrupted transfer leaves no final file
   - a present file with the correct digest causes no download
+  - a second run into one `dest` while the first run downloads raises `FetchError` and keeps the `.part` file of the first run
+  - a `Content-Length` header that is not the registry size causes an error before the read
   - a URL or a redirect that is not `https` causes an error
 
 ### Documentation examples

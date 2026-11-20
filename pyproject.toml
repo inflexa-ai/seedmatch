@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-seedmatch-fetch = "seedmatch.fetch.cli:main"
+seedmatch-fetch = "seedmatch.fetch.cli:run"
 
 [project.urls]
 Homepage = "https://github.com/inflexa-ai/seedmatch"
