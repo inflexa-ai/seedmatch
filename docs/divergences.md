@@ -53,6 +53,16 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: The count of a gene must not depend on the order of its sequences. In R, the first sequence in the input decides the count. The DE table has one row for each gene. Thus a gene with more than one sequence must count once in the report.
 - Test: `test_gene_count_is_the_maximum_over_its_sequences_D003` and `test_the_maximum_does_not_depend_on_the_order_of_the_sequences_D003` in `tests/report/test_annotate.py`. `test_report_counts_genes_not_sequences_D003` and `test_the_best_match_of_a_gene_is_the_best_over_its_sequences_D003` in `tests/report/test_report.py`.
 
+## D-004: The 3' compensatory search runs and returns the sites
+
+- ID: `D-004`
+- R location: `get_compensatory_sequences` (`R/get_compensatory_sequences.R:57-77`, `:34`, `:99`).
+- R behavior: The frame of `:57-66` has no row, thus the test of `:67` is true. The function returns 0 rows with the message `No compensatory regions found.` for each input (note `original_vignette` of `tests/golden/noncanonical/compensatory.tsv`).
+  - Without the early return, `:99` stops at the first site. `gsub` at `:34` makes the seed a `character` value, and `reverseComplement` has no method for it (note `line_99`).
+- New behavior: `compensatory_sites` runs the search. Each row is a pair of a seed match and a region. The golden of the patched function (`tools/golden/patches/get_compensatory_sequences.R`) gives the R rows of each case. With `first_position=8`, the port gives the R rows of the 6 cases on `Test_seqs.fa`.
+- Reason: R gives no result for each input.
+- Test: `test_compensatory_sites_match_r_D004` in `tests/noncanonical/test_compensatory.py`.
+
 ## D-005: The wobble and bulge search runs, with one pattern for the wobbles and extra bases for a bulge
 
 - ID: `D-005`
@@ -607,3 +617,57 @@ The IDs of the known divergences have the same order as the rows of the table in
   - A repeated column that the function does not read is valid. A function that returns the rows of `de` keeps the column. R stops for such a table in `filter_res`, `generate_e_value`, `benchmark_preds`, `SeedMatchReport`, and `SeedMatchR` with `shared_genes = TRUE`.
 - Reason: A repeated column is ambiguous. The result of R depends on the column order, or R stops. A repeated count column gives a wrong count in pandas, and no message. The message names the column, thus the caller can correct the table.
 - Test: `test_ecdf_test_rejects_a_repeated_fold_change_column_D051` and `test_assign_groups_rejects_a_repeated_gene_id_column_D051` in `tests/stats/test_ecdf.py`. `test_a_repeated_gene_id_column_is_an_error_D051`, `test_a_repeated_count_column_is_an_error_D051`, and `test_a_repeated_column_that_is_not_read_is_kept_D051` in `tests/report/test_annotate.py`. `test_filter_de_rejects_a_repeated_padj_column_D051` in `tests/test_de.py`. The tests of `check_columns` and `check_unique_columns` with `_D051` in their names are in `tests/test_checks.py`. One of them shows that a repeated column that is not required is valid.
+
+## D-052: Each sequence is searched, also for a repeated ID
+
+- ID: `D-052`
+- R location: `get_compensatory_sequences` (`R/get_compensatory_sequences.R:36-41`, `:90`, and `:106-108`).
+- R behavior: R selects the sequences with a seed match by name (`sequences[names]`). For a name that occurs two times, this gives the first sequence two times (note `repeated_name_r`).
+  - The merge by `gene_name` (`:90`) then pairs each seed row with each region row of the name.
+  - The case `repeated_name_r` has two sequences with the name `g`, and each sequence has a site. R gives 4 rows, and each row belongs to the first sequence. The second sequence has no row.
+- New behavior: Each sequence of the set is searched. A pair holds a seed match and a region of the same sequence, by the index of the sequence in the set.
+- Reason: A `SequenceSet` can hold two sequences with one ID, for example with `PerGene.EACH_TRANSCRIPT` and gene IDs as names.
+- Test: `test_each_sequence_is_searched_for_a_repeated_id_D052` in `tests/noncanonical/test_compensatory.py`.
+
+## D-053: A region is dropped only for a longer region of the same seed match
+
+- ID: `D-053`
+- R location: `get_compensatory_sequences` (`R/get_compensatory_sequences.R:123-125`).
+- R behavior: Two `dplyr` filters keep the longest region of each transcript and region end, and then of each transcript and region start. The groups ignore the seed match.
+  - Thus a longer region of one seed match drops the region of another seed match.
+  - The case `two_seed_matches_r` has two seed matches in one sequence. R gives one row, and the seed match at 13 has no row.
+- New behavior: A pair is dropped if a pair of the same seed match has a region that contains its region and is longer. Pairs with the same region and different guide windows stay.
+- Reason: Each seed match is a site of its own. On the R goldens without this case, the R rule and the port rule give the same rows.
+- Test: `test_a_region_of_one_seed_match_does_not_drop_a_region_of_another_D053` and `test_a_region_inside_a_longer_region_of_its_seed_match_is_dropped` in `tests/noncanonical/test_compensatory.py`.
+
+## D-054: Each row gives the guide positions of its region and the mismatches of its seed match
+
+- ID: `D-054`
+- R location: `relative_position_seq` (`R/get_compensatory_sequences.R:3-8`), `:127-128`, and `:106-108`.
+- R behavior: `relative_position_seq` searches the full guide and joins each start with a comma.
+  - A region that occurs two times in the guide gives two equal rows with the text `8,12` (case `repeated_region_r`).
+  - A region at g8 that also occurs at g2 gives the text `2,8` (case `region_at_g2_r`, note `relative_position_seq_g6`).
+  - `mismatch_in_seed` is 1 if the text of the seed match differs from the target (`:106-108`). Thus a match with 2 mismatches gives 1 (case `seed_mm2_r`).
+- New behavior: `guide_start` and `guide_end` are the integers of the window of the row. `seed_mismatches` is the number of mismatches, and a position outside the sequence is a mismatch. For `max_seed_mismatch` of 0 or 1, it equals the R value.
+- Reason: A text of positions is not a number, and the position of g2 is not in the region. The flag hides the number of mismatches.
+- Test: `test_each_row_gives_the_guide_positions_of_its_region_D054` and `test_seed_mismatches_is_the_number_of_mismatches_D054` in `tests/noncanonical/test_compensatory.py`.
+
+## D-055: CompensatoryOptions rejects lengths and distances that select no region
+
+- ID: `D-055`
+- R location: `get_compensatory_sequences` (`R/get_compensatory_sequences.R:46-54` and `:92`).
+- R behavior: `compensatory_region_length_min = 6` with `compensatory_region_length_max = 3` gives the lengths 6, 5, 4, and 3, and R returns 3 rows of length 6 (case `min_above_max_r`).
+  - A minimum above the 16 positions of g8 to g23 searches the region g8 to g23 three times (note `min_17`).
+  - `limit = 2` gives no row. R keeps `seed_start > end + 1` and `seed_start < end + 2`, and no integer obeys these two tests.
+- New behavior: `InputError` for `max_length` below `min_length`, for a length above the number of positions of the region, and for a `max_distance` below 1. A longest region of more letters than the pattern limit of the search also raises `InputError`, before the first search.
+- Reason: R gives a result for other lengths than the arguments, and it gives no message.
+- Test: `test_compensatory_options_reject_lengths_that_select_no_region_D055`, `test_a_short_guide_has_no_room_for_the_region_D055`, `test_the_message_names_one_position_in_the_singular_D055`, and `test_a_window_above_the_pattern_limit_raises_before_a_search_D055` in `tests/noncanonical/test_compensatory.py`.
+
+## D-056: The compensatory region starts after the seed
+
+- ID: `D-056`
+- R location: `get_compensatory_sequences` (`R/get_compensatory_sequences.R:44`).
+- R behavior: The region is always g8 to the end of the guide. With the `mer7m8` seed, g8 pairs with the seed match and with the region of one row. In the golden `vignette`, 10 of the 104 rows have a region from g8.
+- New behavior: The default region starts after the seed window, at g9 for `Seed.MER7M8` and at g8 for `Seed.MER6`. `first_position=8` gives the R region.
+- Reason: One guide base pairs with one target base.
+- Test: `test_the_region_starts_after_the_seed_D056`, `test_the_default_region_start_follows_the_seed_window_D056`, and `test_the_default_region_starts_after_a_custom_seed_D056` in `tests/noncanonical/test_compensatory.py`.

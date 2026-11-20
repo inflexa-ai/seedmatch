@@ -17,6 +17,7 @@ from seedmatch import (
     Seed,
     alignment_text,
     annotate_seed_counts,
+    compensatory_sites,
     count_matches,
     e_value_null,
     filter_de,
@@ -168,6 +169,7 @@ def run_core_pipeline() -> None:
         utr3 = ref.sequences(FeatureType.UTR3)
     count_matches(Guide(GUIDE).target(Seed.MER7M8), utr3)
     wobble_bulge_matches(Guide(GUIDE), seqs)
+    compensatory_sites(Guide(GUIDE), seqs)
 
 
 # The columns that an R golden file names differently from the Python frames. The column `names` of

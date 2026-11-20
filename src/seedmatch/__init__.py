@@ -9,8 +9,10 @@ from seedmatch.evalue import e_value_null, e_values
 from seedmatch.kmers import KmerCounts, kmer_counts, kmer_gene_counts
 from seedmatch.mirdb import read_mirdb
 from seedmatch.noncanonical import (
+    CompensatoryOptions,
     WobbleBulgeOptions,
     annotate_wobble_bulge_counts,
+    compensatory_sites,
     wobble_bulge_matches,
     wobble_bulge_patterns,
 )
@@ -54,6 +56,7 @@ __all__ = [
     "REPORT_CATEGORIES",
     "Alternative",
     "Benchmark",
+    "CompensatoryOptions",
     "CustomSeed",
     "EcdfTest",
     "EcdfTestResult",
@@ -88,6 +91,7 @@ __all__ = [
     "assign_groups",
     "benchmark_predictions",
     "best_match",
+    "compensatory_sites",
     "count_matches",
     "e_value_null",
     "e_values",

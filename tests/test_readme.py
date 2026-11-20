@@ -130,3 +130,10 @@ def test_readme_wobble_example_gives_the_count_of_the_rows(readme_namespace):
     assert wobble_de["overall_matches"].tolist() == [
         rows.get(gene, 0) for gene in wobble_de["gene_id"]
     ]
+
+
+def test_readme_compensatory_example_gives_the_sites(readme_namespace):
+    sites = readme_namespace["sites"]
+    assert len(sites) == 96
+    assert sites["gene_id"].nunique() == 51
+    assert 0 <= readme_namespace["site_result"].p_value <= 1

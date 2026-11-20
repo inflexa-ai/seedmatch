@@ -193,6 +193,26 @@ print(wobble_de[["gene_id", "overall_matches"]].head())
 
 `max_bulge` is the longest run of extra bases, and its default is 4. `bulge_free` is the number of seed positions from g2 that no bulge is next to. Its default is 3, thus a bulge lies only between g5 and g6, g6 and g7, or g7 and g8. A sequence has one row for each distinct start of a match, and the row names the first pattern that matches at this start. `wobble_bulge_matches` searches the set one time for each pattern, and `workers` sets the width of the thread pool. R stops for each call of its wobble and bulge search, and its count rule counts one site more than one time (D-005).
 
+`compensatory_sites` finds the sites with a seed match and a second region that pairs with the sequence. A region is a window of the guide that starts after the seed window, at g9 for the `MER7M8` seed. The target of a region is the reverse complement of the window. It lies before the seed match in the same sequence. This example uses the `guide`, the `sequences`, and the `de` table of the examples above.
+
+```python
+from seedmatch import compensatory_sites, ecdf_test
+
+# One row for each pair of a seed match and a region of one sequence.
+sites = compensatory_sites(guide, sequences)
+print(sites.head())
+
+# As in the R vignette: the genes with a site against the other genes of the DE table.
+site_genes = sites["gene_id"].unique()
+other_genes = de.loc[~de["gene_id"].isin(site_genes), "gene_id"]
+site_result = ecdf_test(de, target=site_genes, background=other_genes)
+print(site_result.p_value)
+```
+
+`min_length` is the shortest region, and its default is 6. `max_length` is the longest region, and its default is each position up to the guide end. `first_position` is the first guide position of a region. R always uses g8, and `first_position=8` gives the R regions (D-056). `max_distance` is the largest number of bases between a region and its seed match. R `limit` L gives `max_distance` L - 2, thus the default 98 is the R default 100.
+
+A region is dropped if a longer region of the same seed match contains it (D-053). The seed match can have `max_seed_mismatch` mismatches, and the region can have `max_region_mismatch`. R returns no row for each input (D-004). `workers` sets the width of the thread pool.
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -239,6 +259,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - `benchmark_predictions` applies the `padj` cutoff. In R, `padj <= padj` compares the column with itself, thus each row with a `padj` passes. R also gives the labels to the ROC curve as the scores of the negative class (D-006).
 - `alignment_text` shows the full guide, from g1 to the last base. In R, the guide line of `plotAlignment` has no g1, and the function stops for the default positions (D-045).
 - The wobble and bulge search runs. In R, each call of `run_wobble_bulges_pipeline` stops with an error. The port counts each distinct start of a site one time, and a bulge is a run of extra target bases (D-005).
+- The 3' compensatory search runs. R returns 0 rows for each input, and its code stops at the first site after the early return. The port gives each pair of a seed match and a region (D-004).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -260,11 +281,12 @@ This version has the core path:
 - the benchmark of the seed counts against a gold standard of genes that go down
 - the reader of the miRDB table of predicted miRNA targets
 - the wobble and bulge search: the sites with G:U pairs or a bulge, and their count for each gene
+- the 3' compensatory search: the sites with a seed match and a region of the guide before it
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:
 
-- the 3' compensatory search and the network scores
+- the network scores
 - the plots and the HTML report
 
 ## Installation

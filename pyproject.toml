@@ -85,6 +85,9 @@ extend-immutable-calls = [
     "seedmatch.WobbleBulgeOptions",
     "seedmatch.noncanonical.WobbleBulgeOptions",
     "seedmatch.noncanonical.wobble.WobbleBulgeOptions",
+    "seedmatch.CompensatoryOptions",
+    "seedmatch.noncanonical.CompensatoryOptions",
+    "seedmatch.noncanonical.compensatory.CompensatoryOptions",
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
