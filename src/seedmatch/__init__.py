@@ -7,6 +7,7 @@ from seedmatch.distances import MatchAnchor, match_distances
 from seedmatch.errors import InputError, SeedMatchError, SeedMatchWarning
 from seedmatch.evalue import e_value_null, e_values
 from seedmatch.kmers import KmerCounts, kmer_counts, kmer_gene_counts
+from seedmatch.mirdb import read_mirdb
 from seedmatch.report import (
     DEFAULT_SEEDS,
     NONSEED_SEEDS,
@@ -93,6 +94,7 @@ __all__ = [
     "pr_curve",
     "read_deseq2_table",
     "read_fasta",
+    "read_mirdb",
     "reverse_complement",
     "roc_curve",
     "seed_match_report",

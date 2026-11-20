@@ -528,6 +528,26 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: An area from a broken input looks like a result, and no message tells the caller.
 - Test: `test_benchmark_rejects_a_nan_score_D048`, `test_benchmark_rejects_a_missing_value_of_a_nullable_integer_score_D048`, `test_benchmark_rejects_a_nan_cutoff_D048`, `test_benchmark_rejects_a_cutoff_that_is_not_a_number_D048`, `test_benchmark_rejects_a_gold_standard_without_a_positive_D048`, and `test_benchmark_rejects_a_gold_standard_without_a_negative_D048` in `tests/stats/test_benchmark.py`.
 
+## D-049: read_mirdb rejects a score that is not a number, and keeps the ID text as it is
+
+- ID: `D-049`
+- R location: `get_example_data` with `example.type = "mirna"` (`R/get_data.R:43-46`, `read.table` with the defaults).
+- R behavior: `read.table` converts each column and gives no message. The evidence is in the notes of `tests/golden/analyses/mirdb.tsv`.
+  - A score `abc` makes the column `target.score` text, with the values `50` and `abc`. Then the comparison `mirdb.rat[,3] >= 90` of the vignette (`vignettes/articles/SeedMatchR_miRNA_analysis.Rmd:149`) compares text.
+  - An empty score gives `NA`.
+  - The ID text `NA` becomes `NA`, the R value for no data. The species is then `NA`, and the miRNA name is empty.
+  - A `#` in a field starts a comment, and R stops with `line 2 did not have 3 elements`.
+  - A quote character in a field loses rows, and R gives no message. For a file of 4 lines with a quote character in line 2, R gives 2 rows, with the IDs `hsa-c` and `hsa-d`. The default quote of `read.table` includes the quote character.
+  - A line with 2 fields stops R with `line 2 did not have 3 elements`. The port also raises `InputError` for it, thus this case is no change.
+  - R probes use R 4.5.3 and the call of `R/get_data.R:43-46`. The lines are in a file `path`, and the call is `m <- utils::read.table(path, sep = "\t", header = FALSE, stringsAsFactors = FALSE)`. No golden file keeps the probe results.
+  - R reads a line of any length. After `writeLines(c("hsa-a\tNM_1\t50", paste0("hsa-", strrep("x", 5000), "\tNM_2\t60")), path)`, `nrow(m)` is 2.
+  - R reads a score with spaces before it, after it, or on each side as a number, and the port does the same. After `writeLines(c("hsa-a\tNM_1\t50", "hsa-b\tNM_2\t 60 "), path)`, `class(m$V3)` is `numeric`. A score with a space inside (`6 0`) makes the column text.
+  - R reads the scores `0x10`, `Inf`, `NaN`, and `1e999` as numbers. After `writeLines(c("hsa-a\tNM_1\t50", paste0("hsa-b\tNM_2\t", score)), path)`, `m$V3[2]` is 16, `Inf`, `NaN`, and `Inf`.
+  - A NUL character in a line gives the warning `line 2 appears to contain embedded nulls`. R ends a score at the NUL: the score `6<NUL>0` gives the number 6. In an ID or a RefSeq ID, R stops with `line 2 did not have 3 elements`. The file is `writeBin(c(charToRaw("hsa-a\tNM_1\t50\n"), charToRaw("rno-b\tNM_2\t6"), as.raw(0), charToRaw("0\n")), path)`.
+- New behavior: `read_mirdb` raises `InputError` for a score that is not a finite decimal number. This includes an empty score, `NA`, `NaN`, and `Inf`. The ID fields keep `#`, quote characters, and `NA` as text, and each line is one row. A line of more than 1024 characters with its line end raises `InputError`, and R reads such a line. A line with a NUL character raises `InputError` that names the line.
+- Reason: A text score gives wrong comparisons and no message. A row that R loses is a loss of data without a message. The miRDB format has no quotes and no comments. R cuts a score at a NUL without an error, and a cut score is wrong data. The limit on the line bounds the memory of a chunk of 2^18 lines in bytes. The longest line of the miRDB 6.0 file of `seedmatch-fetch mirdb` has 51 characters with its line end.
+- Test: `test_read_mirdb_rejects_a_score_that_is_not_a_number_D049`, `test_read_mirdb_keeps_a_hash_a_quote_and_the_text_na_D049`, `test_read_mirdb_rejects_a_line_above_the_limit_D049`, and `test_read_mirdb_rejects_a_nul_character_D049` in `tests/test_mirdb.py`. In the same file, `test_read_mirdb_keeps_each_line_that_a_quote_character_would_join_D049` shows that the port keeps the 4 lines of the last note.
+
 ## D-050: auc_integral loses fewer digits than the difference of two logarithms
 
 - ID: `D-050`

@@ -165,6 +165,18 @@ print(benchmark.pr.auc_integral, benchmark.roc.auc)
 
 `benchmark.pr` is a `PrCurve`, and `benchmark.roc` is a `RocCurve`. The PR curve and the ROC curve use the same labels, but the ROC curve of R does not (D-006). A row with a NaN `padj` or a NaN `log2FoldChange` is a negative, as in R. The negatives are the other rows of `de`, thus a filter of `de` before the call also changes the negatives. A NaN score raises `InputError`. So do a cutoff that is not a number, and a gold standard without a positive or without a negative row (D-048).
 
+`read_mirdb` reads the miRDB table of predicted miRNA targets. This is the file that `seedmatch-fetch mirdb` downloads, and it has no header. This example keeps the rows of the rat, which has the species code `rno`.
+
+```python
+from seedmatch import read_mirdb
+
+# The columns: mirdb_id, target_refseq_id, target_score, species, and mirna_name.
+rat_targets = read_mirdb("miRDB_v6.0_prediction_result.txt.gz", species="rno")
+print(rat_targets.head())
+```
+
+`species` is the text of the miRDB ID before the first `-`, and `mirna_name` is the text after it. A code without a row raises `InputError` that lists the codes of the file. The reader reads 2^18 lines at a time. The result holds about 40 bytes for each row and the distinct strings. A score that is not a finite decimal number raises `InputError`. The ID fields keep `#`, quote characters, and the text `NA` as text (D-049).
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -195,7 +207,7 @@ seedmatch-fetch list
 
 If `DEST` is absent, the command makes it. For each file, it prints the path, a tab, and `downloaded` or `present` on standard output. Before a download, it prints the file name and the size on standard error. The exit status is 0 for success and 1 for an error. An error prints `seedmatch-fetch: <message>` on standard error. Ctrl-C ends the command with status 130. A usage error exits with status 2. A key that the registry does not have gives a message that lists the valid keys.
 
-Use one `DEST` for each reference build. `Reference.from_directory(DEST)` opens the one `.sqlite` file and the one `.2bit` file of the directory. A directory with the EnsDb files of different builds has more than one `.sqlite` file, and `from_directory` raises `InputError`. `read_deseq2_table` reads each table of `example sirna` from `DEST`, because it accepts the gzip format. No function of this version reads the miRDB, TRRUST, and STRING files.
+Use one `DEST` for each reference build. `Reference.from_directory(DEST)` opens the one `.sqlite` file and the one `.2bit` file of the directory. A directory with the EnsDb files of different builds has more than one `.sqlite` file, and `from_directory` raises `InputError`. `read_deseq2_table` reads each table of `example sirna` from `DEST`, because it accepts the gzip format. `read_mirdb` reads the miRDB file from `DEST`. No function of this version reads the TRRUST and STRING files.
 
 ## Differences from SeedMatchR
 
@@ -229,11 +241,12 @@ This version has the core path:
 - the distances between the matches of a sequence
 - the e-value of a seed count against a null of shuffled guides
 - the benchmark of the seed counts against a gold standard of genes that go down
+- the reader of the miRDB table of predicted miRNA targets
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:
 
-- the wobble and bulge search, the 3' compensatory search, the network scores, and the other small analyses
+- the wobble and bulge search, the 3' compensatory search, and the network scores
 - the plots and the HTML report
 
 ## Installation

@@ -1,3 +1,4 @@
+import gzip
 import math
 import re
 import shutil
@@ -24,6 +25,9 @@ def readme_namespace(tmp_path, monkeypatch):
     # The test table has a ninth column, mer7m8. read_deseq2_table accepts only 8 columns (D-021).
     sirna_de().drop(columns="mer7m8").to_csv(
         tmp_path / "deseq2_results.tsv", sep="\t", index=False, na_rep="NA"
+    )
+    (tmp_path / "miRDB_v6.0_prediction_result.txt.gz").write_bytes(
+        gzip.compress((DATA / "mirdb_sample.txt").read_bytes())
     )
     monkeypatch.chdir(tmp_path)
     namespace: dict[str, object] = {}
@@ -103,3 +107,16 @@ def test_readme_benchmark_example_runs(readme_namespace):
     assert benchmark.pr.n_negative == (~gold_standard).sum()
     assert 0 < benchmark.pr.auc_integral < 1
     assert 0 < benchmark.roc.auc < 1
+
+
+def test_readme_mirdb_example_gives_the_rat_rows(readme_namespace):
+    rat_targets = readme_namespace["rat_targets"]
+    table = golden("analyses/mirdb.tsv")
+    rows = table[table["species"] == "rno"]
+    assert len(rows) > 0
+    assert rat_targets["mirdb_id"].tolist() == rows["miRDB.ID"].tolist()
+    assert rat_targets["target_refseq_id"].tolist() == rows["target.REFSEQ.ID"].tolist()
+    assert rat_targets["target_score"].tolist() == pytest.approx(
+        rows["target.score"].astype(float).tolist(), rel=1e-9
+    )
+    assert set(rat_targets["species"]) == {"rno"}
