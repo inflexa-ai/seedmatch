@@ -62,8 +62,8 @@ def as_flag(name: str, value: object) -> bool:
     raise InputError(message)
 
 
-def as_cutoff(name: str, value: object) -> float:
-    """Return the value as a plain float. A bool is not a cutoff, and neither is NaN."""
+def as_number(name: str, value: object) -> float:
+    """Return the value as a plain float. A bool is not a number. NaN and infinity are floats."""
     if isinstance(value, bool | np.bool_) or not isinstance(
         value, int | float | np.integer | np.floating
     ):
@@ -72,10 +72,15 @@ def as_cutoff(name: str, value: object) -> float:
         )
         raise InputError(message)
     try:
-        cutoff = float(value)
+        return float(value)
     except OverflowError:
         message = f"{name} {shown(value)} is too large; expected a number that a float can hold"
         raise InputError(message) from None
+
+
+def as_cutoff(name: str, value: object) -> float:
+    """Return the value as a plain float. A bool is not a cutoff, and neither is NaN."""
+    cutoff = as_number(name, value)
     if math.isnan(cutoff):
         message = f"{name} {shown(value)} is not a number; expected an int or a float, not NaN"
         raise InputError(message)
@@ -121,14 +126,19 @@ def check_gene_ids_are_text(de: pd.DataFrame) -> None:
         raise InputError(message)
 
 
+def check_one_dimensional(name: str, array: NDArray[np.generic]) -> None:
+    """Raise `InputError` if the array is not 1-D."""
+    if array.ndim != 1:
+        message = f"{name} has {array.ndim} dimensions; expected a 1-D array"
+        raise InputError(message)
+
+
 def check_vector(name: str, array: NDArray[np.generic], dtype: type[np.generic]) -> None:
     """Raise `InputError` if the array is not a 1-D array of the dtype."""
     if array.dtype != dtype:
         message = f"{name} has dtype {array.dtype}; expected {np.dtype(dtype)}"
         raise InputError(message)
-    if array.ndim != 1:
-        message = f"{name} has {array.ndim} dimensions; expected a 1-D array"
-        raise InputError(message)
+    check_one_dimensional(name, array)
 
 
 def check_offsets(

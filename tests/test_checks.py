@@ -1,8 +1,9 @@
+import math
 import sys
 
 import pytest
 
-from seedmatch._checks import as_cutoff, as_flag, as_limit, check_not_negative
+from seedmatch._checks import as_cutoff, as_flag, as_limit, as_number, check_not_negative
 from seedmatch.errors import InputError
 from seedmatch.report import FullSearchOptions
 
@@ -43,6 +44,17 @@ def test_as_flag_gives_input_error_for_a_huge_int():
 def test_as_cutoff_gives_input_error_for_an_int_that_a_float_cannot_hold(sign):
     with pytest.raises(InputError, match=r"padj_cut .*\d+ bits.* is too large; expected a number"):
         as_cutoff("padj_cut", sign * HUGE)
+
+
+def test_as_number_returns_a_float_and_keeps_nan_and_infinity():
+    assert as_number("x", 3) == 3.0
+    assert isinstance(as_number("x", 3), float)
+    assert as_number("x", float("-inf")) == -math.inf
+    assert math.isnan(as_number("x", math.nan))
+    with pytest.raises(InputError, match=r"x True has type bool; expected an int or a float"):
+        as_number("x", value=True)
+    with pytest.raises(InputError, match=r"x '1' has type str; expected an int or a float"):
+        as_number("x", "1")
 
 
 def test_a_value_with_a_text_form_is_named_by_its_repr():

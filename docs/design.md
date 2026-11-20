@@ -188,9 +188,11 @@ The default `SeedMatchReport` uses indels with the edit distances 0 to 4 for `Fu
 ### KS test
 
 - R uses the exact p-value only if `n_x * n_y < 10000`. scipy `method="auto"` uses a different rule. Thus the port uses the R rule.
-- For the exact p-value with ties, R 4.3 and later use the algorithm of Schröer and Trenkler (1995). The port does the same algorithm.
+- For the exact p-value with ties, R 4.3 and later use the algorithm of Schröer and Trenkler (1995). The port computes the same upper tail with the recursion of Viehmann (2021). A small p-value keeps its relative precision.
+- The statistic is d / (n_x · n_y). The integer d is the largest gap `i · n_y − j · n_x` at a checkpoint. `LESS` uses the negative gap, and the two-sided test uses the absolute gap. Here i and j count the x values and the y values up to the checkpoint. Thus d is exact, and D never exceeds 1. A checkpoint is the end of a run of equal pooled values.
 - The one-sided asymptotic p-value is exp(-2 · en · D²), with en = n_x · n_y / (n_x + n_y). scipy adds the Hodges correction, thus the port does not use the scipy value.
-- The two-sided asymptotic p-value uses the limit Kolmogorov distribution (`scipy.stats.kstwobign`).
+- The two-sided asymptotic p-value is the limit Kolmogorov distribution, `scipy.special.kolmogorov(sqrt(en) · D)`.
+- The asymptotic formulas fix numeric defects of R, which give a wrong p-value or a p-value of 0 (`D-032`).
 - On the test data, the scipy exact p-value agrees with R: D = 0.51035, p = 0.0001037731.
 
 ### Wilcoxon rank-sum test
@@ -364,6 +366,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `load_annotations` with `longest.utr` or `reduce.features` | R applies the two options only to the 3' UTR. For the other feature types, it ignores them without a message (`R/load_annotations.R:82-91`). | `PerGene` applies to each feature type. |
 | `ensembldb::transcripts` (used by `load_annotations` for `$gtf`, and by `.get_longest_utr` through `transcriptLengths`) | The SQL sorts on `seq_name` and `tx_seq_start` only. A tie of two genes then gets the scan order of the SQLite query plan, and the plan depends on the filter. The fixture golden gives two orders for one tie. | The order of a tie is the row order of the `gene` table, then of the `tx` table, for each filter. |
 | `build_annotation_filter` (used by `load_annotations`) | A `transcript.support` of 0 or less, or an `entrez_id` of 0 or less, selects no transcript and gives no message (`R/load_annotations.R:298-330`). | `TranscriptFilter` raises `InputError` for a support level below 1 and for an Entrez ID below 1. |
+| `stats::ks.test` (used by `ecdf_stat_test`) | The asymptotic p-value has numeric defects. The two-sided series keeps one term for `sqrt(en) * D` below 1 (`ks.c:100-111`). The one-sided value `1 - (-expm1(...))` gives 0 for a p-value below about 1e-16. D from a cumulative sum can be above 1, and then the p-value is 0. | The statistic comes from integer counts. The p-value is `scipy.special.kolmogorov(sqrt(en) * D)` for two-sided and `exp(-2 * en * D^2)` for one-sided. |
 
 ## Tests
 
