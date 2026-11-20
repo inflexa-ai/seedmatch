@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 from seedmatch._checks import as_limit, as_member, as_text, check_at_least
 from seedmatch.errors import InputError
 
-STRING_VERSION: Final = "12.0"
+STRING_VERSION: Final = "12.5"
 
 _ANNOTATION_HUB: Final = "https://mghp.osn.xsede.org/bir190004-bucket01/AnnotationHub/"
 _STRING_DOWNLOADS: Final = "https://stringdb-downloads.org/download/"
@@ -250,8 +250,8 @@ REGISTRY: Final[tuple[Entry, ...]] = (
         (
             _string(
                 "9606",
-                83164437,
-                "3e22f32572211aa341d5b4bd08d30c32e693e294603202120936872f87719d4f",
+                62813591,
+                "3d6894ef3a0a8578b70421b7d6bac159c41ed2f6c1b5da21ab7fabb4ac21cd25",
             ),
         ),
     ),
@@ -262,8 +262,8 @@ REGISTRY: Final[tuple[Entry, ...]] = (
         (
             _string(
                 "10090",
-                75325207,
-                "803775e1d1a47864561e41944bf1f988094a836991e7cf13e4229233fc8cff3d",
+                75044046,
+                "b3318ac1cbd0fe0e81a3d6b0b432352f72733b7cf36d2437423a5cbf2a98e9d0",
             ),
         ),
     ),
@@ -274,8 +274,8 @@ REGISTRY: Final[tuple[Entry, ...]] = (
         (
             _string(
                 "10116",
-                78625664,
-                "381e8c7602f6b488e985cf83d68358c00684afac9987d2e9b273e1fae6c9af57",
+                75736490,
+                "4d53bee2bc10daa046aae67532152c7389ba2374dacb18cf2b2cd3886b253387",
             ),
         ),
     ),

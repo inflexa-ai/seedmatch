@@ -13,6 +13,9 @@ dependencies = [
     "scipy>=1.14",
 ]
 
+[project.scripts]
+seedmatch-fetch = "seedmatch.fetch.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/inflexa-ai/seedmatch"
 Issues = "https://github.com/inflexa-ai/seedmatch/issues"

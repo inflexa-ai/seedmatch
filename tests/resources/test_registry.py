@@ -46,8 +46,8 @@ def test_the_reference_keys_are_the_builds_of_r():
         assert ensdb.name.endswith(".sqlite"), entry
 
 
-def test_the_string_urls_name_the_pinned_version():
-    assert STRING_VERSION == "12.0"
+def test_the_string_urls_name_the_pinned_version_D041():
+    assert STRING_VERSION == "12.5"
     for entry in REGISTRY:
         if entry.group is Group.STRING:
             (resource,) = entry.resources

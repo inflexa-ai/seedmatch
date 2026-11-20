@@ -350,20 +350,22 @@ The unrounded areas of R depend on the platform. R 4.5.3 on arm64 macOS uses a f
 | `rnor7.113` | AH106786 | AH119437 |
 
 - The download URL of an AnnotationHub resource is `location_prefix + rdatapath`, from `https://annotationhub.bioconductor.org/ahid/<id>`. For example, AH109732 is `https://mghp.osn.xsede.org/bir190004-bucket01/AnnotationHub/AHEnsDbs/v109/EnsDb.Rnorvegicus.v109.sqlite`.
-- The registry pins the URL, the file name, the size, and the SHA-256 digest. The builder records the size and the digest after the first download.
+- The registry pins the URL, the file name, the size, and the SHA-256 digest. The values come from a streamed download of each file.
 - The other resources come from the URLs in the R code:
-  - the DESeq2 tables of GEO GSE184929 (`R/get_data.R:12-21`)
-  - the miRDB v6.0 predictions (`R/get_data.R:28`)
-  - the TRRUST human and mouse tables (`R/get_network_matches.R:13-14`)
-  - the STRING protein links for a species, with a pinned STRING version
+  - the DESeq2 tables of GEO GSE184929 (`R/get_data.R:23`, `:27`, and `:31`)
+  - the miRDB v6.0 predictions (`R/get_data.R:39`)
+  - the TRRUST human and mouse tables (`R/get_network_matches.R:21-22`)
+  - the STRING protein links for a species (`STRINGdb::STRINGdb$new` in `R/get_stringPPI_to_stringGGI.R:15`), with the pinned STRING version 12.5 (`D-041`)
 
 ### Fetch behavior
 
 - The fetch module uses `urllib.request` from the standard library. It adds no dependency.
-- It streams each file in chunks to `<dest>/<name>.part`. Then it makes sure that the size and the SHA-256 digest agree with the registry. Then it renames the file to its final name.
-- If the final file is present and its digest agrees, it does not download the file again.
-- It refuses a URL that is not `https`, and a redirect to a URL that is not `https`.
-- A failed or interrupted download leaves no final file.
+- It streams each file in chunks to `<dest>/<name>.part`. The option `chunk_size` (default 1 MiB) limits the memory. The read stops at the registry size plus 1 byte. Thus a server that sends more bytes, or that sends no `Content-Length` header, cannot make the read longer. Then it makes sure that the size and the SHA-256 digest agree with the registry. Then it renames the file to its final name.
+- If the final file is present with the size and the digest of the registry, it sends no request.
+- If the final file is present with another size or digest, it raises `FetchError`. The message names the path, the two sizes, and the two digests. The file stays, and the message tells the user to remove the file before the next download.
+- It refuses a URL that is not `https`.
+- It follows a redirect itself, a maximum of `max_redirects` times (default 5). The default client (`open_url`) follows no redirect. The module makes sure that the target is `https` before it sends a request to the target. A redirect to `http` raises `FetchError`, and the `http` URL gets no request.
+- A failed or interrupted download leaves no final file and no `.part` file. The `FetchError` names the URL and the count of received bytes. A `.part` path that is not a regular file raises `FetchError` before the request.
 - The command `seedmatch-fetch` has a subcommand for each resource group. Examples:
   - `seedmatch-fetch reference rnor7 DEST`
   - `seedmatch-fetch example sirna DEST`
@@ -371,6 +373,7 @@ The unrounded areas of R depend on the platform. R 4.5.3 on arm64 macOS uses a f
   - `seedmatch-fetch string 10116 DEST`
   - `seedmatch-fetch mirdb DEST`
   - `seedmatch-fetch list`
+- The command prints the path of each file with the word `present` or `downloaded`. An `InputError` or a `FetchError` gives exit status 1 and the message on standard error.
 
 ## Divergences (defect fixes)
 
@@ -427,6 +430,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `wass_dist` (the areas) | `n.interp` of 1 gives `NA` areas. A value of 0 or less stops with a message that does not name the cause (`R/wass_dist.R:69`). A pooled range above half of the largest float can overflow the sum. R then gives `Inf` or a meaningless area, and no message. | `wasserstein_areas` raises `InputError` for an `n_interp` below 2 and for a range above half of the largest float. |
 | `.check_gene_list_overlap` (used by `deseq_fc_ecdf`) | R warns `Gene lists overlap!` for `any(duplicated(unlist(gene_lists)))`, thus also for a gene that occurs two times in one list (`R/deseq_fc_ecdf.R:165-169`). | `assign_groups` warns with `SeedMatchWarning` only if two groups share a gene. The message names the two groups and one gene. |
 | `.assign_groups` (used by `deseq_fc_ecdf`) | The text `"NA"` marks a gene in no group, and the `factor` call makes it a level if a group has the name `NA`. Then this level also holds each gene in no group (`R/deseq_fc_ecdf.R:109`, `:171-182`). | `assign_groups` gives no value to a gene in no group. A group named `NA` holds only its own genes. |
+| `get_stringPPI_to_stringGGI` (the STRING download) | `STRINGdb$new` gets no `version`, thus STRINGdb 2.22.0 asks the STRING server for the current version at each run (`R/get_stringPPI_to_stringGGI.R:15`, `R/rstring.R:145-151` of STRINGdb 2.22.0). The network depends on the date of the run. | The registry pins STRING 12.5, with the size and the SHA-256 digest of each file. |
 
 ## Tests
 

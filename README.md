@@ -14,7 +14,7 @@ Inflexa, Inc. builds an agentic toolchain for bioinformatics. The toolchain port
 
 A sandbox such as the Inflexa sandbox has no network egress, and an agent corrects its calls from the error messages. Thus seedmatch obeys these rules:
 
-- **No network in the core.** The core modules never use the network. Each function reads its input from a path or an object that you give. A later version adds a separate module that downloads the resources.
+- **No network in the core.** The core modules never use the network. Each function reads its input from a path or an object that you give. The separate module `seedmatch.fetch` downloads the resources (see [Resources](#resources)).
 - **Python only.** The package is pure Python on numpy, pandas, numba, and scipy. It does not use R or a system library.
 - **Errors that an agent can use.** Each `InputError` names the bad value and the expected value. Thus an agent can correct the call.
 
@@ -95,6 +95,38 @@ utr3_counts = count_matches(target, utr3)
 
 [`docs/r-map.md`](docs/r-map.md) gives the Python name of each R function, and the changes of the arguments.
 
+## Resources
+
+The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
+
+The registry in `seedmatch.resources` pins the URL, the size, and the SHA-256 digest of each file. The command downloads a file only through `https`. A download that does not agree with the registry leaves no file. If a file is present and its digest agrees, the command does not download it again. If the digest differs, the command stops with an error and keeps the file.
+
+```bash
+# The 2bit file and the EnsDb file of one genome build.
+seedmatch-fetch reference rnor7 refs/rnor7
+
+# The DESeq2 tables of the siRNA example (GEO series GSE184929).
+seedmatch-fetch example sirna data/sirna
+
+# The miRDB v6.0 predictions.
+seedmatch-fetch mirdb data/mirdb
+
+# The TRRUST table of human or mouse.
+seedmatch-fetch trrust human data/trrust
+
+# The STRING protein links of one NCBI taxon.
+seedmatch-fetch string 10116 data/string
+
+# One line for each file: the group, the key, the file name, the size in bytes, and the description.
+seedmatch-fetch list
+```
+
+`python -m seedmatch.fetch` runs the same command. The files of a reference are large, and `seedmatch-fetch list` gives the size of each file.
+
+If `DEST` is absent, the command makes it. For each file, it prints the path, a tab, and `downloaded` or `present` on standard output. Before a download, it prints the file name and the size on standard error. The exit status is 0 for success and 1 for an error. An error prints `seedmatch-fetch: <message>` on standard error. A usage error exits with status 2. A key that the registry does not have gives a message that lists the valid keys.
+
+Use one `DEST` for each reference build. `Reference.from_directory(DEST)` opens the one `.sqlite` file and the one `.2bit` file of the directory. A directory with the EnsDb files of different builds has more than one `.sqlite` file, and `from_directory` raises `InputError`. `read_deseq2_table` reads each table of `example sirna` from `DEST`, because it accepts the gzip format. No function of this version reads the miRDB, TRRUST, and STRING files.
+
 ## Differences from SeedMatchR
 
 seedmatch corrects the defects of SeedMatchR that it finds. These changes are the most important for a user:
@@ -118,11 +150,11 @@ This version has the core path:
 - the DE table: the reader and the filter
 - the seed counts, `full_search`, `full_search_ranges`, and `seed_match_report`
 - the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and `ecdf_test` for two gene sets
+- the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:
 
 - the PR and ROC curves
-- the downloads
 - the wobble and bulge search, the 3' compensatory search, the network scores, and the other small analyses
 - the plots and the HTML report
 

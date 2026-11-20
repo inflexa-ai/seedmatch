@@ -392,3 +392,12 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `assign_groups` gives no value to a gene in no group, also if a group has the name `NA`. A group named `NA` holds only its own genes.
 - Reason: A gene in no group is not a member of a group named `NA`. The mix gives wrong group sizes and a wrong comparison of the groups. The name of a group is data of the caller, thus it must not change the meaning of a gene in no group.
 - Test: `test_assign_groups_keeps_a_group_named_na_apart_D040` in `tests/stats/test_ecdf.py`.
+
+## D-041: the registry pins the STRING version
+
+- ID: `D-041`
+- R location: `get_stringPPI_to_stringGGI` (`R/get_stringPPI_to_stringGGI.R:15`) and `STRINGdb$new` (STRINGdb 2.22.0, `R/rstring.R:145-151`).
+- R behavior: `get_stringPPI_to_stringGGI` calls `STRINGdb::STRINGdb$new(species = sp_number)` without a `version`. In STRINGdb 2.22.0 (Bioconductor 3.22), `STRINGdb$new` then asks `https://string-db.org/api/tsv-no-header/version` and uses the answer. On 2026-11-20, the answer is 12.5. Thus the network of R depends on the date of the run. Evidence: the source of STRINGdb 2.22.0 and the answer of the API on 2026-11-20. No R run.
+- New behavior: The registry pins STRING 12.5. `seedmatch-fetch string TAXON DEST` downloads `<TAXON>.protein.links.v12.5.txt.gz` and makes sure that the size and the SHA-256 digest agree with the registry.
+- Reason: A pinned version and its digest give the same file at each run. A new STRING release does not change a result, because the registry must change first.
+- Test: `test_the_string_urls_name_the_pinned_version_D041` in `tests/resources/test_registry.py`.

@@ -135,6 +135,30 @@ def test_fetch_reports_a_dest_that_cannot_be_made(tmp_path, monkeypatch):
     assert names(tmp_path) == []
 
 
+def test_a_final_path_that_cannot_be_accessed_is_an_error(tmp_path, monkeypatch):
+    final = tmp_path / "file.bin"
+    error = PermissionError(13, "Permission denied")
+    original_exists = Path.exists
+
+    def failing_exists(self, *args, **kwargs):
+        if self == final:
+            raise error
+        return original_exists(self, *args, **kwargs)
+
+    client = MemoryClient({URL: Route(body=BODY)})
+    message = (
+        f"{os.fspath(final)!r} cannot be accessed: {error!r}; expected a path that can be accessed"
+    )
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "exists", failing_exists)
+        with pytest.raises(FetchError) as caught:
+            fetch_resource(resource_of(), tmp_path, opts=opts_of(client))
+    assert str(caught.value) == message
+    assert caught.value.__cause__ is error
+    assert client.requests == []
+    assert names(tmp_path) == []
+
+
 def test_a_present_file_with_the_digest_causes_no_request(tmp_path):
     (tmp_path / "file.bin").write_bytes(BODY)
     client = MemoryClient({URL: Route(body=b"other")})

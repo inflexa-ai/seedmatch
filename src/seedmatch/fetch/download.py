@@ -58,7 +58,7 @@ def fetch_resource(
     """
     directory = _make_directory(dest)
     final = directory / resource.name
-    if final.exists():
+    if _exists(final):
         _check_present(final, resource)
         return final
     part = directory / f"{resource.name}.part"
@@ -101,6 +101,17 @@ def _make_directory(dest: str | os.PathLike[str]) -> Path:
         )
         raise FetchError(message) from error
     return directory
+
+
+def _exists(final: Path) -> bool:
+    try:
+        return final.exists()
+    except OSError as error:
+        message = (
+            f"{os.fspath(final)!r} cannot be accessed: {error!r}; "
+            "expected a path that can be accessed"
+        )
+        raise FetchError(message) from error
 
 
 def _check_part(part: Path) -> None:

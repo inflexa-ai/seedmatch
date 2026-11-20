@@ -53,11 +53,11 @@ The other groups:
 | `mirdb` | `6.0` | `https://mirdb.org/download/miRDB_v6.0_prediction_result.txt.gz` | 59483982 | `446636d2182212f44ff91623f1429f7922f9575b82226962a6213d592a7e109d` |
 | `trrust` | `human` | `https://www.grnpedia.org/trrust/data/trrust_rawdata.human.tsv` | 297659 | `9b909319ccc8e36588b5a1bd3640e0dfba03936c6fc154cc4304d742bec11bed` |
 | `trrust` | `mouse` | `https://www.grnpedia.org/trrust/data/trrust_rawdata.mouse.tsv` | 220353 | `4847c960c7c2ce0173b056184137b1cc71e8d61d1b1edc825247504ad882dd55` |
-| `string` | `9606` | `https://stringdb-downloads.org/download/protein.links.v12.0/9606.protein.links.v12.0.txt.gz` | 83164437 | `3e22f32572211aa341d5b4bd08d30c32e693e294603202120936872f87719d4f` |
-| `string` | `10090` | `https://stringdb-downloads.org/download/protein.links.v12.0/10090.protein.links.v12.0.txt.gz` | 75325207 | `803775e1d1a47864561e41944bf1f988094a836991e7cf13e4229233fc8cff3d` |
-| `string` | `10116` | `https://stringdb-downloads.org/download/protein.links.v12.0/10116.protein.links.v12.0.txt.gz` | 78625664 | `381e8c7602f6b488e985cf83d68358c00684afac9987d2e9b273e1fae6c9af57` |
+| `string` | `9606` | `https://stringdb-downloads.org/download/protein.links.v12.5/9606.protein.links.v12.5.txt.gz` | 62813591 | `3d6894ef3a0a8578b70421b7d6bac159c41ed2f6c1b5da21ab7fabb4ac21cd25` |
+| `string` | `10090` | `https://stringdb-downloads.org/download/protein.links.v12.5/10090.protein.links.v12.5.txt.gz` | 75044046 | `b3318ac1cbd0fe0e81a3d6b0b432352f72733b7cf36d2437423a5cbf2a98e9d0` |
+| `string` | `10116` | `https://stringdb-downloads.org/download/protein.links.v12.5/10116.protein.links.v12.5.txt.gz` | 75736490 | `4d53bee2bc10daa046aae67532152c7389ba2374dacb18cf2b2cd3886b253387` |
 
-The URLs of R: the GEO tables are at `R/get_data.R:23`, `:27`, and `:31`, miRDB at `R/get_data.R:39`, and TRRUST at `R/get_network_matches.R:21-22`. R reads STRING through `STRINGdb::STRINGdb$new` (`R/get_stringPPI_to_stringGGI.R:15`), whose default is STRING 12.0. The registry pins the version 12.0.
+The URLs of R: the GEO tables are at `R/get_data.R:23`, `:27`, and `:31`, miRDB at `R/get_data.R:39`, and TRRUST at `R/get_network_matches.R:21-22`. R reads STRING through `STRINGdb::STRINGdb$new` (`R/get_stringPPI_to_stringGGI.R:15`). Without a version, STRINGdb 2.22.0 uses the current version of the STRING API, 12.5 on 2026-11-20. The registry pins the version 12.5 (`D-041`).
 
 ## Review Focus
 
@@ -103,7 +103,7 @@ class Entry:
     resources: tuple[Resource, ...]
 
 REGISTRY: Final[tuple[Entry, ...]]
-STRING_VERSION: Final = "12.0"
+STRING_VERSION: Final = "12.5"
 
 def lookup(group: Group, key: str, *, registry: Sequence[Entry] = REGISTRY) -> Entry: ...
 ```
