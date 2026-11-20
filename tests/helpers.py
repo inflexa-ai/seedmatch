@@ -58,6 +58,23 @@ def golden_rows(path: str) -> list[Any]:
     return list(golden(path).itertuples(index=False))
 
 
+def golden_row(path: str, case: str, alternative: str) -> Any:
+    (row,) = (
+        row for row in golden_rows(path) if row.case == case and row.alternative == alternative
+    )
+    return row
+
+
+# The cache shares one dict of lists, so a test must not change them.
+@cache
+def stats_samples() -> dict[str, tuple[list[float], list[float]]]:
+    cases: dict[str, tuple[list[float], list[float]]] = {}
+    for case, sample, value in golden("stats/samples.tsv").itertuples(index=False):
+        x, y = cases.setdefault(case, ([], []))
+        (x if sample == "x" else y).append(float(value))
+    return cases
+
+
 # A SequenceSet is immutable, so each test can share the one set.
 @cache
 def sirna_seqs() -> SequenceSet:

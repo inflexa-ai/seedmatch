@@ -27,7 +27,7 @@ def ks_test(
     The statistic is D, `D+` for `GREATER`, or `D-` for `LESS`, from the ECDFs F of `x` and G of
     `y`. `GREATER` tests F above G. An infinite value is the greatest or the least value. The
     p-value is exact if the product of the two sizes is below 10000, also with ties, and
-    asymptotic otherwise (`D-032`).
+    asymptotic otherwise (`D-032`). The test gives no warning for ties (`D-037`).
     """
     chosen = as_alternative(alternative)
     sample_x = as_sample("x", x, finite=False)

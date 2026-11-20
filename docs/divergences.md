@@ -286,3 +286,26 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: The statistic comes from integer counts. A checkpoint is the end of a run of equal pooled values. Let i and j be the counts of x values and y values up to a checkpoint. The gap of the two ECDFs, scaled by `m * n`, is the integer `i * n - j * m`. Let d be the maximum of the gap for `GREATER`, of the negative gap for `LESS`, and of the absolute gap for `TWO_SIDED`. D is d divided by `m * n`, and d is at most `m * n`. Thus D is never above 1. The two-sided p-value is `scipy.special.kolmogorov(sqrt(en) * D)`. The one-sided p-value is `exp(-2 * en * D^2)`.
 - Reason: R gives 0 for a p-value that a float64 can hold, for example 1e-43. A p-value of 0 hides the size of an effect. The cut series changes the fifth digit of a p-value. Each defect is a numeric error of R, not a property of the test.
 - Test: `test_ks_asymptotic_two_sided_uses_the_limit_distribution_D032`, `test_ks_asymptotic_one_sided_keeps_a_small_p_value_D032`, `test_ks_keeps_a_p_value_that_r_rounds_to_zero_D032`, and `test_ks_statistic_cannot_exceed_1_where_the_sum_of_r_does_D032` in `tests/stats/test_ks.py`. `test_ks_matches_r` in the same file covers each other row of `ks.tsv`.
+
+## D-033: The Wilcoxon test gives the p-value 1 when each value is equal
+
+- ID: `D-033`
+- R location: `ecdf_stat_test` calls `stats::wilcox.test` (`R/deseq_fc_ecdf.R:274-276`). In R 4.5.3, `wilcox.test.default` uses the normal approximation if two values are equal.
+- R behavior: If each pooled value is equal, each rank is the average rank, and z is 0 before the continuity correction. The variance SIGMA^2 is 0, thus R divides by 0. The golden `wilcoxon_all_equal` in `tests/golden/stats/wilcoxon.tsv` (5 values and 7 values, each equal to 1) gives the evidence:
+  - `two.sided`: the correction `sign(z) * 0.5` is 0, thus z is 0/0, and the p-value is NaN.
+  - `less`: z is 0.5/0 = Inf, and the p-value is 1.
+  - `greater`: z is -0.5/0 = -Inf, and the p-value is 1.
+- New behavior: `wilcoxon_test` gives the p-value 1 for each alternative if each pooled value is equal. The statistic is W, as in R, and the method is `ASYMPTOTIC`. The results for `LESS` and `GREATER` do not change. Only the two-sided result differs from R.
+- Reason: Two samples of equal values show no difference, thus 1 is the correct p-value. A NaN p-value fails each comparison with a threshold. R already gives 1 for the one-sided tests.
+- Test: `test_wilcoxon_with_all_values_equal_gives_1_D033` in `tests/stats/test_wilcoxon.py`. `test_wilcoxon_matches_r` in the same file covers each other row of `wilcoxon.tsv`.
+
+## D-037: The KS and Wilcoxon tests give no warning for ties
+
+- ID: `D-037`
+- R location: `ecdf_stat_test` calls `stats::ks.test` (`R/deseq_fc_ecdf.R:255-257`) and `stats::wilcox.test` (`R/deseq_fc_ecdf.R:274-276`).
+- R behavior: R warns if ties make a p-value approximate. Two R probes with R 4.5.3 give the evidence:
+  - `ks.test(rep(c(1, 2, 3), 40), rep(c(2, 3, 4), 50))` uses the asymptotic method and gives the warning `p-value will be approximate in the presence of ties`. The exact method gives no warning, for example `ks.test(c(1, 2, 2, 3), c(2, 3, 4))`.
+  - `wilcox.test(c(1, 2, 3, 3), c(3, 4, 5))` gives the warning `cannot compute exact p-value with ties`.
+- New behavior: `ks_test` and `wilcoxon_test` give no warning. The field `method` of the result is `EXACT` or `ASYMPTOTIC`, thus the caller can read how the p-value was made.
+- Reason: A caller that does many tests gets one warning for each call with ties. The result already holds this information, in a field that a program can read.
+- Test: `test_ks_gives_no_warning_for_ties_D037` in `tests/stats/test_ks.py` and `test_wilcoxon_gives_no_warning_for_ties_D037` in `tests/stats/test_wilcoxon.py`.

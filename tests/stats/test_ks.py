@@ -1,12 +1,12 @@
 import itertools
 import math
 import re
+import warnings
 from collections.abc import Sequence
-from functools import cache
 
 import numpy as np
 import pytest
-from helpers import golden, golden_rows
+from helpers import golden_row, golden_rows, stats_samples
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from scipy.special import kolmogorov
@@ -28,35 +28,16 @@ D032_ROWS = {
 }
 
 
-@cache
-def samples() -> dict[str, tuple[list[float], list[float]]]:
-    frame = golden("stats/samples.tsv")
-    cases: dict[str, tuple[list[float], list[float]]] = {}
-    for case, sample, value in frame.itertuples(index=False):
-        x, y = cases.setdefault(case, ([], []))
-        (x if sample == "x" else y).append(float(value))
-    return cases
-
-
-def ks_row(case, alternative):
-    (row,) = (
-        row
-        for row in golden_rows("stats/ks.tsv")
-        if row.case == case and row.alternative == alternative
-    )
-    return row
-
-
 def run_case(case, alternative):
-    x, y = samples()[case]
+    x, y = stats_samples()[case]
     return ks_test(x, y, alternative=Alternative(alternative))
 
 
 def limit_inputs(case, alternative):
     """Return (en, D) of the asymptotic formulas, with D from the lattice value that R rounds."""
-    x, y = samples()[case]
+    x, y = stats_samples()[case]
     m, n = len(x), len(y)
-    d = round(float(ks_row(case, alternative).statistic) * m * n)
+    d = round(float(golden_row("stats/ks.tsv", case, alternative).statistic) * m * n)
     return m * n / (m + n), d / (m * n)
 
 
@@ -81,7 +62,7 @@ def test_ks_result_carries_the_sizes_and_the_alternative():
 
 
 def test_ks_default_alternative_is_the_default_of_r():
-    x, y = samples()["ks_5x7_plain"]
+    x, y = stats_samples()["ks_5x7_plain"]
     assert ks_test(x, y) == ks_test(x, y, alternative=Alternative.TWO_SIDED)
     assert ks_test(x, y).alternative is Alternative.TWO_SIDED
 
@@ -116,6 +97,15 @@ def test_ks_uses_the_exact_p_value_only_below_10000_pairs(m, n, method):
     generator = np.random.default_rng(7)
     result = ks_test(generator.normal(size=m), generator.normal(size=n))
     assert result.method is method
+
+
+def test_ks_gives_no_warning_for_ties_D037():
+    # R 4.5.3 warns "p-value will be approximate in the presence of ties" for these samples.
+    x, y = np.repeat([1.0, 2.0, 3.0], 40), np.repeat([2.0, 3.0, 4.0], 50)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = ks_test(x, y)
+    assert result.method is PValueMethod.ASYMPTOTIC
 
 
 def test_ks_with_equal_samples_has_the_statistic_0_and_the_p_value_1():
@@ -209,7 +199,7 @@ def test_exact_p_value_equals_the_count_of_the_permutations(pair):
 
 
 def test_ks_asymptotic_two_sided_uses_the_limit_distribution_D032():
-    row = ks_row("ks_asym_cut_series", "two.sided")
+    row = golden_row("stats/ks.tsv", "ks_asym_cut_series", "two.sided")
     result = run_case(row.case, row.alternative)
     en, d = limit_inputs(row.case, row.alternative)
     expected = float(kolmogorov(math.sqrt(en) * d))
@@ -221,7 +211,7 @@ def test_ks_asymptotic_two_sided_uses_the_limit_distribution_D032():
 
 
 def test_ks_asymptotic_one_sided_keeps_a_small_p_value_D032():
-    row = ks_row("ks_asym_small_p", "greater")
+    row = golden_row("stats/ks.tsv", "ks_asym_small_p", "greater")
     result = run_case(row.case, row.alternative)
     en, d = limit_inputs(row.case, row.alternative)
     assert float(row.p_value) == 0
@@ -239,7 +229,7 @@ def test_ks_asymptotic_one_sided_keeps_a_small_p_value_D032():
     ],
 )
 def test_ks_keeps_a_p_value_that_r_rounds_to_zero_D032(case, alternative):
-    row = ks_row(case, alternative)
+    row = golden_row("stats/ks.tsv", case, alternative)
     result = run_case(case, alternative)
     en, d = limit_inputs(case, alternative)
     if alternative == "two.sided":
@@ -253,6 +243,6 @@ def test_ks_keeps_a_p_value_that_r_rounds_to_zero_D032(case, alternative):
 
 
 def test_ks_statistic_cannot_exceed_1_where_the_sum_of_r_does_D032():
-    x, y = samples()["ks_100x100_shift"]
-    assert float(ks_row("ks_100x100_shift", "two.sided").statistic) > 1
+    x, y = stats_samples()["ks_100x100_shift"]
+    assert float(golden_row("stats/ks.tsv", "ks_100x100_shift", "two.sided").statistic) > 1
     assert ks_test(x, y).statistic == 1.0
