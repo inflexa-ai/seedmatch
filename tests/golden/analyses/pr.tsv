@@ -1,0 +1,15 @@
+# generated-by: tools/golden/R/analyses.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# PRROC: 1.4
+# the call is PRROC::pr.curve(scores.class0 = score, weights.class0 = label, curve = TRUE)
+# the cases ties_small, continuous, and large use set.seed(20261123), and the other cases are fixed values
+case	auc_integral	auc_davis_goadrich
+ties_small	0.53337889209768685	0.53384174063965339
+continuous	0.49635466620953372	0.49394846744617155
+large	0.69646250442823054	0.69646373077879664
+one_value	0.5	0.5
+perfect	1	1
+first_negative	0.31234369513184473	0.29999999999999999
+inverse	0.30685281944005471	0.29999999999999999

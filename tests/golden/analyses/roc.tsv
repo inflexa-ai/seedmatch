@@ -1,0 +1,14 @@
+# generated-by: tools/golden/R/analyses.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# PRROC: 1.4
+# the call is PRROC::roc.curve(scores.class0 = score, weights.class0 = label, curve = TRUE)
+case	auc
+ties_small	0.62630208333333326
+continuous	0.44084821428571425
+large	0.67910466646421697
+one_value	0.5
+perfect	1
+first_negative	0.055555555555555559
+inverse	0

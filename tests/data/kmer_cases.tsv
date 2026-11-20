@@ -1,0 +1,9 @@
+seq_id	gene_id	sequence
+s1	g1	ACGTNACGTA
+s2	g1	acgtRacgt
+s3	g2	AC
+s4	g3	
+s5	g4	AAAAAAAAAA
+s6	g2	GATTACAGATTACA
+s7	g5	TTTTMKTTTT
+s8	g6	CGCGCGCGCGCGCGCGCGCG

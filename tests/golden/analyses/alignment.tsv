@@ -1,0 +1,134 @@
+# generated-by: tools/golden/R/analyses.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# the mer7m8 target is CTCTATA, and the guide is UUAUAGAGCAAGAACACUGUUUU
+# text is the column alignment of plotAlignment of tools/golden/patches/plotAlignment.R, with each space
+# the unpatched plotAlignment stops for mer7m8_1: nchar(s1) == nchar(s2) is not TRUE
+# the unpatched plotAlignment stops for a row of SeedMatchR(res.format = "data.frame"): subscript out of bounds
+# the patched plotAlignment stops for a window that starts before 1 (match 5 to 11, window from -10): solving row 1: the supplied start/end lead to a negative width
+# the patched plotAlignment stops for a window that starts at 0 (match 15 to 21): solving row 1: 'allow.nonnarrowing' is FALSE and the supplied start (0) is < 1
+# the patched plotAlignment stops for a window that ends after its sequence (the sequence has 146 bases, and the match ends at the last base): solving row 1: 'allow.nonnarrowing' is FALSE and the supplied end (147) is > refwidth
+# the patched plotAlignment stops for a match with an indel (width 6): nchar(s1) == nchar(s2) is not TRUE
+# edge_first_1 has the window 1 to 23 (match 16 to 22 of the first sequence). edge_last_1 has a window that ends at the last base (match 139 to 145 of 146 bases). These matches are not search results
+case	seq_id	start	end	seed	start_pos	stop_pos	left_pad	right_pad	line	text
+mer7m8_1	ENSRNOG00000016275	73	79	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_1	ENSRNOG00000016275	73	79	mer7m8	2	8	0	0	2	         ||||||||||||||||||||||      
+mer7m8_1	ENSRNOG00000016275	73	79	mer7m8	2	8	0	0	3	  5'-...GAAACAGUGUUCUUGCUCUAUAA...-3'
+mer7m8_2	ENSRNOG00000047179	319	325	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_2	ENSRNOG00000047179	319	325	mer7m8	2	8	0	0	2	        |          | |||||||||       
+mer7m8_2	ENSRNOG00000047179	319	325	mer7m8	2	8	0	0	3	  5'-...AUUGUCUCACACAUGCUCUAUAU...-3'
+mer7m8_3	ENSRNOG00000001050	609	615	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_3	ENSRNOG00000001050	609	615	mer7m8	2	8	0	0	2	          |   |    | |||||||||       
+mer7m8_3	ENSRNOG00000001050	609	615	mer7m8	2	8	0	0	3	  5'-...CUACAGGGUCCCAUGCUCUAUAG...-3'
+mer7m8_4	ENSRNOG00000015732	2601	2607	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_4	ENSRNOG00000015732	2601	2607	mer7m8	2	8	0	0	2	         ||  || |     |||||||||      
+mer7m8_4	ENSRNOG00000015732	2601	2607	mer7m8	2	8	0	0	3	  5'-...GAAGAAGAGAAAAAGCUCUAUAA...-3'
+mer7m8_5	ENSRNOG00000025198	600	606	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_5	ENSRNOG00000025198	600	606	mer7m8	2	8	0	0	2	                 ||    ||||||||      
+mer7m8_5	ENSRNOG00000025198	600	606	mer7m8	2	8	0	0	3	  5'-...CCUUUUUAUUUAAAUCUCUAUAA...-3'
+mer7m8_6	ENSRNOG00000025302	189	195	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_6	ENSRNOG00000025302	189	195	mer7m8	2	8	0	0	2	               | ||||  ||||||||      
+mer7m8_6	ENSRNOG00000025302	189	195	mer7m8	2	8	0	0	3	  5'-...UUUCUUAUCUUCUCCCUCUAUAA...-3'
+mer7m8_7	ENSRNOG00000025302	461	467	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_7	ENSRNOG00000025302	461	467	mer7m8	2	8	0	0	2	        |         |    |||||||       
+mer7m8_7	ENSRNOG00000025302	461	467	mer7m8	2	8	0	0	3	  5'-...AUUCAUUGACUGGAACUCUAUAG...-3'
+mer7m8_8	ENSRNOG00000003307	117	123	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_8	ENSRNOG00000003307	117	123	mer7m8	2	8	0	0	2	                     |||||||||       
+mer7m8_8	ENSRNOG00000003307	117	123	mer7m8	2	8	0	0	3	  5'-...CUUCAUUCAGAUAUGCUCUAUAG...-3'
+mer7m8_9	ENSRNOG00000010728	22	28	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_9	ENSRNOG00000010728	22	28	mer7m8	2	8	0	0	2	        ||| || |     | |||||||       
+mer7m8_9	ENSRNOG00000010728	22	28	mer7m8	2	8	0	0	3	  5'-...AAAUCAUUUCAUGUCCUCUAUAC...-3'
+mer7m8_10	ENSRNOG00000007496	2020	2026	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_10	ENSRNOG00000007496	2020	2026	mer7m8	2	8	0	0	2	         |       |     |||||||       
+mer7m8_10	ENSRNOG00000007496	2020	2026	mer7m8	2	8	0	0	3	  5'-...CAGUUCAAAUAAAAUCUCUAUAU...-3'
+mer7m8_11	ENSRNOG00000011351	1044	1050	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_11	ENSRNOG00000011351	1044	1050	mer7m8	2	8	0	0	2	          |        |   |||||||       
+mer7m8_11	ENSRNOG00000011351	1044	1050	mer7m8	2	8	0	0	3	  5'-...GCACAGACAACCAGCCUCUAUAG...-3'
+mer7m8_12	ENSRNOG00000011250	96	102	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_12	ENSRNOG00000011250	96	102	mer7m8	2	8	0	0	2	         |    ||    |  ||||||||      
+mer7m8_12	ENSRNOG00000011250	96	102	mer7m8	2	8	0	0	3	  5'-...GACCAUGUUGCUUCUCUCUAUAA...-3'
+mer7m8_13	ENSRNOG00000018077	241	247	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_13	ENSRNOG00000018077	241	247	mer7m8	2	8	0	0	2	        |||    | || || |||||||       
+mer7m8_13	ENSRNOG00000018077	241	247	mer7m8	2	8	0	0	3	  5'-...AAAUGCCUCUUGUUCCUCUAUAG...-3'
+mer7m8_14	ENSRNOG00000051819	642	648	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_14	ENSRNOG00000051819	642	648	mer7m8	2	8	0	0	2	            |   |    ||||||||||      
+mer7m8_14	ENSRNOG00000051819	642	648	mer7m8	2	8	0	0	3	  5'-...GUGCCCACGAAACUGCUCUAUAA...-3'
+mer7m8_15	ENSRNOG00000027434	616	622	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_15	ENSRNOG00000027434	616	622	mer7m8	2	8	0	0	2	            |   |  || ||||||||       
+mer7m8_15	ENSRNOG00000027434	616	622	mer7m8	2	8	0	0	3	  5'-...GUGUCCUGGAACUCGCUCUAUAG...-3'
+mer7m8_16	ENSRNOG00000010210	1103	1109	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_16	ENSRNOG00000010210	1103	1109	mer7m8	2	8	0	0	2	        || |    |      ||||||||      
+mer7m8_16	ENSRNOG00000010210	1103	1109	mer7m8	2	8	0	0	3	  5'-...AACAUCAGGCCUCAUCUCUAUAA...-3'
+mer7m8_17	ENSRNOG00000010210	7145	7151	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_17	ENSRNOG00000010210	7145	7151	mer7m8	2	8	0	0	2	              || |   | |||||||       
+mer7m8_17	ENSRNOG00000010210	7145	7151	mer7m8	2	8	0	0	3	  5'-...CUGUAUGUCUGUCUUCUCUAUAU...-3'
+mer7m8_18	ENSRNOG00000009434	74	80	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_18	ENSRNOG00000009434	74	80	mer7m8	2	8	0	0	2	         |             ||||||||      
+mer7m8_18	ENSRNOG00000009434	74	80	mer7m8	2	8	0	0	3	  5'-...GACCUGUGCCGACAUCUCUAUAA...-3'
+mer7m8_19	ENSRNOG00000016239	153	159	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_19	ENSRNOG00000016239	153	159	mer7m8	2	8	0	0	2	           |        |  |||||||       
+mer7m8_19	ENSRNOG00000016239	153	159	mer7m8	2	8	0	0	3	  5'-...CUGAAUAAAAGUUCUCUCUAUAG...-3'
+mer7m8_20	ENSRNOG00000004763	1532	1538	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_20	ENSRNOG00000004763	1532	1538	mer7m8	2	8	0	0	2	        | | |   |      |||||||       
+mer7m8_20	ENSRNOG00000004763	1532	1538	mer7m8	2	8	0	0	3	  5'-...ACAGCCAGGACUCAUCUCUAUAG...-3'
+mer7m8_pad_1	ENSRNOG00000016275	73	79	mer7m8	2	8	3	2	1	        3'-UUUUGUCACAAGAACGAGAUAUU-5'     
+mer7m8_pad_1	ENSRNOG00000016275	73	79	mer7m8	2	8	3	2	2	            ||||||||||||||||||||||        
+mer7m8_pad_1	ENSRNOG00000016275	73	79	mer7m8	2	8	3	2	3	  5'-...ACUGAAACAGUGUUCUUGCUCUAUAAAC...-3'
+mer7m8_pad_2	ENSRNOG00000047179	319	325	mer7m8	2	8	3	2	1	        3'-UUUUGUCACAAGAACGAGAUAUU-5'     
+mer7m8_pad_2	ENSRNOG00000047179	319	325	mer7m8	2	8	3	2	2	           |          | |||||||||         
+mer7m8_pad_2	ENSRNOG00000047179	319	325	mer7m8	2	8	3	2	3	  5'-...UGUAUUGUCUCACACAUGCUCUAUAUAA...-3'
+mer7m8_pad_3	ENSRNOG00000001050	609	615	mer7m8	2	8	3	2	1	        3'-UUUUGUCACAAGAACGAGAUAUU-5'     
+mer7m8_pad_3	ENSRNOG00000001050	609	615	mer7m8	2	8	3	2	2	             |   |    | |||||||||         
+mer7m8_pad_3	ENSRNOG00000001050	609	615	mer7m8	2	8	3	2	3	  5'-...UAUCUACAGGGUCCCAUGCUCUAUAGCC...-3'
+mer8_1	ENSRNOG00000016275	73	80	mer8	1	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer8_1	ENSRNOG00000016275	73	80	mer8	1	8	0	0	2	         ||||||||||||||||||||||      
+mer8_1	ENSRNOG00000016275	73	80	mer8	1	8	0	0	3	  5'-...GAAACAGUGUUCUUGCUCUAUAA...-3'
+mer8_2	ENSRNOG00000015732	2601	2608	mer8	1	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer8_2	ENSRNOG00000015732	2601	2608	mer8	1	8	0	0	2	         ||  || |     |||||||||      
+mer8_2	ENSRNOG00000015732	2601	2608	mer8	1	8	0	0	3	  5'-...GAAGAAGAGAAAAAGCUCUAUAA...-3'
+mer8_3	ENSRNOG00000025198	600	607	mer8	1	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer8_3	ENSRNOG00000025198	600	607	mer8	1	8	0	0	2	                 ||    ||||||||      
+mer8_3	ENSRNOG00000025198	600	607	mer8	1	8	0	0	3	  5'-...CCUUUUUAUUUAAAUCUCUAUAA...-3'
+mer8_4	ENSRNOG00000025302	189	196	mer8	1	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer8_4	ENSRNOG00000025302	189	196	mer8	1	8	0	0	2	               | ||||  ||||||||      
+mer8_4	ENSRNOG00000025302	189	196	mer8	1	8	0	0	3	  5'-...UUUCUUAUCUUCUCCCUCUAUAA...-3'
+mer8_5	ENSRNOG00000011250	96	103	mer8	1	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer8_5	ENSRNOG00000011250	96	103	mer8	1	8	0	0	2	         |    ||    |  ||||||||      
+mer8_5	ENSRNOG00000011250	96	103	mer8	1	8	0	0	3	  5'-...GACCAUGUUGCUUCUCUCUAUAA...-3'
+mer8_6	ENSRNOG00000051819	642	649	mer8	1	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer8_6	ENSRNOG00000051819	642	649	mer8	1	8	0	0	2	            |   |    ||||||||||      
+mer8_6	ENSRNOG00000051819	642	649	mer8	1	8	0	0	3	  5'-...GUGCCCACGAAACUGCUCUAUAA...-3'
+mer8_7	ENSRNOG00000010210	1103	1110	mer8	1	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer8_7	ENSRNOG00000010210	1103	1110	mer8	1	8	0	0	2	        || |    |      ||||||||      
+mer8_7	ENSRNOG00000010210	1103	1110	mer8	1	8	0	0	3	  5'-...AACAUCAGGCCUCAUCUCUAUAA...-3'
+mer8_8	ENSRNOG00000009434	74	81	mer8	1	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer8_8	ENSRNOG00000009434	74	81	mer8	1	8	0	0	2	         |             ||||||||      
+mer8_8	ENSRNOG00000009434	74	81	mer8	1	8	0	0	3	  5'-...GACCUGUGCCGACAUCUCUAUAA...-3'
+mer6_1	ENSRNOG00000016275	74	79	mer6	2	7	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer6_1	ENSRNOG00000016275	74	79	mer6	2	7	0	0	2	         ||||||||||||||||||||||      
+mer6_1	ENSRNOG00000016275	74	79	mer6	2	7	0	0	3	  5'-...GAAACAGUGUUCUUGCUCUAUAA...-3'
+mer6_2	ENSRNOG00000047179	320	325	mer6	2	7	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer6_2	ENSRNOG00000047179	320	325	mer6	2	7	0	0	2	        |          | |||||||||       
+mer6_2	ENSRNOG00000047179	320	325	mer6	2	7	0	0	3	  5'-...AUUGUCUCACACAUGCUCUAUAU...-3'
+mer6_3	ENSRNOG00000001050	610	615	mer6	2	7	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer6_3	ENSRNOG00000001050	610	615	mer6	2	7	0	0	2	          |   |    | |||||||||       
+mer6_3	ENSRNOG00000001050	610	615	mer6	2	7	0	0	3	  5'-...CUACAGGGUCCCAUGCUCUAUAG...-3'
+mer6_4	ENSRNOG00000024365	1051	1056	mer6	2	7	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer6_4	ENSRNOG00000024365	1051	1056	mer6	2	7	0	0	2	           || |  || ||  ||||||       
+mer6_4	ENSRNOG00000024365	1051	1056	mer6	2	7	0	0	3	  5'-...CUGACUGGAUUUUUUUUCUAUAC...-3'
+mer6_5	ENSRNOG00000019525	114	119	mer6	2	7	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer6_5	ENSRNOG00000019525	114	119	mer6	2	7	0	0	2	           |   |     |  ||||||       
+mer6_5	ENSRNOG00000019525	114	119	mer6	2	7	0	0	3	  5'-...UGUAUUUUUGCAGUAUUCUAUAU...-3'
+full_mm2_1	ENSRNOG00000016275	58	79	Full	2	23	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+full_mm2_1	ENSRNOG00000016275	58	79	Full	2	23	0	0	2	         ||||||||||||||||||||||      
+full_mm2_1	ENSRNOG00000016275	58	79	Full	2	23	0	0	3	  5'-...GAAACAGUGUUCUUGCUCUAUAA...-3'
+custom_1	ENSRNOG00000016275	69	78	custom	3	12	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+custom_1	ENSRNOG00000016275	69	78	custom	3	12	0	0	2	         ||||||||||||||||||||||      
+custom_1	ENSRNOG00000016275	69	78	custom	3	12	0	0	3	  5'-...GAAACAGUGUUCUUGCUCUAUAA...-3'
+edge_first_1	ENSRNOG00000016275	16	22	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+edge_first_1	ENSRNOG00000016275	16	22	mer7m8	2	8	0	0	2	           ||   |  |  |      |       
+edge_first_1	ENSRNOG00000016275	16	22	mer7m8	2	8	0	0	3	  5'-...GGGACCCAGCCCAGGAGGACCAG...-3'
+edge_last_1	ENSRNOG00000016275	139	145	mer7m8	2	8	0	0	1	     3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+edge_last_1	ENSRNOG00000016275	139	145	mer7m8	2	8	0	0	2	        ||| ||   || || |  |  ||      
+edge_last_1	ENSRNOG00000016275	139	145	mer7m8	2	8	0	0	3	  5'-...AAACCACCUUUAUUUCAUUCAAA...-3'

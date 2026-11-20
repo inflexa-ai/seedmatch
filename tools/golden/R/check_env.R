@@ -28,8 +28,14 @@ if (any(wrong)) {
   )
 }
 
+# The benchmark goldens (analyses.R) need PRROC 1.4, which has no third version part.
+prroc <- as.character(packageVersion("PRROC"))
+if (prroc != "1.4") {
+  stop("PRROC ", prroc, ", expected 1.4")
+}
+
 cat(
   "golden environment OK: SeedMatchR ", seedmatchr, ", Biostrings ", biostrings, ", ",
-  paste(names(installed), installed, collapse = ", "), "\n",
+  paste(names(installed), installed, collapse = ", "), ", PRROC ", prroc, "\n",
   sep = ""
 )

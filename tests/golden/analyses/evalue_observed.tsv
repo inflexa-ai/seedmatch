@@ -1,0 +1,46 @@
+# generated-by: tools/golden/R/analyses.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# the observed counts: sample(0:4, 40, replace = TRUE), then g01 is 0
+gene_id	overall_matches
+g01	0
+g02	2
+g03	3
+g04	2
+g05	0
+g06	3
+g07	1
+g08	0
+g09	1
+g10	0
+g11	0
+g12	4
+g13	0
+g14	4
+g15	2
+g16	3
+g17	3
+g18	3
+g19	4
+g20	3
+g21	4
+g22	2
+g23	3
+g24	0
+g25	4
+g26	2
+g27	0
+g28	4
+g29	1
+g30	2
+g31	2
+g32	3
+g33	0
+g34	1
+g35	0
+g36	0
+g37	0
+g38	2
+g39	0
+g40	4

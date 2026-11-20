@@ -15,6 +15,29 @@
 - a value below a cutoff
 - a negative fold change
 
+## Fixtures of the small analyses
+
+`kmer_cases.tsv` and `mirdb_sample.txt` are synthetic. They are not copies of SeedMatchR data or of miRDB data. A tab separates the fields. Each line ends with a newline.
+
+`kmer_cases.tsv` has a header line with the fields `seq_id`, `gene_id`, and `sequence`. Each row is an edge case of the k-mer count:
+
+- `s1` has the base `N`, and `s7` has the IUPAC bases `M` and `K`.
+- `s2` has lowercase bases and the base `R`.
+- `s3` is shorter than most widths.
+- `s4` has an empty sequence. Its line ends with a tab.
+- `s5` has one repeated base, and `s8` has one repeated pair of bases.
+- `s6` has a k-mer that occurs two times.
+- `s1` and `s2` share the gene `g1`, and `s3` and `s6` share the gene `g2`.
+
+`mirdb_sample.txt` has the format of the miRDB file. It has no header, and its fields are the ID, the RefSeq ID, and the score. The IDs and the RefSeq IDs are not copies of miRDB data. The rows cover these cases:
+
+- The species `hsa`, `mmu`, `rno`, `cfa`, and `gga`.
+- An ID with more than one hyphen after the species (`rno-let-7a-2-3p`).
+- An ID without a hyphen (`lin4`).
+- Integer scores and scores with decimals.
+
+The R golden files in `tests/golden/analyses/` come from these files. `tools/golden/README.md` gives the command.
+
 ## Annotation fixture
 
 The files in `annotation/` are synthetic. They are not copies of SeedMatchR data. The script `tools/fixtures/annotation.py` writes each file from one specification:

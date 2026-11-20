@@ -1,0 +1,18 @@
+# generated-by: tools/golden/R/analyses.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# PRROC: 1.4
+# the result of benchmark_preds of tools/golden/patches/benchmark_preds.R for load_test_data()$res and preds_col = mer7m8
+# n_positive and n_negative count the labels of the filter of the patch. The curves are in pr_curve.tsv and roc_curve.tsv
+# the unpatched benchmark_preds(res, padj = 1e-10) keeps 63 genes, and the patched function keeps 24
+# the unpatched benchmark_preds(res, padj = 1e-10) gives the PR auc.integral 0.47231772145316409 and the ROC auc 0.37626790674448363
+# the patched function stops for a NaN score in one row: NAs are not allowed in subscripted assignments
+# the patched function for padj = 0 (no positive) gives the PR auc.integral NaN, the PR auc.davis.goadrich NaN, and the ROC auc NaN
+# the patched function for padj = 1 and l2fc = Inf (no negative) gives the PR auc.integral 1, the PR auc.davis.goadrich 1, and the ROC auc NaN
+# benchmark_na has the filter of benchmark_2 and a padj of NA for ENSRNOG00000016275 and ENSRNOG00000000127. R makes these rows negatives: n_positive is 22 instead of 24
+case	column	padj	l2fc	n_positive	n_negative	auc_integral	auc_davis_goadrich	roc_auc
+benchmark_1	mer7m8	0.14999999999999999	0	63	116	0.47231772145316409	0.47179629149246627	0.59195402298850586
+benchmark_2	mer7m8	1e-10	0	24	155	0.24622104283616147	0.24527831028849564	0.63225806451612898
+benchmark_3	mer7m8	1e-10	-1	19	160	0.18552575851331127	0.18433025757702198	0.61842105263157898
+benchmark_na	mer7m8	1e-10	0	22	157	0.21627493343879756	0.21521512087749289	0.62203242617255361

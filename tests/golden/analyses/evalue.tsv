@@ -1,0 +1,54 @@
+# generated-by: tools/golden/R/analyses.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# e_value is the result of generate_e_value for the observed counts and the null, in the row order of the result
+# generate_e_value without a null stops: object 'random_siRNA_results_overall' not found
+# the next notes use the null with the genes a and b: a has the counts 1, 2, 3, 0 and b has the counts 0, 1, 0, 0
+# the observed count NA gives the e-value 0
+# the observed count -1 gives the e-value 0, and the warning NaNs produced
+# the observed rows a = 1 and a = 3 both get 0.5, because the comparison recycles the two counts over the null row. One by one they get 0.75 and 0.25
+# a null with two rows for a (the second row 5, 5, 5, 5) gives the e-value 1.5 for a = 2
+# an observed table without a gene of the null stops: replacement has 1 row, data has 0
+# an observed table with the genes a and z, where z is not in the null, gives 1 row, for a. R drops the row of z
+gene_id	overall_matches	e_value
+g01	0	1
+g02	2	0.71999999999999997
+g03	3	0.52000000000000002
+g04	2	0.68000000000000005
+g05	0	1
+g06	3	0.47999999999999998
+g07	1	0.80000000000000004
+g08	0	1
+g09	1	0.95999999999999996
+g10	0	1
+g11	0	1
+g12	4	0.16
+g13	0	1
+g14	4	0.35999999999999999
+g15	2	0.68000000000000005
+g16	3	0.59999999999999998
+g17	3	0.52000000000000002
+g18	3	0.40000000000000002
+g19	4	0.28000000000000003
+g20	3	0.47999999999999998
+g21	4	0.35999999999999999
+g22	2	0.64000000000000001
+g23	3	0.56000000000000005
+g24	0	1
+g25	4	0.35999999999999999
+g26	2	0.52000000000000002
+g27	0	1
+g28	4	0.32000000000000001
+g29	1	0.80000000000000004
+g30	2	0.68000000000000005
+g31	2	0.71999999999999997
+g32	3	0.59999999999999998
+g33	0	1
+g34	1	0.95999999999999996
+g35	0	1
+g36	0	1
+g37	0	1
+g38	2	0.59999999999999998
+g39	0	1
+g40	4	0.35999999999999999

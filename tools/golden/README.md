@@ -142,6 +142,164 @@ The columns of `ecdf.tsv` obey these rules:
 - The `p_value` of `DTS` comes from `set.seed(1)` before the call.
 - `n_target` and `n_background` count the fold changes that are not `NA`.
 
+## Golden files of the small analyses
+
+The script `analyses.R` writes the golden files in `tests/golden/analyses/`. They give the R results of these functions and files:
+
+- the k-mer counts of `sequence_kmer_counts` and `kmer_hist`
+- the alignment text of `plotAlignment`
+- the distances of `match_distances`
+- the e-value of `generate_e_value`
+- the PR and ROC curves of PRROC
+- `benchmark_preds`
+- the miRDB table of `get_example_data`
+
+Run the script from the repository root:
+
+```bash
+tools/golden/run.sh tools/golden/R/analyses.R
+```
+
+The script reads `Test_seqs.fa` and `DESEQ2_results.tsv` from `tests/data/`. It also reads the synthetic fixtures `kmer_cases.tsv` and `mirdb_sample.txt` from the same directory.
+
+The second run of the script writes the same bytes as the first run. A section that draws random numbers starts with its own `set.seed`. The e-value section uses 20261122, and the curve section uses 20261123. Thus a new case in one section moves no case of another section. A new random case in the curve section moves the random cases after it.
+
+### PRROC
+
+`benchmark_preds` calls PRROC, which is a Suggests of SeedMatchR. The golden files use PRROC 1.4. `install.R` installs the CRAN source file `PRROC_1.4.tar.gz` into `tools/golden/.rlib`. It stops unless the MD5 digest of the file is `229140aa270cdad059daf08783b083bb`. `check_env.R` stops unless the PRROC version is exactly 1.4. The comment lines of each file with a PRROC result give the version.
+
+### Patches
+
+`analyses.R` puts these patches into the SeedMatchR namespace with `with_seedmatchr_patch`. A patch is a copy of one SeedMatchR function. Its first comment gives the divergence, the R line, and the fix:
+
+- `tools/golden/patches/plotAlignment.R` (`D-045`): `plotAlignment` takes the guide target from `get_seed(guide.seq, "Full", ...)` (`R/plotAlignment.R:32`). This target starts at g2, thus the guide string is one base shorter than the window, and R stops. The patch takes the target from `.get_custom_sequence(guide.seq, 1, guide.len)`. As a result, the guide string has the full guide, g1 to gN.
+- `tools/golden/patches/benchmark_preds.R` (`D-006`): the filter `padj <= padj` of `benchmark_preds` (`R/benchmark.R:23`) compares the column `padj` with itself, thus the argument `padj` has no effect. The patch compares the column with the argument. It also gives `roc.curve` the labels as `weights.class0`, as `pr.curve` gets them.
+
+The comment lines of the golden files give the results of the unpatched functions where they differ.
+
+### K-mers
+
+- `kmer_counts.tsv`: the columns `case`, `seq_id`, `gene_id`, `kmer`, and `count`. It has one row for each count above 0 of `sequence_kmer_counts`, in the order of its rows and then of its columns.
+- `kmer_frame.tsv`: the data frame of `sequence_kmer_counts` for `cases_k2_s1`, as R gives it. Its columns are `tx_id`, `gene_id`, and one column for each 2-mer.
+- `kmer_gene_counts.tsv`: the columns `case`, `kmer`, and `n`. The value `n` is the number of sequences that have the k-mer. It is `colSums` of the presence matrix of `R/kmer_hist.R:19-28`. The file has one row for each k-mer, in column order.
+
+The ID of a case is `<set>_k<width>_s<step>`. The set is one of these:
+
+- `test_data_first10`: the first 10 sequences of `Test_seqs.fa`. With the width 7 and the step 1, this is the call of the k-mer vignette.
+- `test_data`: each sequence of `Test_seqs.fa`.
+- `cases`: the sequences of `kmer_cases.tsv`.
+
+For `Test_seqs.fa`, `tx2gene` maps each name to itself. For `kmer_cases.tsv`, it maps `seq_id` to `gene_id`.
+
+R counts a window only if each base is A, C, G, or T. Biostrings reads a lowercase base as an uppercase base. A sequence that is shorter than the width has no row in `kmer_counts.tsv`. The empty sequence `s4` has no row either.
+
+### Alignment
+
+`alignment.tsv` has the columns `case`, `seq_id`, `start`, `end`, `seed`, `start_pos`, `stop_pos`, `left_pad`, `right_pad`, `line`, and `text`.
+
+- `seq_id`, `start`, and `end` give the match. `seed` holds the R seed name.
+- `start_pos` and `stop_pos` are the arguments `seq.start.pos` and `seq.stop.pos`.
+- A case has 3 rows, for `line` 1 to 3: the siRNA, the match marks, and the target.
+- `text` is a value of the column `alignment` of the patched `plotAlignment`. Each text starts with spaces, and the three texts of a case have the same length.
+
+R takes the window of the sequence from `start - (N - stop_pos) - left_pad` to `end + (start_pos - 1) + right_pad`. N is the length of the guide. For `mer7m8` and a guide of 23 bases, the window starts 15 bases before the match.
+
+The cases use `GUIDE` of `common.R` and the sequences of `Test_seqs.fa`. In a case ID, `i` is the 1-based row of the match:
+
+- `mer7m8_<i>`: each match of `vmatchPattern2` for the `mer7m8` target. The positions are 2 and 8, and the pads are 0.
+- `mer7m8_pad_<i>`: the first 3 of these matches, with `left.pad` 3 and `right.pad` 2.
+- `mer8_<i>`: each match of the `mer8` target. The positions are 1 and 8.
+- `mer6_<i>`: the first 5 matches of the `mer6` target. The positions are 2 and 7.
+- `full_mm2_<i>`: each match of `Biostrings::vmatchPattern` for the `Full` target with `max.mismatch` 2, if its window is in its sequence. The positions are 2 and 23.
+- `custom_<i>`: each match of the custom seed from position 3 to 12. The `seed` column holds `custom`.
+- `edge_first_1` and `edge_last_1`: a `mer7m8` window that starts at position 1 of the first sequence, and a window that ends at its last base. These positions are not search results.
+
+The comment lines give the R error for these inputs:
+
+- the unpatched `plotAlignment`
+- a row of `SeedMatchR(res.format = "data.frame")`
+- a window that starts before 1
+- a window that ends after its sequence
+- a match with an indel
+
+### Distances
+
+- `distances_ranges.tsv`: the columns `case`, `seq_id`, `start`, `end`, and `width`. These are the ranges that the script gives to `match_distances`, in list order.
+- `distances.tsv`: the columns `case`, `anchor`, `seq_id`, and `distance`. The `anchor` is `fivePrimeEnd`, `threePrimeEnd`, or `center`. The file has one row for each value of the R list, in list order and in the order of each vector. `NA` stays `NA`.
+
+Each case splits its ranges by name with `factor(names, levels = unique(names))`. Thus the list keeps the order of the first range of each name. A list element with one range gives the values `NA` and 0. An element without a range gives `NA` and `NA`.
+
+The cases:
+
+- `mer6`: the matches of `vmatchPattern2` for the `mer6` target. Some names have one match, and some names have more.
+- `mer7m8_indel`: the matches of `vmatchPattern2` for the `mer7m8` target with `max.mismatch` 1 and `with.indels` `TRUE`. Their widths differ, thus `center` has half values.
+- `synthetic`: the names `a` (starts 10, 30, 35, widths 7, 7, 8), `b` (start 5, width 7), and `c` (starts 100, 50, width 7).
+
+### E-value
+
+The genes are `g01` to `g40`. The files:
+
+- `evalue_observed.tsv`: the columns `gene_id` and `overall_matches`. The gene `g01` has the count 0.
+- `evalue_null.tsv`: the columns `gene_id`, `shuffle` (1 to 25), and `count`. The rows follow the null table of R. This table has the genes in reverse order, thus a match by row position fails.
+- `evalue.tsv`: the columns `gene_id`, `overall_matches`, and `e_value`. The rows are the result of `generate_e_value`, in its row order. The e-value is the number of shuffles with a count at or above the observed count, divided by the number of shuffles.
+
+The comment lines of `evalue.tsv` give the R results for these inputs:
+
+- no null table
+- an observed count `NA` or -1
+- observed rows with the same gene
+- a null with two rows for a gene
+- a gene that is not in the null
+- observed rows where only some genes are in the null
+
+### Curves
+
+The R calls are `PRROC::pr.curve(scores.class0 = score, weights.class0 = label, curve = TRUE)` and `PRROC::roc.curve(scores.class0 = score, weights.class0 = label, curve = TRUE)`. The files:
+
+- `curve_samples.tsv`: the columns `case`, `score`, and `label` (0 or 1).
+- `pr.tsv`: the columns `case`, `auc_integral`, and `auc_davis_goadrich`.
+- `pr_curve.tsv`: the columns `case`, `row`, `recall`, `precision`, and `threshold`.
+- `roc.tsv`: the columns `case` and `auc`.
+- `roc_curve.tsv`: the columns `case`, `row`, `fpr`, `tpr`, and `threshold`.
+
+The value `row` is the 1-based row of the matrix `curve` of PRROC. The benchmark cases also have rows in `curve_samples.tsv`, `pr_curve.tsv`, and `roc_curve.tsv`. Their areas are in `benchmark.tsv`, not in `pr.tsv` and `roc.tsv`.
+
+The curve cases start with `set.seed(20261123)`. Each case has at least one positive and one negative:
+
+- `ties_small`: 40 scores from `sample(0:3, 40, replace = TRUE)`, and labels from `rbinom(40, 1, 0.4)`.
+- `continuous`: 60 scores from `rnorm(60)`, and labels from `rbinom(60, 1, 0.5)`.
+- `large`: 400 scores from `sample(0:5, 400, replace = TRUE)`, and the label 1 with the probability `0.3 + 0.1 * score`. It has at least 100 positives, thus its curve uses the recall step 1/P.
+- `one_value`: the score 1 for each of 10 points, and the labels `rep(c(0, 1), 5)`.
+- `perfect`: the scores `5:1`, and the labels `c(1, 1, 0, 0, 0)`.
+- `first_negative`: the scores `c(9, 9, 5, 5, 1, 1)`, and the labels `c(0, 0, 1, 0, 1, 1)`. The top score has only negatives.
+- `inverse`: the scores `1:6`, and the labels `c(1, 1, 1, 0, 0, 0)`.
+
+### Benchmark
+
+`benchmark.tsv` has the columns `case`, `column`, `padj`, `l2fc`, `n_positive`, `n_negative`, `auc_integral`, `auc_davis_goadrich`, and `roc_auc`. The script runs the patched `benchmark_preds` on `load_test_data()$res` with `preds_col = "mer7m8"`. The cases:
+
+- `benchmark_1`: `padj` 0.15 and `l2fc` 0.
+- `benchmark_2`: `padj` 1e-10 and `l2fc` 0.
+- `benchmark_3`: `padj` 1e-10 and `l2fc` -1.
+- `benchmark_na`: the filter of `benchmark_2`, on a copy of `res` where `padj` is `NA` for two genes that pass the filter. R makes these rows negatives.
+
+`n_positive` and `n_negative` count the labels of the filter of the patch. The comment lines give the result of the unpatched `benchmark_preds(res, padj = 1e-10)`. They also give the result of the patched function for a `NaN` score, for `padj = 0` (no positive), and for `padj = 1` with `l2fc = Inf` (no negative).
+
+### miRDB
+
+`mirdb.tsv` is the table of `R/get_data.R:43-52` for `tests/data/mirdb_sample.txt`. Its columns are `miRDB.ID`, `target.REFSEQ.ID`, `target.score`, `species`, and `miRNA.name`.
+
+R splits the ID at the first hyphen. The ID `rno-let-7a-2-3p` has the species `rno` and the name `let-7a-2-3p`. The ID `lin4` has no hyphen, thus its species is `lin4` and its `miRNA.name` is empty.
+
+The comment lines give the R result for these lines of a file:
+
+- a text score
+- an empty score
+- the ID `NA`
+- a line with 2 fields
+- a field with `#`
+- a field with `'`
+
 ## Patch of vmatchPattern2
 
 `vmatchPattern2` of SeedMatchR ignores `with.indels` and `min.mismatch` (`docs/divergences.md`, `D-001`). The file `tools/golden/patches/vmatchPattern2.R` defines a patched function with the same arguments and the same data frame. `full_search.R` puts it into the SeedMatchR namespace with `assignInNamespace`. As a result, the ranges in the golden files obey the same rules as the counts. A script that needs the original function does not source the patch.
@@ -159,11 +317,11 @@ A script in `tools/golden/R/` starts with `source("tools/golden/R/common.R")`. T
 
 - `load_test_data()` returns the list `res`, `seqs`, and `guide` from `tests/data/`.
 - `write_golden(df, path, script, notes)` writes the data frame `df` to `tests/golden/<path>`. The argument `script` is the file name of the script, for example `check_env.R`. Each text in the optional argument `notes` becomes one more comment line. If `path` ends with `.gz`, the file is gzip. The gzip header has no time stamp and no file name, thus each run writes the same bytes.
+- `with_seedmatchr_patch(patch, code)` puts each function of the file `patch` into the SeedMatchR namespace. Then it evaluates `code` and replaces the patched functions with the original functions.
 
 An annotation script also sources `tools/golden/R/annotation_common.R`, which has these values and functions:
 
 - `local_anno_db(txdb, dna)` returns the replacement of `load_species_anno_db` for the EnsDb `txdb` and the 2bit file `dna`.
-- `with_seedmatchr_patch(patch, code)` puts each function of the file `patch` into the SeedMatchR namespace. Then it evaluates `code` and replaces the patched functions with the original functions.
 - `ANNOTATION_CONFIGS` holds the configs of `load_annotations`. A config gives the feature, the arguments, and the optional patch.
 - `run_config(name, config)` runs `load_annotations` for the config, with the patch of the config. It returns a list. The element `result` holds the result of `load_annotations` for each value of `return_gene_name`. The element `notes` holds the notes for the golden files.
 - `sequences_table(result)` returns the names, the widths, and the sequences of the element `result` of the `run_config` list.

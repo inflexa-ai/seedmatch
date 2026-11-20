@@ -44,4 +44,25 @@ if (length(still_missing) > 0) {
   stop("Imports not installed: ", paste(still_missing, collapse = ", "))
 }
 
+# PRROC is a Suggests of SeedMatchR, and benchmark_preds calls it. The goldens pin PRROC 1.4 by its digest.
+prroc_md5 <- "229140aa270cdad059daf08783b083bb"
+if (!("PRROC" %in% rownames(installed.packages(lib.loc = lib))) ||
+    as.character(packageVersion("PRROC", lib.loc = lib)) != "1.4") {
+  tarball <- file.path(tempdir(), "PRROC_1.4.tar.gz")
+  urls <- c(
+    "https://cran.r-project.org/src/contrib/PRROC_1.4.tar.gz",
+    "https://cran.r-project.org/src/contrib/Archive/PRROC/PRROC_1.4.tar.gz"
+  )
+  got <- FALSE
+  for (url in urls) {
+    got <- tryCatch(utils::download.file(url, tarball, mode = "wb", quiet = TRUE) == 0, error = function(e) FALSE)
+    if (got) break
+  }
+  if (!got) stop("PRROC 1.4 cannot be downloaded from ", paste(urls, collapse = " or "))
+  if (unname(tools::md5sum(tarball)) != prroc_md5) {
+    stop("PRROC_1.4.tar.gz has the MD5 ", tools::md5sum(tarball), ", expected ", prroc_md5)
+  }
+  install.packages(tarball, repos = NULL, type = "source", lib = lib)
+}
+
 install.packages(src, repos = NULL, type = "source", lib = lib, dependencies = FALSE)

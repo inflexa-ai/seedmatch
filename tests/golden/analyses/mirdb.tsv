@@ -1,0 +1,24 @@
+# generated-by: tools/golden/R/analyses.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# the table of R/get_data.R:43-52 for tests/data/mirdb_sample.txt, with the R column names
+# a score abc gives the column target.score the type character, with the values 50 and abc
+# an empty score gives NA
+# the ID NA gives the value NA for the ID, the species NA, and the miRNA name ""
+# a line with 2 fields stops: line 2 did not have 3 elements
+# a line with a field with a hash character stops: line 2 did not have 3 elements
+# a quote character in a field of line 2 of 4 lines gives 2 rows with the IDs hsa-c and hsa-d, because the default quote of read.table includes the quote character
+miRDB.ID	target.REFSEQ.ID	target.score	species	miRNA.name
+hsa-let-7a-5p	NM_000101	96.487183026500006	hsa	let-7a-5p
+hsa-let-7a-5p	NM_000102	50	hsa	let-7a-5p
+hsa-miR-21-5p	NM_000103	54.527000000000001	hsa	miR-21-5p
+hsa-miR-21-5p	XM_000104	99.789705137746097	hsa	miR-21-5p
+mmu-miR-122-5p	NM_000201	88.099999999999994	mmu	miR-122-5p
+mmu-miR-122-5p	NM_000202	62	mmu	miR-122-5p
+rno-miR-192-5p	NM_000301	91.25	rno	miR-192-5p
+rno-miR-192-5p	XM_000302	77	rno	miR-192-5p
+rno-let-7a-2-3p	NM_000303	58.060000000000002	rno	let-7a-2-3p
+cfa-miR-1185	XM_000401	59.343809975200003	cfa	miR-1185
+gga-miR-1a-3p	NM_000501	71	gga	miR-1a-3p
+lin4	NM_000601	55	lin4	

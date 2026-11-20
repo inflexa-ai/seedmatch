@@ -33,3 +33,17 @@ write_golden <- function(df, path, script, notes = character(0)) {
   write.table(df, con, sep = "\t", quote = FALSE, row.names = FALSE, na = "NA")
   invisible(out)
 }
+
+# Put each function of the patch file into the SeedMatchR namespace, evaluate code, and then put
+# back the original functions. The patched functions get the namespace as the parent environment,
+# thus they find the imports of SeedMatchR, for example %>%.
+with_seedmatchr_patch <- function(patch, code) {
+  ns <- asNamespace("SeedMatchR")
+  patched <- new.env(parent = ns)
+  sys.source(patch, envir = patched)
+  names <- ls(patched, all.names = TRUE)
+  originals <- mget(names, envir = ns)
+  for (name in names) utils::assignInNamespace(name, patched[[name]], ns = "SeedMatchR")
+  on.exit(for (name in names) utils::assignInNamespace(name, originals[[name]], ns = "SeedMatchR"))
+  code
+}
