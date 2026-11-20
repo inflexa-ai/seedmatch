@@ -25,6 +25,7 @@ from seedmatch import (
     kmer_counts,
     match_distances,
     seed_match_report,
+    wobble_bulge_matches,
 )
 from seedmatch.sequence import SequenceSet, read_fasta
 
@@ -166,6 +167,7 @@ def run_core_pipeline() -> None:
     ) as ref:
         utr3 = ref.sequences(FeatureType.UTR3)
     count_matches(Guide(GUIDE).target(Seed.MER7M8), utr3)
+    wobble_bulge_matches(Guide(GUIDE), seqs)
 
 
 # The columns that an R golden file names differently from the Python frames. The column `names` of

@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from helpers import NOT_A_DATA_FRAME
 
+from seedmatch import Guide
 from seedmatch._checks import (
     as_cutoff,
     as_data_frame,
@@ -23,6 +24,7 @@ from seedmatch._checks import (
     check_integer_columns,
     check_not_negative,
     check_numeric_columns,
+    check_type,
     check_unique_columns,
     column_values,
     concatenate_and_clear,
@@ -135,6 +137,17 @@ def test_as_member_rejects_the_text_of_a_member_and_other_values(value):
     message = f"colour {value!r} is not valid; expected one of Colour.RED, Colour.DARK_BLUE"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         as_member("colour", value, Colour)
+
+
+def test_check_type_names_the_argument_and_the_type():
+    message = "guide has type str; expected a Guide"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_type("guide", "UUAU", Guide)
+
+
+def test_check_type_accepts_an_instance_and_an_instance_of_a_subclass():
+    check_type("guide", Guide("UUAUAGAG"), Guide)
+    check_type("count", np.int64(3), np.integer)
 
 
 def test_as_text_returns_a_str_and_names_another_type():

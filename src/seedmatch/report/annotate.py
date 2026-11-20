@@ -5,6 +5,7 @@ from typing import Final
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 from seedmatch._checks import (
     as_data_frame,
@@ -23,6 +24,49 @@ _AMBIGUITY_LETTER: Final = re.compile(
     f"[{''.join(letter for letter, mask in MASKS.items() if mask.bit_count() > 1)}]",
     flags=re.IGNORECASE,
 )
+
+
+def check_count_column(de: object, name: str) -> pd.DataFrame:
+    """Return the DE table after the checks that a count column in `name` needs.
+
+    The checks run in this order. The table is a `DataFrame`. It has the column `gene_id`. `name`
+    is not `gene_id`. No column that the function uses repeats (`D-051`), and the gene IDs are text.
+    Each failed check raises `InputError`.
+    """
+    table = as_data_frame(de)
+    if "gene_id" not in table.columns:
+        message = f"DE table has no 'gene_id' column; found {list(table.columns)}"
+        raise InputError(message)
+    if name == "gene_id":
+        message = "column 'gene_id' would overwrite the gene IDs; expected another column name"
+        raise InputError(message)
+    check_unique_columns(table, ("gene_id", name))
+    check_gene_ids_are_text(table)
+    return table
+
+
+def add_gene_counts(
+    de: pd.DataFrame,
+    sequences: SequenceSet,
+    counts: NDArray[np.int64],
+    *,
+    name: str,
+    shared_genes: bool,
+) -> pd.DataFrame:
+    """Return a copy of the DE table with the count of each gene in the column `name`.
+
+    `counts` has one value for each sequence of the set. The count of a gene is the maximum over its
+    sequences (`D-003`), and 0 for a gene without a sequence. With `shared_genes`, the result keeps
+    only the rows whose gene has a sequence, in the order of the input, and has a new index. A
+    column with the name `name` gets the new values in its place (`D-015`).
+    """
+    by_gene = pd.Series(counts).groupby(np.asarray(sequences.gene_ids, dtype=object)).max()
+    if shared_genes:
+        annotated = de.loc[de["gene_id"].isin(by_gene.index)].reset_index(drop=True)
+    else:
+        annotated = de.copy()
+    annotated[name] = by_gene.reindex(annotated["gene_id"], fill_value=0).to_numpy(dtype=np.int64)
+    return annotated
 
 
 # Each keyword-only parameter is an independent option of SeedMatchR, so no parameter object fits.
@@ -60,20 +104,7 @@ def annotate_seed_counts(  # noqa: PLR0913
             f"{letter!r} only to the letter {letter!r}"
         )
         raise InputError(message)
-    if "gene_id" not in as_data_frame(de).columns:
-        message = f"DE table has no 'gene_id' column; found {list(de.columns)}"
-        raise InputError(message)
     name = target.name if column is None else column
-    if name == "gene_id":
-        message = "column 'gene_id' would overwrite the gene IDs; expected another column name"
-        raise InputError(message)
-    check_unique_columns(de, ("gene_id", name))
-    check_gene_ids_are_text(de)
-    counts = pd.Series(count_matches(target, sequences, options))
-    by_gene = counts.groupby(np.asarray(sequences.gene_ids, dtype=object)).max()
-    if shared_genes:
-        annotated = de.loc[de["gene_id"].isin(by_gene.index)].reset_index(drop=True)
-    else:
-        annotated = de.copy()
-    annotated[name] = by_gene.reindex(annotated["gene_id"], fill_value=0).to_numpy(dtype=np.int64)
-    return annotated
+    table = check_count_column(de, name)
+    counts = count_matches(target, sequences, options)
+    return add_gene_counts(table, sequences, counts, name=name, shared_genes=shared_genes)

@@ -9,7 +9,13 @@ import pandas as pd
 from numpy.typing import NDArray
 from scipy.sparse import coo_array, csr_array
 
-from seedmatch._checks import as_limit, check_at_least, concatenate_and_clear, shown
+from seedmatch._checks import (
+    as_limit,
+    check_at_least,
+    check_type,
+    concatenate_and_clear,
+    shown,
+)
 from seedmatch.errors import InputError
 from seedmatch.sequence.alphabet import MASKS
 from seedmatch.sequence.sequence_set import SequenceSet
@@ -93,9 +99,7 @@ def kmer_counts(sequences: SequenceSet, *, k: int = 7, step: int = 1) -> KmerCou
     M2 Max: the call takes 1.2 s. The matrix has 15.7 million entries and 179 MB. The peak memory
     of the call is 421 MB.
     """
-    if not isinstance(sequences, SequenceSet):
-        message = f"sequences has type {type(sequences).__name__}; expected a SequenceSet"
-        raise InputError(message)
+    check_type("sequences", sequences, SequenceSet)
     width = as_limit("k", k)
     if not 1 <= width <= MAX_K:
         message = f"k {shown(width)} is out of range; expected an integer from 1 to {MAX_K}"
@@ -130,9 +134,7 @@ def kmer_gene_counts(counts: KmerCounts) -> pd.Series:
     and a k-mer. For k = 12 the call takes about 3 s, and its peak memory is near 2 GB, because of
     the 16,777,216 labels.
     """
-    if not isinstance(counts, KmerCounts):
-        message = f"counts has type {type(counts).__name__}; expected a KmerCounts"
-        raise InputError(message)
+    check_type("counts", counts, KmerCounts)
     matrix = counts.matrix
     sequence_count = matrix.shape[0]
     codes, genes = pd.factorize(pd.Index(counts.gene_ids))

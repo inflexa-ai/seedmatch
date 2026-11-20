@@ -8,6 +8,12 @@ from seedmatch.errors import InputError, SeedMatchError, SeedMatchWarning
 from seedmatch.evalue import e_value_null, e_values
 from seedmatch.kmers import KmerCounts, kmer_counts, kmer_gene_counts
 from seedmatch.mirdb import read_mirdb
+from seedmatch.noncanonical import (
+    WobbleBulgeOptions,
+    annotate_wobble_bulge_counts,
+    wobble_bulge_matches,
+    wobble_bulge_patterns,
+)
 from seedmatch.report import (
     DEFAULT_SEEDS,
     NONSEED_SEEDS,
@@ -75,8 +81,10 @@ __all__ = [
     "Target",
     "TranscriptFilter",
     "WassersteinAreas",
+    "WobbleBulgeOptions",
     "alignment_text",
     "annotate_seed_counts",
+    "annotate_wobble_bulge_counts",
     "assign_groups",
     "benchmark_predictions",
     "best_match",
@@ -99,5 +107,7 @@ __all__ = [
     "roc_curve",
     "seed_match_report",
     "wasserstein_areas",
+    "wobble_bulge_matches",
+    "wobble_bulge_patterns",
     "write_fasta",
 ]

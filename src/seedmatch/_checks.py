@@ -80,6 +80,13 @@ def as_member[M: Enum](name: str, value: object, members: type[M]) -> M:
     raise InputError(message)
 
 
+def check_type(name: str, value: object, expected: type) -> None:
+    """Raise `InputError` unless the value is an instance of the expected type."""
+    if not isinstance(value, expected):
+        message = f"{name} has type {type(value).__name__}; expected a {expected.__name__}"
+        raise InputError(message)
+
+
 def as_text(name: str, value: object) -> str:
     """Return the value if it is a `str`."""
     if not isinstance(value, str):

@@ -120,3 +120,13 @@ def test_readme_mirdb_example_gives_the_rat_rows(readme_namespace):
         rows["target.score"].astype(float).tolist(), rel=1e-9
     )
     assert set(rat_targets["species"]) == {"rno"}
+
+
+def test_readme_wobble_example_gives_the_count_of_the_rows(readme_namespace):
+    wobble_matches = readme_namespace["wobble_matches"]
+    wobble_de = readme_namespace["wobble_de"]
+    assert len(wobble_matches) == 757
+    rows = wobble_matches.groupby("gene_id").size()
+    assert wobble_de["overall_matches"].tolist() == [
+        rows.get(gene, 0) for gene in wobble_de["gene_id"]
+    ]

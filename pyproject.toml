@@ -82,6 +82,9 @@ extend-immutable-calls = [
     "seedmatch.TranscriptFilter",
     "seedmatch.annotation.TranscriptFilter",
     "seedmatch.annotation.filters.TranscriptFilter",
+    "seedmatch.WobbleBulgeOptions",
+    "seedmatch.noncanonical.WobbleBulgeOptions",
+    "seedmatch.noncanonical.wobble.WobbleBulgeOptions",
 ]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]

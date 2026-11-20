@@ -2,13 +2,14 @@ from dataclasses import FrozenInstanceError
 
 import numpy as np
 import pytest
+from helpers import GUIDE, sirna_seqs
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from strategies import subjects_for
 
-from seedmatch import Target
+from seedmatch import Guide, Seed, Target
 from seedmatch.errors import InputError
-from seedmatch.search import SearchOptions, count_matches, find_matches
+from seedmatch.search import SearchOptions, count_matches, find_matches, match_ranges
 from seedmatch.search.compat import compat_table
 from seedmatch.sequence import SequenceSet
 from seedmatch.sequence.alphabet import MASKS
@@ -323,3 +324,32 @@ def test_the_pattern_length_limit_of_biostrings():
     assert count_matches("A" * 20000, subject).tolist() == [10001]
     with pytest.raises(InputError, match="pattern has 20001 letters; expected at most 20000"):
         count_matches("A" * 20001, subject)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        SearchOptions(),
+        SearchOptions(max_mismatch=1),
+        SearchOptions(max_mismatch=1, indels=True),
+    ],
+)
+def test_match_ranges_give_the_rows_of_find_matches(options):
+    seqs = sirna_seqs()
+    target = Guide(GUIDE).target(Seed.MER7M8)
+    index, starts, ends = match_ranges(target, seqs, options)
+    frame = find_matches(target, seqs, options)
+    assert len(frame) > 0
+    assert np.array(seqs.ids, dtype=object)[index].tolist() == frame["seq_id"].tolist()
+    assert starts.tolist() == frame["start"].tolist()
+    assert ends.tolist() == frame["end"].tolist()
+    assert [array.dtype for array in (index, starts, ends)] == [np.int64] * 3
+
+
+def test_match_ranges_name_the_sequence_of_a_repeated_id():
+    seqs = SequenceSet.from_records([("x", "GG"), ("x", "AC"), ("y", "ACAC")])
+    index, starts, ends = match_ranges("AC", seqs)
+    assert index.tolist() == [1, 2, 2]
+    assert starts.tolist() == [1, 1, 3]
+    assert ends.tolist() == [2, 2, 4]
+    assert find_matches("AC", seqs)["seq_id"].tolist() == ["x", "y", "y"]

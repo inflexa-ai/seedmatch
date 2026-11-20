@@ -53,6 +53,27 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: The count of a gene must not depend on the order of its sequences. In R, the first sequence in the input decides the count. The DE table has one row for each gene. Thus a gene with more than one sequence must count once in the report.
 - Test: `test_gene_count_is_the_maximum_over_its_sequences_D003` and `test_the_maximum_does_not_depend_on_the_order_of_the_sequences_D003` in `tests/report/test_annotate.py`. `test_report_counts_genes_not_sequences_D003` and `test_the_best_match_of_a_gene_is_the_best_over_its_sequences_D003` in `tests/report/test_report.py`.
 
+## D-005: The wobble and bulge search runs, with one pattern for the wobbles and extra bases for a bulge
+
+- ID: `D-005`
+- R location: `run_wobble_bulges_pipeline` (`R/run_wobble_bulges_pipeline.R:18-62`), `.get_all_combination_w_b` (`:75-129`), `.get_target_bulged_guides` (`:160-173`), `.sequence_with_tb` (`:185-198`), and `check_bulges_nt` (`:208-225`).
+- R behavior: Each call stops, and the rules of the pipeline are wrong in other places too. The golden file `tests/golden/noncanonical/wobble_bulge_r.tsv` and its notes give the evidence. R 4.5.3, Biostrings 2.78.0, and gtools 3.9.5 made the file.
+  - `.get_target_bulged_guides` sets `bulge_allowance` in its own frame (`:167`). `.sequence_with_tb` reads it at `:192` and `:197`, and its environment is the namespace. Thus each call stops with `object 'bulge_allowance' not found` (note `pipeline_error`). The call with `bulges_lim = 1` stops with the same message (note `pipeline_error_bulges_lim_1`).
+  - The call at `:27` gives `bulges_lim` to the parameter `guide_seq_length` and the guide length to `bulges_lim` (`:160`, note `formals_get_target_bulged_guides`).
+  - `.get_all_combination_w_b` sets exactly 4 U positions to `Y` (`:82-93`). A guide with fewer than 4 U stops (`:101`, notes `wobble_seeds_2_u` and `wobble_seeds_0_u`). No seed has `R` at 5 positions (note `wobble_seeds_5_u_in_seed`).
+  - `.sequence_with_tb` replaces seed letters with `N` (`:197`). Thus a "bulge" of R matches a mismatch, and no R pattern matches an extra base (the cases `mismatch_t4` and `bulge_after_g5`).
+  - `check_bulges_nt` looks for an `N` in the first `nt` letters of the target (`:213`). They pair with g8, g7, and g6, not with g2 to g4 (note `check_bulges_nt`). The R documentation of `nt` names the start of the siRNA and the wobbles (`:11`), and the bulges (`:203`). The R code applies `nt` only to the bulges (`:28`, `:213`).
+  - The counts add each bulged string of each wobble seed (`:35-55`). The columns `r_rule_bulges_lim_1` and `r_rule_bulges_lim_4` of the golden file give this count rule, as if the call did not stop. One site gives 12 for `bulges_lim = 1` and 24 for 4 (case `perfect`). A mismatch gives 4 and 12 (case `mismatch_t4`). Each case with an extra target base gives 0.
+- New behavior: `wobble_bulge_matches` and `annotate_wobble_bulge_counts` run. The rules follow.
+  - The seed is `Seed.MER7M8`, as in R (`:113`). `Guide.target(Seed.MER7M8, wobble=True)` has `R` at each target position that pairs with a guide `U`. Thus one pattern covers each set of G:U pairs.
+  - A bulge is 1 to `max_bulge` extra target bases between two adjacent seed positions. The pattern has the letter `N` for each extra base. A site has one bulge at most. `max_bulge` is at most 19993, because a search accepts a pattern of 20000 letters at most.
+  - No bulge is next to the `bulge_free` seed positions from g2. With the default 3, a bulge can be only between g5 and g6, g6 and g7, or g7 and g8. As in the R code, `bulge_free` applies only to the bulges, thus a G:U pair can be at each seed position.
+  - The search uses `fixed = FALSE` of R for the pattern and the subject (`:39`, `:42`). Thus a subject `N` matches each pattern letter.
+  - A sequence has one row for each distinct start of a match. The row takes the first pattern in pattern order that matches at this start. Two patterns with different starts and one end thus count two times, for example `ENSRNOG00000016275` at 69 and 73.
+  - `annotate_wobble_bulge_counts` gives each sequence its number of rows, and each gene the maximum over its sequences (`D-003`). It gives only the column `overall_matches` (`:51-55`), not one column for each wobble seed.
+- Reason: R gives no result. The R count rule counts one site more than one time, counts mismatches as bulges, and protects the wrong end of the seed.
+- Test: `test_wobble_bulge_matches_of_the_cases_D005`, `test_each_r_call_stops_D005`, `test_one_site_counts_once_D005`, `test_a_mismatch_is_not_a_bulge_D005`, `test_an_extra_target_base_is_a_bulge_D005`, `test_no_bulge_is_next_to_g2_to_g4_D005`, `test_each_set_of_wobbles_is_in_one_pattern_D005`, and `test_each_distinct_start_counts_once_D005` in `tests/noncanonical/test_wobble.py`.
+
 ## D-006: The benchmark applies the padj cutoff, and the ROC curve uses the labels
 
 - ID: `D-006`

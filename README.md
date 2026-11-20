@@ -177,6 +177,22 @@ print(rat_targets.head())
 
 `species` is the text of the miRDB ID before the first `-`, and `mirna_name` is the text after it. A code without a row raises `InputError` that lists the codes of the file. The reader reads 2^18 lines at a time. The result holds about 40 bytes for each row and the distinct strings. A score that is not a finite decimal number raises `InputError`. The ID fields keep `#`, quote characters, and the text `NA` as text (D-049).
 
+`wobble_bulge_matches` finds the sites that have G:U pairs or a bulge in the seed region. A guide U can pair with a target A or G. Thus one pattern with the letter `R` covers each set of G:U pairs. A bulge is a run of extra target bases between two seed positions. This example uses the `guide`, the `sequences`, and the `de` table of the examples above.
+
+```python
+from seedmatch import annotate_wobble_bulge_counts, wobble_bulge_matches
+
+# One row for each distinct start of a site, with the place and the size of its bulge.
+wobble_matches = wobble_bulge_matches(guide, sequences)
+print(wobble_matches.head())
+
+# The column "overall_matches": the number of rows of each gene.
+wobble_de = annotate_wobble_bulge_counts(de, sequences, guide)
+print(wobble_de[["gene_id", "overall_matches"]].head())
+```
+
+`max_bulge` is the longest run of extra bases, and its default is 4. `bulge_free` is the number of seed positions from g2 that no bulge is next to. Its default is 3, thus a bulge lies only between g5 and g6, g6 and g7, or g7 and g8. A sequence has one row for each distinct start of a match, and the row names the first pattern that matches at this start. `wobble_bulge_matches` searches the set one time for each pattern, and `workers` sets the width of the thread pool. R stops for each call of its wobble and bulge search, and its count rule counts one site more than one time (D-005).
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -222,6 +238,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - `kmer_gene_counts` counts the genes with a k-mer. The histogram of R counts the sequences, but its label says genes (D-042).
 - `benchmark_predictions` applies the `padj` cutoff. In R, `padj <= padj` compares the column with itself, thus each row with a `padj` passes. R also gives the labels to the ROC curve as the scores of the negative class (D-006).
 - `alignment_text` shows the full guide, from g1 to the last base. In R, the guide line of `plotAlignment` has no g1, and the function stops for the default positions (D-045).
+- The wobble and bulge search runs. In R, each call of `run_wobble_bulges_pipeline` stops with an error. The port counts each distinct start of a site one time, and a bulge is a run of extra target bases (D-005).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -242,11 +259,12 @@ This version has the core path:
 - the e-value of a seed count against a null of shuffled guides
 - the benchmark of the seed counts against a gold standard of genes that go down
 - the reader of the miRDB table of predicted miRNA targets
+- the wobble and bulge search: the sites with G:U pairs or a bulge, and their count for each gene
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:
 
-- the wobble and bulge search, the 3' compensatory search, and the network scores
+- the 3' compensatory search and the network scores
 - the plots and the HTML report
 
 ## Installation

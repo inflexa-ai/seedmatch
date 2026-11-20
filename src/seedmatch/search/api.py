@@ -107,16 +107,16 @@ def count_matches(
     return np.asarray(counts, dtype=np.int64)
 
 
-def find_matches(
+def match_ranges(
     pattern: str | Target,
     sequences: SequenceSet,
     options: SearchOptions = SearchOptions(),
-) -> pd.DataFrame:
-    """Return the ranges of the matches, 1-based and inclusive.
+) -> tuple[NDArray[np.int64], NDArray[np.int64], NDArray[np.int64]]:
+    """Return the sequence index, the start, and the end of each match, 1-based and inclusive.
 
-    The columns are `seq_id`, `gene_id`, `start`, `end`, and `width`. The rows come in the order of
-    the sequences, and then in the order of Biostrings. A mismatch match can reach past either end
-    of a sequence, so `start` can be less than 1 and `end` can be greater than the length.
+    The arrays have the rows of `find_matches`, in its order. The sequence index is the position of
+    the sequence in the set, thus a sequence ID that occurs more than once does not hide which
+    sequence has the match. The ranges follow the rules of `find_matches`.
     """
     masks = _encode_pattern(pattern)
     compat = _compat(options)
@@ -134,14 +134,33 @@ def find_matches(
             options.min_mismatch,
         )
         ends = starts + (masks.size - 1)
+    return (
+        np.asarray(index, dtype=np.int64),
+        np.asarray(starts, dtype=np.int64),
+        np.asarray(ends, dtype=np.int64),
+    )
+
+
+def find_matches(
+    pattern: str | Target,
+    sequences: SequenceSet,
+    options: SearchOptions = SearchOptions(),
+) -> pd.DataFrame:
+    """Return the ranges of the matches, 1-based and inclusive.
+
+    The columns are `seq_id`, `gene_id`, `start`, `end`, and `width`. The rows come in the order of
+    the sequences, and then in the order of Biostrings. A mismatch match can reach past either end
+    of a sequence, so `start` can be less than 1 and `end` can be greater than the length.
+    """
+    index, starts, ends = match_ranges(pattern, sequences, options)
     seq_ids = np.array(sequences.ids, dtype=object)
     gene_ids = np.array(sequences.gene_ids, dtype=object)
     return pd.DataFrame(
         {
             "seq_id": seq_ids[index],
             "gene_id": gene_ids[index],
-            "start": np.asarray(starts, dtype=np.int64),
-            "end": np.asarray(ends, dtype=np.int64),
-            "width": np.asarray(ends - starts + 1, dtype=np.int64),
+            "start": starts,
+            "end": ends,
+            "width": ends - starts + 1,
         }
     )

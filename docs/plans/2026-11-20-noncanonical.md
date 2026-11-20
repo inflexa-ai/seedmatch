@@ -469,7 +469,7 @@ The expected port rows of the synthetic cases, with `first_position=8`. A row is
 
 ### Task 4: Verification of the plan
 
-- [ ] **Step 1: Run the checks one time.** The controller runs `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, and `PYTHONPATH=tmp/claude/covfix NUMBA_DISABLE_JIT=1 uv run pytest -p cov_rlock --cov`. The plugin `cov_rlock` makes the data lock of coverage re-entrant. Without it, a threaded test can stop for hours (coveragepy issue 2348). Expected: each passes, and the coverage is not below 95%. Give a reason for each line of the new modules without coverage.
+- [ ] **Step 1: Run the checks one time.** The controller runs `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, and `PYTHONPATH=tmp/claude/covfix NUMBA_DISABLE_JIT=1 uv run pytest -p cov_serial --cov`. The plugin `cov_serial` runs the pool of `seedmatch._pool` in the caller thread, except in `tests/test_pool.py`. Without it, the coverage tracer stops the pool threads for hours. Expected: each passes, and the coverage is not below 95%. Give a reason for each line of the new modules without coverage.
 - [ ] **Step 2: Compare the documents with the code.**
   - Each public name of `seedmatch.noncanonical` has a row in `docs/r-map.md`, or is a type of a function that has a row.
   - Each `D-NNN` of this plan has an entry, a table row, and a test.

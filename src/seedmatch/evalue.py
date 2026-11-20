@@ -16,6 +16,7 @@ from seedmatch._checks import (
     check_columns,
     check_gene_ids_are_text,
     check_numeric_columns,
+    check_type,
     column_values,
     is_text,
     number_text,
@@ -88,9 +89,7 @@ def e_value_null(  # noqa: PLR0913
     width = pool_width(workers)
     shuffles = as_limit("n_random", n_random)
     check_at_least("n_random", shuffles, 1)
-    if not isinstance(options, SearchOptions):
-        message = f"options has type {type(options).__name__}; expected a SearchOptions"
-        raise InputError(message)
+    check_type("options", options, SearchOptions)
     guide.target(seed)
 
     codes, genes = pd.factorize(np.array(sequences.gene_ids, dtype=object))
