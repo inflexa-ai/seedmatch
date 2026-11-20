@@ -54,6 +54,13 @@ def check_not_negative(name: str, value: int) -> None:
         raise InputError(message)
 
 
+def check_positive(name: str, value: int) -> None:
+    """Raise `InputError` if the value is below 1."""
+    if value < 1:
+        message = f"{name} {shown(value)} is less than 1; expected 1 or more"
+        raise InputError(message)
+
+
 def as_flag(name: str, value: object) -> bool:
     """Return the value as a plain bool. An int is not a flag."""
     if isinstance(value, bool | np.bool_):

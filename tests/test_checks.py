@@ -3,7 +3,14 @@ import sys
 
 import pytest
 
-from seedmatch._checks import as_cutoff, as_flag, as_limit, as_number, check_not_negative
+from seedmatch._checks import (
+    as_cutoff,
+    as_flag,
+    as_limit,
+    as_number,
+    check_not_negative,
+    check_positive,
+)
 from seedmatch.errors import InputError
 from seedmatch.report import FullSearchOptions
 
@@ -33,6 +40,21 @@ def test_a_huge_negative_int_is_a_limit_that_check_not_negative_rejects():
     limit = as_limit("distance", -HUGE)
     with pytest.raises(InputError, match=r"distance .*\d+ bits.* is negative; expected 0 or more"):
         check_not_negative("distance", limit)
+
+
+def test_check_positive_rejects_0_and_a_negative_int_and_accepts_1():
+    check_positive("n_boot", 1)
+    for value in (0, -3):
+        with pytest.raises(
+            InputError, match=rf"^n_boot {value} is less than 1; expected 1 or more$"
+        ):
+            check_positive("n_boot", value)
+
+
+def test_a_huge_negative_int_is_a_limit_that_check_positive_rejects():
+    limit = as_limit("n_boot", -HUGE)
+    with pytest.raises(InputError, match=r"n_boot .*\d+ bits.* is less than 1; expected 1 or more"):
+        check_positive("n_boot", limit)
 
 
 def test_as_flag_gives_input_error_for_a_huge_int():

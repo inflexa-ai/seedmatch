@@ -218,9 +218,16 @@ The default `SeedMatchReport` uses indels with the edit distances 0 to 4 for `Fu
 
 - The statistic is a sum over the gaps between the sorted pooled values.
 - Each term is |E − F| / sqrt(2 · G · (1 − G) / n), multiplied by the width of the gap.
-- E and F are the ECDFs of the two samples. G is the pooled ECDF. n is the pooled size.
+- E and F are the ECDFs of the two samples. G is the pooled ECDF. n is the pooled size. Each ECDF is at the left value of the gap.
+- A gap of width 0 adds nothing to the sum. Thus only the end of a run of equal values counts.
 - A Python test of this formula gives 74.91157, the same as the R snapshot.
-- The p-value comes from `n_boot` permutations (default 2000, as in twosamples). The caller gives a `numpy.random.Generator` or a seed.
+- The port computes E − F from integer counts: (c · n − k · n_x) / (n_x · n_y). Here k values lie at or below the gap, and c of them come from the first sample.
+- A permutation chooses n_x of the pooled sorted positions for the first sample. This is the method of twosamples.
+- The p-value is the fraction of `n_boot` permutation statistics that are not less than the observed statistic (default 2000, as in twosamples). If the fraction is 0, the p-value is 1 / (2 · `n_boot`).
+- The observed statistic and each permutation statistic come from the same code, and each row adds its terms in the same order. Thus a permutation with the same counts as the observed arrangement gives the same value, and it counts.
+- The caller gives a `numpy.random.Generator` or a non-negative int seed.
+- The port draws the permutations in blocks of 64, and numpy does the work of each block. Thus the memory is O(64 · n) and does not grow with `n_boot`. The time is O(`n_boot` · n).
+- An infinite value and an empty sample raise `InputError`. R gives the statistic `Inf`, or a statistic that does not compare two samples, and the p-value 1 (`D-034`).
 
 ### Wasserstein areas
 
@@ -381,6 +388,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `build_annotation_filter` (used by `load_annotations`) | A `transcript.support` of 0 or less, or an `entrez_id` of 0 or less, selects no transcript and gives no message (`R/load_annotations.R:298-330`). | `TranscriptFilter` raises `InputError` for a support level below 1 and for an Entrez ID below 1. |
 | `stats::ks.test` (used by `ecdf_stat_test`) | The asymptotic p-value has numeric defects. The two-sided series keeps one term for `sqrt(en) * D` below 1 (`ks.c:100-111`). The one-sided value `1 - (-expm1(...))` gives 0 for a p-value below about 1e-16. D from a cumulative sum can be above 1, and then the p-value is 0. | The statistic comes from integer counts. The p-value is `scipy.special.kolmogorov(sqrt(en) * D)` for two-sided and `exp(-2 * en * D^2)` for one-sided. |
 | `stats::wilcox.test` (used by `ecdf_stat_test`) | If each value is equal, the variance is 0 (`R/deseq_fc_ecdf.R:274-276`). The two-sided z is 0/0, and the p-value is NaN. The one-sided p-values are 1. | The p-value is 1 for each alternative. |
+| `twosamples::dts_test` (used by `ecdf_stat_test`) | The function does not check its samples. An infinite value gives the statistic `Inf` and the p-value 1. An empty sample gives a statistic and the p-value 1 (`R/deseq_fc_ecdf.R:259-264`). | `dts_test` raises `InputError` for an infinite value and for an empty sample. |
 | `stats::ks.test`, `stats::wilcox.test` (used by `ecdf_stat_test`) | Each test warns if ties make the p-value approximate (`R/deseq_fc_ecdf.R:255-257`, `:274-276`). | No warning. The field `method` of the result is `EXACT` or `ASYMPTOTIC`. |
 
 ## Tests

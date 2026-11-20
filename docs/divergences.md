@@ -299,6 +299,18 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: Two samples of equal values show no difference, thus 1 is the correct p-value. A NaN p-value fails each comparison with a threshold. R already gives 1 for the one-sided tests.
 - Test: `test_wilcoxon_with_all_values_equal_gives_1_D033` in `tests/stats/test_wilcoxon.py`. `test_wilcoxon_matches_r` in the same file covers each other row of `wilcoxon.tsv`.
 
+## D-034: The DTS test rejects an infinite value and an empty sample
+
+- ID: `D-034`
+- R location: `ecdf_stat_test` calls `twosamples::dts_test` (`R/deseq_fc_ecdf.R:259-264`). The version of twosamples is 2.0.1.
+- R behavior: `dts_test` does not check its samples. Let `a` be `c(0.5, -0.2, 1.1, 0.3, -0.7)` and `b` be `c(0.1, -0.4, 0.9, 0.2, -1, 0.6, -0.3)`. R probes with R 4.5.3 and `set.seed(1)` give the evidence:
+  - `dts_test(c(a, Inf), b)`, `dts_test(c(a, -Inf), b)`, and `dts_test(a, c(b, Inf))` give the statistic `Inf` and the p-value 1.
+  - `dts_test(numeric(0), b)` gives the statistic 3.9986665900519656 and the p-value 1. `dts_test(a, numeric(0))` gives 3.3254468626107201 and the p-value 1.
+  - A NaN or an NA makes the function stop with the message `missing value where TRUE/FALSE needed`. The port also raises an error, and its message gives the sample and the index.
+- New behavior: `dts_test` raises `InputError` for an empty sample and for an infinite value, `Inf` or `-Inf`. The message gives the sample and the index of the value.
+- Reason: An infinite value makes a statistic that does not measure a difference, and the p-value 1 states that the samples agree. An empty sample has no distribution to compare. R gives a result and no message, thus the mistake of the caller stays hidden. `ks_test` and `wilcoxon_test` accept an infinite value, because they use only the order of the values.
+- Test: `test_dts_rejects_an_infinite_value_D034` and `test_dts_rejects_an_empty_sample_D034` in `tests/stats/test_dts.py`.
+
 ## D-037: The KS and Wilcoxon tests give no warning for ties
 
 - ID: `D-037`
