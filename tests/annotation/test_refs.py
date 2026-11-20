@@ -9,15 +9,18 @@ from helpers import golden
 
 from seedmatch.annotation.filters import FeatureType, PerGene
 from seedmatch.annotation.reference import Reference
+from seedmatch.resources import Group, lookup
 
 pytestmark = pytest.mark.refs
 
-ENSDB = "EnsDb.Rnorvegicus.v109.sqlite"
-TWOBIT = "Rattus_norvegicus.mRatBN7.2.dna_sm.toplevel.2bit"
+TWOBIT_RESOURCE, ENSDB_RESOURCE = lookup(Group.REFERENCE, "rnor7").resources
+ENSDB = ENSDB_RESOURCE.name
+TWOBIT = TWOBIT_RESOURCE.name
 GTF = "Rattus_norvegicus.mRatBN7.2.109.gtf.gz"
+# The registry has no GTF file, so the GTF row is the only one that this test file pins.
 RNOR7_FILES = {
-    ENSDB: (179650560, "2453c59e1054157798df5a4114650911d046b5f7795af91a6a2171614ba0289b"),
-    TWOBIT: (661989722, "73eacccd66a8843cced837d0cb0a272b42b7214b4a7c62a3c48963509ea914f3"),
+    ENSDB: (ENSDB_RESOURCE.size, ENSDB_RESOURCE.sha256),
+    TWOBIT: (TWOBIT_RESOURCE.size, TWOBIT_RESOURCE.sha256),
     GTF: (18029537, "ff7d5ecd69ed7df5e641ec90383e5de9e10e9d82316a0570c71fa80a98e8edca"),
 }
 RNOR7_CONFIGS = ("utr3", "utr5", "exons", "cds", "utr3_longest", "utr3_union")
