@@ -210,6 +210,7 @@ This version has the core path:
 - the DE table: the reader and the filter
 - the seed counts, `full_search`, `full_search_ranges`, and `seed_match_report`
 - the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and `ecdf_test` for two gene sets
+- the PR and ROC curves of scores and 0/1 labels
 - the k-mer counts of a sequence set, and the number of genes with each k-mer
 - the alignment text of a seed match
 - the distances between the matches of a sequence
@@ -218,7 +219,6 @@ This version has the core path:
 
 These parts of SeedMatchR are not in this version:
 
-- the PR and ROC curves
 - the wobble and bulge search, the 3' compensatory search, the network scores, and the other small analyses
 - the plots and the HTML report
 

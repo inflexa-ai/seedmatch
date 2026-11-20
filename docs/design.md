@@ -273,6 +273,54 @@ The unrounded areas of R depend on the platform. R 4.5.3 on arm64 macOS uses a f
 - On the test data (`ecdf.tsv`), the target genes have lower values. KS `greater` gives p = 1.04e-4, and WILCOXON `greater` gives p = 0.9996. WILCOXON `less` gives p = 3.9e-4.
 - The port keeps the default of R. The docstring of `ecdf_test` and the README give the direction.
 
+### PR and ROC curves
+
+`pr_curve` and `roc_curve` replace the calls `pr.curve(scores.class0 = scores, weights.class0 = labels, curve = TRUE)` and `roc.curve(...)` of PRROC 1.4. PRROC has the GPL-3 license. Thus the port writes the curves from Keilwagen, Grosse, and Grau (2014, PLOS ONE 9(3)) and from Davis and Goadrich (2006, ICML). The R code of PRROC settles the details that the papers leave open. The port does not translate it.
+
+Inputs:
+
+- `scores` goes through `as_sample` with `finite=False`. NaN raises `InputError`, and an infinite score is valid.
+- `labels` is 1-D and has the length of `scores`. Each label is a bool, or a number equal to 0 or 1. A label of 1 or `True` is a positive. PRROC calls the positives class 0.
+- Labels without a positive raise `InputError`. `roc_curve` also raises for labels without a negative. `pr_curve` accepts labels without a negative, and then the precision is 1 at each point.
+
+Definitions:
+
+- Let s_1 > s_2 > ... > s_K be the distinct scores. TP_k and FP_k count the positives and the negatives with a score of at least s_k. TP_0 = FP_0 = 0.
+- The scores -0.0 and 0.0 are one score. The threshold of a run of equal scores is its last score in the order of the input, as in PRROC.
+- Let P = TP_K and N = FP_K. The recall is r_k = TP_k / P, and the precision is p_k = TP_k / (TP_k + FP_k).
+- If TP_k > TP_{k−1}, then h_k = (FP_k − FP_{k−1}) / (TP_k − TP_{k−1}). Between the points k − 1 and k, FP grows on a line: FP = FP_{k−1} + h_k · (TP − TP_{k−1}).
+
+`auc_integral` (Keilwagen, Grosse, and Grau 2014):
+
+- On step k, the precision at the recall r is r / (a_k · r + b_k), with a_k = 1 + h_k and b_k = (FP_{k−1} − h_k · TP_{k−1}) / P.
+- The area of step k is the integral of this precision from r_{k−1} to r_k. Let c_{k−1} = (TP_{k−1} + FP_{k−1}) / P, which is a_k · r_{k−1} + b_k. Then v_k = ((r_k − r_{k−1}) − (b_k / a_k) · log1p(a_k · (r_k − r_{k−1}) / c_{k−1})) / a_k.
+- If b_k = 0, then v_k = (r_k − r_{k−1}) / a_k. If TP_k = TP_{k−1}, then v_k = 0.
+- `auc_integral` is the sum of v_k.
+- PRROC writes the logarithm as ln(a_k · r_k + b_k) − ln(a_k · r_{k−1} + b_k). This difference loses digits if the negatives far outnumber the positives (`D-050`). The port uses `log1p`, which gives the same value in exact arithmetic. It loses fewer digits, but a smaller error remains, because it still subtracts a term from the width of the step. For 11 positives in 200000 scores, the relative error is 2.4e-13 for the port and 4.2e-8 for PRROC. For 1 positive in 1000000 scores, it is 3.2e-10 for the port and 3.7e-4 for PRROC.
+
+`auc_davis_goadrich` (Davis and Goadrich 2006):
+
+- Step 1 adds (TP_1 / P) · p_1. PRROC uses the precision of point 1 for the full width of step 1.
+- A step k ≥ 2 with TP_k − TP_{k−1} ≥ 2 and p_k ≠ p_{k−1} gets a point at each integer TP. Let Δ = TP_k − TP_{k−1} and q(x) = (TP_{k−1} + x) / (TP_{k−1} + x + FP_{k−1} + h_k · x). Such a step adds (1 / P) · (q(x) + q(x + 1)) / 2 for x = 0 to Δ − 1.
+- Each other step adds the trapezoid ((TP_k − TP_{k−1}) / P) · (p_{k−1} + p_k) / 2.
+- `auc_davis_goadrich` is the sum. The labels are hard, thus this area is always defined. PRROC gives `NA` for soft labels, which the port does not take.
+
+The PR curve (`curve`, with the columns `recall`, `precision`, and `threshold`):
+
+- The base rows are (r_k, p_k, s_k) for k = 1 to K.
+- The recall step is σ = min(1, P / 100) / P. It comes from the PRROC default `minStepSize = min(1, P / 100)`.
+- Each step k ≥ 2 with (TP_k − TP_{k−1}) / P > σ and p_k ≠ p_{k−1} gets intermediate rows. Let d = r_k − r_{k−1} and m = `int(d / σ + 1e-10)`. For j = 0 to m, let x = min(j · σ, d). The row is (r_{k−1} + x, (r_{k−1} + x) / (r_{k−1} + x + FP_{k−1} / P + h_k · x), s_k). This is `seq(0, d, by = σ)` of R 4.5.3.
+- The intermediate rows come after the base rows, in the order of k and then of j.
+- The sort puts the rows in the order of `recall`, from the highest to the lowest value. Rows with equal `recall` come in the order of `threshold`, from the lowest to the highest value. The sort is stable, as `order(..., decreasing = TRUE)` of R is.
+- A first row with the recall 1 and a last row with the recall 0 follow. Each takes the precision and the threshold of the sorted row next to it.
+- The code computes each value with the IEEE operations of these formulas, in their order. Thus the recalls that R gives as equal stay equal, and the stable sort gives the R order.
+- The curve has at most 2K + 2 + max(100, P) rows.
+
+The ROC curve:
+
+- The points are (0, 0) and (FP_k / N, TP_k / P) for k = 1 to K. `auc` is the sum over k of (fpr_k − fpr_{k−1}) · (tpr_k + tpr_{k−1}) / 2.
+- `curve` has the columns `fpr`, `tpr`, and `threshold`, with one row for each point. The threshold column is the threshold column of PRROC: the point (0, 0) has s_1, the point k has s_{k+1} for k < K, and the point K has s_K. Thus the threshold of a row is the score of the points that the next row adds.
+
 ## Annotation
 
 ### EnsDb and 2bit (the parity path)
@@ -445,6 +493,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `plotAlignment` | The guide target comes from `get_seed(..., "Full", ...)`, which starts at g2 (`R/plotAlignment.R:32`, `R/get_seed.R:121`). The window has one base more, thus each call with the default positions stops. A row of `SeedMatchR` with `res.format = "data.frame"` has no column `names`. | `alignment_text` shows g1 to gN, and it finds the sequence with `seq_id`. |
 | `plotAlignment` (a window past a sequence end) | `XVector::subseq` stops for a window that starts before 1 or ends after the sequence (`R/plotAlignment.R:43-45`). | `alignment_text` shows a space for each position outside the sequence. |
 | `generate_e_value` (the counts) | A count of `NA`, a negative count, `Inf`, and `-Inf` in `result_output` give the e-value 0 (`R/generate_e_value.R:16-21`). In the null, R does not count a cell with `NA`, a negative number, or `-Inf`, but the cell stays in the denominator. A gene with two rows in the null gives an e-value above 1. Two rows of one gene in `result_output` both get the value of a recycled comparison. | `e_values` raises `InputError` for a count that is NaN, infinite, or negative, and for a gene with two rows in the null. Each row gets its own e-value. |
+| `pr.curve` (the integral area) | `compute.pr` of PRROC 1.4 gives the area of a step as the difference of two logarithms (lines 71 and 72 of the printed function). The difference loses digits if the negatives far outnumber the positives. The relative error is 4.2e-8 for 11 positives in 200000 scores. | `pr_curve` computes the same area with `log1p`. The relative error is 2.4e-13 on the same sample, and 3.2e-10 for 1 positive in 1000000 scores (PRROC: 3.7e-4). |
 
 ## Tests
 
@@ -530,6 +579,7 @@ A test runs each code example in `README.md` and in `docs/`.
 - `match_distances` gives n(n − 1)/2 rows for a sequence with n matches, thus the result sets the memory. 10,000 matches in one sequence give 49,995,000 rows of 24 bytes. The function allocates the result one time. The work memory, without the result, is O(m) for m matches. The time is O(m log m + P) for P pairs.
 - `e_value_null` runs `n_random` searches of the set on `workers` threads. Its memory is the result, genes × `n_random` × 4 bytes, and O(`workers` × (genes + sequences)) more, for example 80 MB for 20,000 genes and 1000 shuffles. `map_in_pool` takes the shuffles one at a time from a generator, and the pool holds at most 2 × `workers` + 1 of them. The result exists before the first draw, thus a table that the system cannot allocate raises `MemoryError` before any search.
 - `e_values` compares blocks of 4096 rows of `de` with `null.index.get_indexer`, which it calls one time. The work memory is O(4096 × `n_random`), and the function makes no copy of the null. The time is O(R × `n_random`) for R rows.
+- `pr_curve` and `roc_curve` sort the scores one time. The time is O(n log n) and the memory is O(n) for n scores. The curve has at most 2K + 2 + max(100, P) rows for K distinct scores. For 1,000,000 distinct scores, `pr_curve` takes 0.18 seconds and 161 MB, and `roc_curve` takes 0.11 seconds and 104 MB.
 - `docs/performance.md` records the wall time and the peak memory of `seed_match_report` on the canonical 3' UTRs of `rnor7`, for Python and for R.
 - Target: after the JIT compilation, Python is not slower than R by more than a factor of 2.
 

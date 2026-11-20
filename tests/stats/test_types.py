@@ -9,7 +9,7 @@ import seedmatch
 import seedmatch.stats
 from seedmatch.errors import InputError
 from seedmatch.stats import Alternative, PValueMethod, TwoSampleResult
-from seedmatch.stats.types import as_alternative, as_sample
+from seedmatch.stats.types import as_alternative, as_sample, as_vector
 
 
 def test_alternatives_have_the_names_of_r():
@@ -181,6 +181,23 @@ def test_as_sample_names_the_type_of_a_value_that_is_not_an_array(values, type_n
     message = f"x has type {type_name}; expected a 1-D array of numbers"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         as_sample("x", values, finite=False)
+
+
+def test_as_vector_keeps_an_array_of_the_kinds_and_makes_objects_of_the_other_values():
+    assert as_vector("x", [1, 2], kinds="iuf", expected="numbers").dtype.kind == "i"
+    assert as_vector("x", [1.5], kinds="iuf", expected="numbers").dtype.kind == "f"
+    assert as_vector("x", [True], kinds="biuf", expected="labels").dtype.kind == "b"
+    for values in ([True, False], ["a"], [[1], [2, 3]]):
+        assert as_vector("x", values, kinds="iuf", expected="numbers").dtype == object
+
+
+def test_as_vector_names_the_expected_items_in_the_message_of_a_value_that_is_not_an_array():
+    message = "x has type set; expected a 1-D array of labels"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        as_vector("x", {1, 2}, kinds="biuf", expected="labels")
+    message = "x has 2 dimensions; expected a 1-D array"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        as_vector("x", np.zeros((2, 2)), kinds="biuf", expected="labels")
 
 
 def test_p_value_method_is_in_the_top_level_package():

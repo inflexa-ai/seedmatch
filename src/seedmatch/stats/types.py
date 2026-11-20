@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -87,7 +88,12 @@ def as_sample(name: str, values: ArrayLike, *, finite: bool) -> npt.NDArray[np.f
     return sample
 
 
-def _as_vector(name: str, values: ArrayLike) -> npt.NDArray[np.float64]:
+def as_vector(name: str, values: ArrayLike, *, kinds: str, expected: str) -> npt.NDArray[Any]:
+    """Return the values as a 1-D array of a dtype kind in `kinds`, or else as a 1-D object array.
+
+    A value with no 1-D form (a set, a generator, a dict, a str, or a scalar) raises `InputError`.
+    The message names the type of the value, and `expected` names the items of a 1-D array.
+    """
     try:
         array = np.asarray(values)
     except ValueError:
@@ -95,15 +101,24 @@ def _as_vector(name: str, values: ArrayLike) -> npt.NDArray[np.float64]:
         array = None
     if array is not None and array.ndim == 0:
         # A set, a generator, a dict, a str, and a scalar each make a 0-D array.
-        message = f"{name} has type {type(values).__name__}; expected a 1-D array of numbers"
+        message = f"{name} has type {type(values).__name__}; expected a 1-D array of {expected}"
         raise InputError(message)
-    if array is not None and array.dtype.kind in "iuf" and not _holds_a_bool(values):
-        check_one_dimensional(name, array)
+    if array is None or array.dtype.kind not in kinds:
+        # numpy turns a list of numbers and strings into strings, so only objects name the index.
+        array = np.asarray(values, dtype=object)
+    check_one_dimensional(name, array)
+    return array
+
+
+def _as_vector(name: str, values: ArrayLike) -> npt.NDArray[np.float64]:
+    array = as_vector(name, values, kinds="iuf", expected="numbers")
+    if array.dtype.kind in "iuf" and not _holds_a_bool(values):
         return array.astype(np.float64)
-    # numpy turns a list of numbers and strings into strings, so only the objects name the index.
-    objects = np.asarray(values, dtype=object)
-    check_one_dimensional(name, objects)
-    numbers = [as_number(f"{name}[{index}]", value) for index, value in enumerate(objects.tolist())]
+    if array.dtype.kind != "O":
+        # numpy made floats of a list with a bool, so only the objects name the bool.
+        array = np.asarray(values, dtype=object)
+        check_one_dimensional(name, array)
+    numbers = [as_number(f"{name}[{index}]", value) for index, value in enumerate(array.tolist())]
     return np.array(numbers, dtype=np.float64)
 
 
