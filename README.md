@@ -153,6 +153,18 @@ print(scored[["gene_id", "mer7m8", "e_value"]].head())
 
 `rng` is a `numpy.random.Generator` or an int seed, and the default `n_random` is 1000. The null is a required argument of `e_values`, because the R default does not exist. Genes match by `gene_id` (D-008). The result has the rows of `de` whose gene is in the null. `e_value_null` runs its searches on a thread pool, and `workers` sets the width of the pool. The null holds genes x `n_random` x 4 bytes. A count that is NaN, infinite, or negative raises `InputError`, because R gives it the e-value 0 (D-047).
 
+`benchmark_predictions` scores the seed counts against a gold standard of genes that go down. A gene is in the gold standard if one of its rows has `padj` at most `padj_cutoff` and `log2FoldChange` below `l2fc_cutoff`. This example uses the `de` table of the example above.
+
+```python
+from seedmatch import benchmark_predictions
+
+# The scores are the seed counts of the column "mer7m8". The cutoffs are the R defaults: 0.15 and 0.
+benchmark = benchmark_predictions(de)
+print(benchmark.pr.auc_integral, benchmark.roc.auc)
+```
+
+`benchmark.pr` is a `PrCurve`, and `benchmark.roc` is a `RocCurve`. The PR curve and the ROC curve use the same labels, but the ROC curve of R does not (D-006). A row with a NaN `padj` or a NaN `log2FoldChange` is a negative, as in R. The negatives are the other rows of `de`, thus a filter of `de` before the call also changes the negatives. A NaN score raises `InputError`. So do a cutoff that is not a number, and a gold standard without a positive or without a negative row (D-048).
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -196,6 +208,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - A sequence from an annotation keeps its transcript ID and its gene ID. In R, `load_annotations` gives the name `NA` to each sequence of a gene union (D-002), and `tx.names` is `NULL` (D-009).
 - `ecdf_test` drops the rows without a fold change for each test. R drops them for the KS and Wilcoxon tests only, and it stops for DTS and Wasserstein (D-036). `ecdf_test` raises `InputError` for an `alternative` with DTS or Wasserstein, but R ignores it without a message (D-035).
 - `kmer_gene_counts` counts the genes with a k-mer. The histogram of R counts the sequences, but its label says genes (D-042).
+- `benchmark_predictions` applies the `padj` cutoff. In R, `padj <= padj` compares the column with itself, thus each row with a `padj` passes. R also gives the labels to the ROC curve as the scores of the negative class (D-006).
 - `alignment_text` shows the full guide, from g1 to the last base. In R, the guide line of `plotAlignment` has no g1, and the function stops for the default positions (D-045).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
@@ -215,6 +228,7 @@ This version has the core path:
 - the alignment text of a seed match
 - the distances between the matches of a sequence
 - the e-value of a seed count against a null of shuffled guides
+- the benchmark of the seed counts against a gold standard of genes that go down
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:

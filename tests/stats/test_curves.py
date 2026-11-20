@@ -7,7 +7,7 @@ from functools import cache
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import STATISTIC_TOLERANCE, golden
+from helpers import STATISTIC_TOLERANCE, assert_curve_matches_golden, golden
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from scipy.stats import rankdata
@@ -35,18 +35,6 @@ def curve_samples() -> dict[str, tuple[list[float], list[int]]]:
 CASES = [case for case in curve_samples() if not case.startswith("benchmark_")]
 
 
-def golden_curve(path: str, case: str) -> pd.DataFrame:
-    table = golden(path)
-    return table[table["case"] == case].reset_index(drop=True)
-
-
-def assert_columns_match(got: pd.DataFrame, expected: pd.DataFrame, columns: list[str]) -> None:
-    assert len(got) == len(expected)
-    for name in columns:
-        for row, (value, reference) in enumerate(zip(got[name], expected[name], strict=True)):
-            assert math.isclose(value, float(reference), **STATISTIC_TOLERANCE), (name, row)
-
-
 def golden_row(path: str, case: str) -> pd.Series:
     table = golden(path)
     return table[table["case"] == case].iloc[0]
@@ -61,9 +49,9 @@ def test_pr_curve_matches_r(case):
     assert math.isclose(
         result.auc_davis_goadrich, float(areas.auc_davis_goadrich), **STATISTIC_TOLERANCE
     )
-    expected = golden_curve("analyses/pr_curve.tsv", case)
-    assert_columns_match(result.curve, expected, ["recall", "precision", "threshold"])
-    assert result.curve["threshold"].tolist() == expected["threshold"].astype(float).tolist()
+    assert_curve_matches_golden(
+        result.curve, "analyses/pr_curve.tsv", case, ["recall", "precision", "threshold"]
+    )
     assert (result.n_positive, result.n_negative) == (sum(labels), len(labels) - sum(labels))
 
 
@@ -74,9 +62,9 @@ def test_roc_curve_matches_r(case):
     assert math.isclose(
         result.auc, float(golden_row("analyses/roc.tsv", case).auc), **STATISTIC_TOLERANCE
     )
-    expected = golden_curve("analyses/roc_curve.tsv", case)
-    assert_columns_match(result.curve, expected, ["fpr", "tpr", "threshold"])
-    assert result.curve["threshold"].tolist() == expected["threshold"].astype(float).tolist()
+    assert_curve_matches_golden(
+        result.curve, "analyses/roc_curve.tsv", case, ["fpr", "tpr", "threshold"]
+    )
     assert (result.n_positive, result.n_negative) == (sum(labels), len(labels) - sum(labels))
 
 

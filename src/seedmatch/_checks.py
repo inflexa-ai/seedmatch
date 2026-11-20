@@ -197,6 +197,37 @@ def check_columns(
         raise InputError(message)
 
 
+def number_text(value: float) -> str:
+    """Return the value for a message: NaN as `NaN`, and a whole number without a decimal point."""
+    if math.isnan(value):
+        return "NaN"
+    return str(int(value)) if value.is_integer() else repr(value)
+
+
+def column_values(
+    de: pd.DataFrame,
+    column: str,
+    is_valid: Callable[[NDArray[np.float64]], NDArray[np.bool_]],
+    expected: str,
+) -> NDArray[np.float64]:
+    """Return the numeric column as a `float64` array, with NaN for a missing value.
+
+    `is_valid` marks the valid values. The first row that it rejects raises `InputError`. The
+    message names the column, the value, and the `gene_id` of the row, and `expected` ends it. The
+    table must have the column `gene_id`.
+    """
+    values = de[column].to_numpy(dtype=np.float64, na_value=np.nan)
+    invalid = np.flatnonzero(~is_valid(values))
+    if invalid.size:
+        row = int(invalid[0])
+        message = (
+            f"column {column!r} of de holds {number_text(float(values[row]))} "
+            f"for gene {shown(de['gene_id'].iloc[row])}; expected {expected}"
+        )
+        raise InputError(message)
+    return values
+
+
 def check_numeric_columns(de: pd.DataFrame, names: Sequence[str]) -> None:
     """Raise `InputError` that names the first column whose dtype is not numeric.
 

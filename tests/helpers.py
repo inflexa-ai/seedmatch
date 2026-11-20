@@ -2,6 +2,7 @@ import bz2
 import gzip
 import lzma
 import math
+import re
 import zlib
 from functools import cache
 from pathlib import Path
@@ -83,6 +84,35 @@ def ecdf_golden_row(input_name: str, test: str, alternative: str) -> Any:
 # DTS statistic from floating-point divisions. Thus each statistic differs from its exact form by
 # rounding errors. A p-value has no such noise.
 STATISTIC_TOLERANCE = {"rel_tol": 1e-9, "abs_tol": 1e-12}
+
+
+def golden_note(path: str, pattern: str) -> str:
+    """Return the first group of `pattern` in the first note that it matches.
+
+    A note is a line of the golden file that starts with `#`.
+    """
+    for line in (GOLDEN / path).read_text().splitlines():
+        found = re.search(pattern, line) if line.startswith("#") else None
+        if found:
+            return found.group(1)
+    message = f"{path} has no note that matches {pattern!r}"
+    raise AssertionError(message)
+
+
+def assert_curve_matches_golden(
+    got: pd.DataFrame, path: str, case: str, columns: list[str]
+) -> None:
+    """Compare the columns of a curve with the rows of the case in the golden file.
+
+    A value agrees within `STATISTIC_TOLERANCE`. The column `threshold` must be equal.
+    """
+    table = golden(path)
+    expected = table[table["case"] == case].reset_index(drop=True)
+    assert len(got) == len(expected)
+    for name in columns:
+        for row, (value, reference) in enumerate(zip(got[name], expected[name], strict=True)):
+            assert math.isclose(value, float(reference), **STATISTIC_TOLERANCE), (name, row)
+    assert got["threshold"].tolist() == expected["threshold"].astype(float).tolist()
 
 
 def dts_p_value_error(p_r: float, n_boot: int) -> float:

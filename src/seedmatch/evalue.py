@@ -1,6 +1,5 @@
 """The e-value of a seed count against a null of shuffled guides (`generate_e_value` of R)."""
 
-import math
 from collections.abc import Iterator
 from typing import Final
 
@@ -17,7 +16,9 @@ from seedmatch._checks import (
     check_columns,
     check_gene_ids_are_text,
     check_numeric_columns,
+    column_values,
     is_text,
+    number_text,
     shown,
 )
 from seedmatch._pool import map_in_pool, pool_width
@@ -115,12 +116,6 @@ def e_value_null(  # noqa: PLR0913
     )
 
 
-def _count_text(value: float) -> str:
-    if math.isnan(value):
-        return "NaN"
-    return str(int(value)) if value.is_integer() else repr(value)
-
-
 def _check_null(null: object) -> pd.DataFrame:
     frame = as_data_frame(
         null, name="null", expected="a pandas.DataFrame with one row for each gene"
@@ -156,24 +151,11 @@ def _check_null(null: object) -> pd.DataFrame:
         if not valid.all():
             row, found = np.argwhere(~valid)[0]
             message = (
-                f"null holds {_count_text(float(block[row, found]))} "
+                f"null holds {number_text(float(block[row, found]))} "
                 f"for gene {shown(frame.index[start + row])}; expected counts of 0 or more"
             )
             raise InputError(message)
     return frame
-
-
-def _observed_counts(table: pd.DataFrame, column: str) -> NDArray[np.float64]:
-    counts = table[column].to_numpy(dtype=np.float64, na_value=np.nan)
-    invalid = np.flatnonzero(~_is_count(counts))
-    if invalid.size:
-        row = int(invalid[0])
-        message = (
-            f"column {column!r} of de holds {_count_text(float(counts[row]))} "
-            f"for gene {shown(table['gene_id'].iloc[row])}; expected a count of 0 or more"
-        )
-        raise InputError(message)
-    return counts
 
 
 def e_values(de: pd.DataFrame, null: pd.DataFrame, *, column: str) -> pd.DataFrame:
@@ -201,7 +183,7 @@ def e_values(de: pd.DataFrame, null: pd.DataFrame, *, column: str) -> pd.DataFra
     check_columns(table, ("gene_id", name))
     check_gene_ids_are_text(table)
     check_numeric_columns(table, (name,))
-    observed = _observed_counts(table, name)
+    observed = column_values(table, name, _is_count, "a count of 0 or more")
     frame = _check_null(null)
 
     positions = frame.index.get_indexer(pd.Index(table["gene_id"].to_numpy(dtype=object)))

@@ -53,6 +53,17 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: The count of a gene must not depend on the order of its sequences. In R, the first sequence in the input decides the count. The DE table has one row for each gene. Thus a gene with more than one sequence must count once in the report.
 - Test: `test_gene_count_is_the_maximum_over_its_sequences_D003` and `test_the_maximum_does_not_depend_on_the_order_of_the_sequences_D003` in `tests/report/test_annotate.py`. `test_report_counts_genes_not_sequences_D003` and `test_the_best_match_of_a_gene_is_the_best_over_its_sequences_D003` in `tests/report/test_report.py`.
 
+## D-006: The benchmark applies the padj cutoff, and the ROC curve uses the labels
+
+- ID: `D-006`
+- R location: `benchmark_preds` (`R/benchmark.R:22-38`).
+- R behavior: The notes of `tests/golden/analyses/benchmark.tsv` give the evidence for the defects below.
+  - In `dplyr::filter(padj <= padj, ...)` (`R/benchmark.R:23`), both names are the column `padj` of the data mask. Thus each row with a `padj` passes, and the argument `padj` has no effect. On the test data, `benchmark_preds(res, padj = 1e-10)` keeps 63 genes. The cutoff keeps 24 genes.
+  - `roc.curve(scores.class0 = preds, scores.class1 = res$GS.label)` (`R/benchmark.R:36-38`) takes the labels as the scores of the negative class. Thus R compares the seed counts with the numbers 0 and 1. These 63 genes give the case `benchmark_1`, which has the same PR area. For them, the ROC area is 0.37626790674448363 in R, but 0.59195402298850586 with the labels as weights, as `pr.curve` gets them.
+- New behavior: `benchmark_predictions` applies `padj_cutoff`, and `roc_curve` takes the labels as `pr_curve` does.
+- Reason: A cutoff without an effect gives a wrong gold standard. The ROC area of R does not measure the predictions.
+- Test: `test_the_padj_cutoff_applies_D006` and `test_the_roc_curve_uses_the_labels_D006` in `tests/stats/test_benchmark.py`. `test_benchmark_matches_r` in the same file compares the areas and the curves with the golden files of the patched R function (`tools/golden/patches/benchmark_preds.R`).
+
 ## D-008: e_values has no default null, and genes match by gene_id
 
 - ID: `D-008`
@@ -498,6 +509,24 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `e_values` raises `InputError` for a count that is NaN, infinite, or negative. This rule covers `de` and the null. It raises `InputError` also for a gene with two rows in the null. The message names the column or the null, the value (`NaN`, `inf`, `-inf`, or the negative number), and the gene. A count that is not an integer, for example 1.5, is valid. Each row gets its own e-value.
 - Reason: The e-value 0 is the strongest result, thus a count that is not known must not give it. A count that is not finite is not a count. A fraction above 1 has no meaning.
 - Test: `test_e_values_reject_a_nan_count_D047`, `test_e_values_reject_a_negative_count_D047`, `test_e_values_reject_an_infinite_count_D047`, `test_e_values_reject_a_repeated_gene_of_the_null_D047`, and `test_each_row_of_a_gene_gets_its_own_e_value_D047` in `tests/test_evalue.py`. The tests `test_e_values_reject_a_nan_count_in_the_null_D047`, `test_e_values_reject_a_negative_count_in_the_null_D047`, and `test_e_values_reject_an_infinite_count_in_the_null_D047` in the same file cover the counts of the null.
+
+## D-048: The benchmark rejects a NaN score, a cutoff that is not a number, and a gold standard with one class
+
+- ID: `D-048`
+- R location: `benchmark_preds` (`R/benchmark.R:22-38`) and `pr.curve` and `roc.curve` of PRROC 1.4.
+- R behavior: R gives no message, or a message that does not name the cause. The notes of `tests/golden/analyses/benchmark.tsv` give some of the evidence. R probes give the rest. A probe uses R 4.5.3, SeedMatchR 2.0.0, dplyr 1.2.1, and PRROC 1.4 on the test data. No golden file keeps the probe results.
+  - To do a probe again, run `source("tools/golden/R/common.R")` and `res <- load_test_data()$res` from the repository root.
+  - The area probe is `with_seedmatchr_patch("tools/golden/patches/benchmark_preds.R", SeedMatchR::benchmark_preds(res, padj = NaN))`. Read the integral area, the Davis-Goadrich area, and the ROC area as `$PRC$auc.integral`, `$PRC$auc.davis.goadrich`, and `$ROC$auc`.
+  - The gene probe is `sum(res$gene_id %in% dplyr::pull(dplyr::filter(res, padj <= !!padj, log2FoldChange < !!l2fc), gene_id))`. Set the variables `padj` and `l2fc` to the cutoffs first.
+  - A NaN score in one row stops the function with `NAs are not allowed in subscripted assignments` (the notes).
+  - A NaN cutoff keeps no gene, because each comparison with NaN fails. The area probe with `padj = NaN` and with `l2fc = NaN` gives NaN for the integral area, the Davis-Goadrich area, and the ROC area.
+  - A gold standard without a positive (`padj = 0`) gives NaN for the integral area, the Davis-Goadrich area, and the ROC area (the notes).
+  - A gold standard without a negative (`padj = 1` and `l2fc = Inf`) gives 1 for the integral area, 1 for the Davis-Goadrich area, and NaN for the ROC area (the notes).
+  - A text cutoff compares the values as text. The gene probe with `padj = "0.15"` keeps no gene. With `padj = 1e-10`, `l2fc = "-1"` keeps 5 genes, but `l2fc = -1` keeps 19 genes.
+  - A bool cutoff is the number 1. The gene probe with `padj = 0.15` and `l2fc = TRUE` keeps 68 genes, and `l2fc = 0` keeps 63 genes.
+- New behavior: `benchmark_predictions` raises `InputError` for a NaN score, and for a cutoff that is a bool, text, or NaN. It also raises `InputError` for a gold standard without a positive row and for a gold standard without a negative row. A score of infinity is valid. A row with a NaN `padj` or a NaN `log2FoldChange` is a negative, as in R (the note on `benchmark_na`).
+- Reason: An area from a broken input looks like a result, and no message tells the caller.
+- Test: `test_benchmark_rejects_a_nan_score_D048`, `test_benchmark_rejects_a_missing_value_of_a_nullable_integer_score_D048`, `test_benchmark_rejects_a_nan_cutoff_D048`, `test_benchmark_rejects_a_cutoff_that_is_not_a_number_D048`, `test_benchmark_rejects_a_gold_standard_without_a_positive_D048`, and `test_benchmark_rejects_a_gold_standard_without_a_negative_D048` in `tests/stats/test_benchmark.py`.
 
 ## D-050: auc_integral loses fewer digits than the difference of two logarithms
 

@@ -26,6 +26,7 @@ from seedmatch.seed import CustomSeed, Guide, Seed, SeedSpec, Target
 from seedmatch.sequence import SequenceSet, read_fasta, reverse_complement, write_fasta
 from seedmatch.stats import (
     Alternative,
+    Benchmark,
     EcdfTest,
     EcdfTestResult,
     PrCurve,
@@ -33,6 +34,7 @@ from seedmatch.stats import (
     RocCurve,
     WassersteinAreas,
     assign_groups,
+    benchmark_predictions,
     ecdf_test,
     pr_curve,
     roc_curve,
@@ -44,6 +46,7 @@ __all__ = [
     "NONSEED_SEEDS",
     "REPORT_CATEGORIES",
     "Alternative",
+    "Benchmark",
     "CustomSeed",
     "EcdfTest",
     "EcdfTestResult",
@@ -74,6 +77,7 @@ __all__ = [
     "alignment_text",
     "annotate_seed_counts",
     "assign_groups",
+    "benchmark_predictions",
     "best_match",
     "count_matches",
     "e_value_null",

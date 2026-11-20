@@ -23,6 +23,8 @@ from seedmatch._checks import (
     check_integer_columns,
     check_not_negative,
     check_numeric_columns,
+    column_values,
+    number_text,
 )
 from seedmatch.errors import InputError
 from seedmatch.report import FullSearchOptions
@@ -270,3 +272,33 @@ def test_as_data_frame_ends_the_message_with_the_expected_text_of_the_caller():
     message = "null has type list; expected a pandas.DataFrame with one row for each gene"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         as_data_frame([1, 2], name="null", expected="a pandas.DataFrame with one row for each gene")
+
+
+def test_column_values_returns_a_float_array_with_nan_for_a_missing_value():
+    de = pd.DataFrame({"gene_id": ["a", "b"], "value": pd.array([1, None], dtype="Int64")})
+    values = column_values(de, "value", lambda _: np.ones(2, dtype=bool), "anything")
+    assert values.dtype == np.float64
+    assert values[0] == 1.0
+    assert math.isnan(values[1])
+
+
+def test_column_values_names_the_column_the_value_and_the_gene_of_the_first_rejected_row():
+    de = pd.DataFrame({"gene_id": ["a", "b", "c"], "value": [1.0, -2.5, -3.0]})
+    message = "column 'value' of de holds -2.5 for gene 'b'; expected a positive number"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        column_values(de, "value", lambda values: values > 0, "a positive number")
+
+
+@pytest.mark.parametrize(
+    ("value", "text"),
+    [
+        (math.nan, "NaN"),
+        (3.0, "3"),
+        (-1.0, "-1"),
+        (2.5, "2.5"),
+        (math.inf, "inf"),
+        (-math.inf, "-inf"),
+    ],
+)
+def test_number_text_shows_a_whole_number_without_a_decimal_point(value, text):
+    assert number_text(value) == text

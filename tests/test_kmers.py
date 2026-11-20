@@ -4,7 +4,7 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import DATA, GOLDEN, GUIDE, golden, sirna_seqs
+from helpers import DATA, GUIDE, golden, golden_note, sirna_seqs
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -55,15 +55,6 @@ def listed_cells(counts):
         (counts.ids[row], counts.gene_ids[row], labels[column], int(value))
         for row, column, value in zip(rows, matrix.indices, matrix.data, strict=True)
     ]
-
-
-def golden_note(path, pattern):
-    for line in (GOLDEN / path).read_text().splitlines():
-        found = re.search(pattern, line) if line.startswith("#") else None
-        if found:
-            return found.group(1)
-    message = f"{path} has no note that matches {pattern!r}"
-    raise AssertionError(message)
 
 
 def exactly(message):

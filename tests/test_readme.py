@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from helpers import DATA, STATISTIC_TOLERANCE, ecdf_golden_row, golden, sirna_de
 
-from seedmatch import Alternative, EcdfTest
+from seedmatch import Alternative, Benchmark, EcdfTest
 
 README = Path(__file__).parents[1] / "README.md"
 PYTHON_BLOCK = re.compile(r"^```python\n(.*?)^```$", re.MULTILINE | re.DOTALL)
@@ -92,3 +92,14 @@ def test_readme_e_value_example_runs(readme_namespace):
     scored = readme_namespace["scored"]
     assert len(scored) == len(readme_namespace["de"])
     assert scored["e_value"].between(0, 1).all()
+
+
+def test_readme_benchmark_example_runs(readme_namespace):
+    benchmark = readme_namespace["benchmark"]
+    de = readme_namespace["de"]
+    gold_standard = (de["padj"] <= 0.15) & (de["log2FoldChange"] < 0)
+    assert isinstance(benchmark, Benchmark)
+    assert benchmark.pr.n_positive == gold_standard.sum()
+    assert benchmark.pr.n_negative == (~gold_standard).sum()
+    assert 0 < benchmark.pr.auc_integral < 1
+    assert 0 < benchmark.roc.auc < 1

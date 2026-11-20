@@ -1,5 +1,6 @@
-"""The two-sample tests of an ECDF comparison, and the PR and ROC curves."""
+"""The two-sample tests of an ECDF comparison, the PR and ROC curves, and the benchmark."""
 
+from seedmatch.stats.benchmark import Benchmark, benchmark_predictions
 from seedmatch.stats.curves import PrCurve, RocCurve, pr_curve, roc_curve
 from seedmatch.stats.dts import dts_test
 from seedmatch.stats.ecdf import EcdfTest, EcdfTestResult, assign_groups, ecdf_test
@@ -10,6 +11,7 @@ from seedmatch.stats.wilcoxon import wilcoxon_test
 
 __all__ = [
     "Alternative",
+    "Benchmark",
     "EcdfTest",
     "EcdfTestResult",
     "PValueMethod",
@@ -18,6 +20,7 @@ __all__ = [
     "TwoSampleResult",
     "WassersteinAreas",
     "assign_groups",
+    "benchmark_predictions",
     "dts_test",
     "ecdf_test",
     "ks_test",
