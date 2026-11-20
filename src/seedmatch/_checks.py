@@ -2,7 +2,8 @@
 
 import math
 import operator
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Sequence
+from enum import Enum
 from typing import SupportsIndex
 
 import numpy as np
@@ -69,6 +70,54 @@ def as_flag(name: str, value: object) -> bool:
     raise InputError(message)
 
 
+def as_member[M: Enum](name: str, value: object, members: type[M]) -> M:
+    """Return the value if it is a member of the enum. Its text is not a member."""
+    if isinstance(value, members):
+        return value
+    expected = ", ".join(f"{members.__name__}.{member.name}" for member in members)
+    message = f"{name} {shown(value)} is not valid; expected one of {expected}"
+    raise InputError(message)
+
+
+def as_text(name: str, value: object) -> str:
+    """Return the value if it is a `str`."""
+    if not isinstance(value, str):
+        message = f"{name} {shown(value)} has type {type(value).__name__}; expected a str"
+        raise InputError(message)
+    return value
+
+
+# Each argument is an independent part of the message or of the check, so no parameter object fits.
+def as_items[T](  # noqa: PLR0913
+    name: str,
+    value: Iterable[object],
+    as_item: Callable[[str, object], T],
+    item_type: str,
+    *,
+    container: str = "a sequence",
+    example: str | None = None,
+) -> tuple[T, ...]:
+    """Return the items of the value as a tuple, each item checked by `as_item`.
+
+    A `str` is one value and not a set of values, thus it raises `InputError`, and so does a value
+    that is not iterable. The message for a `str` gives the `str` in a tuple as an example, unless
+    the caller gives another `example`. `as_item` gets `name[index]` and the item. The caller keeps
+    its own rule for an empty set.
+    """
+    if isinstance(value, str):
+        message = (
+            f"{name} {shown(value)} is a str; expected {container} of {item_type}, "
+            f"for example ({example or repr(value)},)"
+        )
+        raise InputError(message)
+    try:
+        items = tuple(value)
+    except TypeError:
+        message = f"{name} {shown(value)} has type {type(value).__name__}; expected {container}"
+        raise InputError(message) from None
+    return tuple(as_item(f"{name}[{position}]", item) for position, item in enumerate(items))
+
+
 def as_number(name: str, value: object) -> float:
     """Return the value as a plain float. A bool is not a number. NaN and infinity are floats."""
     if isinstance(value, bool | np.bool_) or not isinstance(
@@ -103,9 +152,18 @@ def check_columns(de: pd.DataFrame, required: Sequence[str]) -> None:
 
 
 def check_numeric_columns(de: pd.DataFrame, names: Sequence[str]) -> None:
-    """Raise `InputError` that names the first column whose dtype is not numeric."""
+    """Raise `InputError` that names the first column whose dtype is not numeric.
+
+    As `is.numeric` of R does, this check rejects a bool column and a complex column.
+    """
     for name in names:
-        if not pd.api.types.is_numeric_dtype(de[name]):
+        dtype = de[name].dtype
+        is_number = (
+            pd.api.types.is_numeric_dtype(dtype)
+            and not pd.api.types.is_bool_dtype(dtype)
+            and not pd.api.types.is_complex_dtype(dtype)
+        )
+        if not is_number:
             message = f"column {name!r} has dtype {de[name].dtype}; expected a numeric dtype"
             raise InputError(message)
 

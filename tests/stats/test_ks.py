@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import numpy as np
 import pytest
-from helpers import golden_row, golden_rows, stats_samples
+from helpers import STATISTIC_TOLERANCE, golden_row, golden_rows, stats_samples
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from scipy.special import kolmogorov
@@ -14,9 +14,6 @@ from scipy.special import kolmogorov
 from seedmatch.errors import InputError
 from seedmatch.stats import Alternative, PValueMethod, ks_test
 
-# R finds D with a cumulative sum of 1/m and -1/n, so its D is off by up to about 1e-15 from the
-# lattice value d / (m * n). A p-value has no such noise.
-STATISTIC_TOLERANCE = {"rel_tol": 1e-9, "abs_tol": 1e-12}
 P_VALUE_TOLERANCE = {"rel_tol": 1e-9, "abs_tol": 0.0}
 D032_ROWS = {
     ("ks_asym_cut_series", "two.sided"),

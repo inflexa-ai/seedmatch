@@ -11,7 +11,7 @@ from numpy.typing import ArrayLike
 from seedmatch._checks import as_limit, check_at_least, shown
 from seedmatch._rmath import r_round
 from seedmatch.errors import InputError
-from seedmatch.stats.types import as_sample
+from seedmatch.stats.types import as_sample, check_range
 
 _MIN_VALUES: Final = 10
 _DECIMALS: Final = 3
@@ -55,6 +55,7 @@ def wasserstein_areas(
     """
     seed_values = _as_wasserstein_sample("seed", seed)
     non_seed_values = _as_wasserstein_sample("non_seed", non_seed)
+    check_wasserstein_range("seed", "non_seed", seed_values, non_seed_values)
     points = as_limit("n_interp", n_interp)
     check_at_least("n_interp", points, 2)
     absolute, negative, positive = _unrounded_areas(seed_values, non_seed_values, points)
@@ -67,6 +68,12 @@ def wasserstein_areas(
 
 def _as_wasserstein_sample(name: str, values: ArrayLike) -> npt.NDArray[np.float64]:
     sample = as_sample(name, values, finite=True)
+    check_wasserstein_sample(name, sample)
+    return sample
+
+
+def check_wasserstein_sample(name: str, sample: npt.NDArray[np.float64]) -> None:
+    """Raise `InputError` unless the sample has 10 values or more, and 2 distinct values or more."""
     if sample.size < _MIN_VALUES:
         message = f"{name} has {sample.size} values; expected at least {_MIN_VALUES}"
         raise InputError(message)
@@ -76,7 +83,16 @@ def _as_wasserstein_sample(name: str, values: ArrayLike) -> npt.NDArray[np.float
             "expected at least 2 distinct values"
         )
         raise InputError(message)
-    return sample
+
+
+def check_wasserstein_range(
+    first: str,
+    second: str,
+    x: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
+) -> None:
+    """Raise `InputError` if the pooled range is above half of the largest float (`D-038`)."""
+    check_range(first, second, x, y, _MAX_RANGE)
 
 
 def _unrounded_areas(
@@ -93,11 +109,6 @@ def _unrounded_areas(
     """
     low = float(min(seed.min(), non_seed.min()))
     high = float(max(seed.max(), non_seed.max()))
-    if high - low > _MAX_RANGE:
-        message = (
-            f"seed and non_seed span from {low} to {high}; expected a range of at most {_MAX_RANGE}"
-        )
-        raise InputError(message)
     seed_ecdf, non_seed_ecdf = _ecdf(seed), _ecdf(non_seed)
     totals = [0.0, 0.0, 0.0]
     for start in range(0, n_interp - 1, chunk):

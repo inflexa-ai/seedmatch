@@ -7,3 +7,7 @@ class SeedMatchError(Exception):
 
 class InputError(SeedMatchError, ValueError):
     """Invalid input. The message names the bad value and the expected value."""
+
+
+class SeedMatchWarning(UserWarning):
+    """Base class of each warning that seedmatch gives."""

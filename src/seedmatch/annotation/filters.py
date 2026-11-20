@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 from typing import Final
 
-from seedmatch._checks import as_flag, as_limit, shown
+from seedmatch._checks import as_flag, as_items, as_limit, as_text
 from seedmatch.errors import InputError
 
 _MIN_SUPPORT_LEVEL: Final = 1
@@ -30,13 +30,6 @@ class PerGene(Enum):
     EACH_TRANSCRIPT = auto()
     LONGEST = auto()
     UNION = auto()
-
-
-def _as_text(name: str, item: object) -> str:
-    if not isinstance(item, str):
-        message = f"{name} {shown(item)} has type {type(item).__name__}; expected a str"
-        raise InputError(message)
-    return item
 
 
 def _as_support_level(value: object) -> int:
@@ -74,21 +67,11 @@ def _as_set[T](
     """
     if value is None:
         return None
-    if isinstance(value, str):
-        message = (
-            f"{name} {shown(value)} is a str; expected a sequence of {item_type}, "
-            f"for example ({example or repr(value)},)"
-        )
-        raise InputError(message)
-    try:
-        items = tuple(value)
-    except TypeError:
-        message = f"{name} {shown(value)} has type {type(value).__name__}; expected a sequence"
-        raise InputError(message) from None
+    items = as_items(name, value, as_item, item_type, example=example)
     if not items:
         message = f"{name} is empty; expected at least one value, or None for no filter"
         raise InputError(message)
-    return tuple(as_item(f"{name}[{position}]", item) for position, item in enumerate(items))
+    return items
 
 
 @dataclass(frozen=True)
@@ -119,6 +102,6 @@ class TranscriptFilter:
         if self.support_level is not None:
             object.__setattr__(self, "support_level", _as_support_level(self.support_level))
         for name in ("gene_ids", "tx_ids", "symbols", "tx_biotypes", "gene_biotypes"):
-            object.__setattr__(self, name, _as_set(name, getattr(self, name), _as_text, "str"))
+            object.__setattr__(self, name, _as_set(name, getattr(self, name), as_text, "str"))
         entrez_ids = _as_set("entrez_ids", self.entrez_ids, _as_entrez_id, "int", "1006")
         object.__setattr__(self, "entrez_ids", entrez_ids)

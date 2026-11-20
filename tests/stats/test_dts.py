@@ -1,11 +1,14 @@
 import itertools
 import math
+import re
+import sys
 import time
 import tracemalloc
+import warnings
 
 import numpy as np
 import pytest
-from helpers import golden_rows, stats_samples
+from helpers import STATISTIC_TOLERANCE, dts_p_value_error, golden_rows, stats_samples
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -13,9 +16,6 @@ from seedmatch.errors import InputError
 from seedmatch.stats import PValueMethod, dts_test
 from seedmatch.stats.dts import _gaps, _statistics
 
-# R takes E - F and the weights from floating-point divisions and adds the terms in its own order,
-# so its statistic differs from the integer form by rounding errors.
-STATISTIC_TOLERANCE = {"rel_tol": 1e-9, "abs_tol": 1e-12}
 R_ROWS = [pytest.param(row, id=row.case) for row in golden_rows("stats/dts.tsv")]
 
 
@@ -89,9 +89,7 @@ def test_dts_p_value_agrees_with_r_within_the_permutation_error(row):
     x, y = stats_samples()[row.case]
     n_boot, p_r = int(row.n_boot), float(row.p_value)
     result = dts_test(x, y, rng=1, n_boot=n_boot)
-    # Each p-value is a fraction of n draws, so the difference has the variance 2 p (1 - p) / n.
-    tolerance = 4 * math.sqrt(2 * p_r * (1 - p_r) / n_boot) + 2 / n_boot
-    assert abs(result.p_value - p_r) <= tolerance
+    assert abs(result.p_value - p_r) <= dts_p_value_error(p_r, n_boot)
 
 
 def test_dts_p_value_is_the_same_for_the_same_seed():
@@ -298,3 +296,37 @@ def test_dts_runs_on_a_large_table():
     assert elapsed < 30
     assert 0 < result.p_value < 0.01
     assert (result.n_x, result.n_y) == (2000, 18000)
+
+
+def test_dts_rejects_a_range_that_overflows_D034():
+    message = "x and y span from -1e+308 to 1e+308; expected a range of at most"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}"):
+        dts_test([-1e308, 0.1, 0.2], [1e308, -0.1], rng=0)
+    # The range inside one sample overflows to inf too.
+    with pytest.raises(InputError, match=r"^x and y span from -1e\+308 to 1e\+308"):
+        dts_test([-1e308, 1e308], [0.1, 0.2], rng=0)
+
+
+def test_dts_names_the_limit_of_the_range_as_the_largest_float_over_2_n_D034():
+    limit = sys.float_info.max / (2 * 5)
+    message = f"x and y span from 0.0 to {2 * limit}; expected a range of at most {limit}"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        dts_test([0.0, 1.0, 2.0], [3.0, 2 * limit], rng=0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        at_the_limit = dts_test([0.0, 1.0, 2.0], [3.0, limit], rng=0)
+    assert math.isfinite(at_the_limit.statistic)
+
+
+@pytest.mark.parametrize("fraction", [0.5, 0.99])
+def test_dts_is_finite_and_scales_with_the_values_up_to_the_limit_D034(fraction):
+    # One gap is 0.96 of the range, so width * N^1.5 overflows if the range is near the limit.
+    x, y = [0.0, 0.01, 0.02, 0.03, 0.04], [0.005, 0.015, 0.025, 0.035, 1.0]
+    base = dts_test(x, y, rng=3, n_boot=50)
+    scale = fraction * sys.float_info.max / (2 * 10)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        scaled = dts_test(np.array(x) * scale, np.array(y) * scale, rng=3, n_boot=50)
+    assert math.isfinite(scaled.statistic)
+    assert math.isclose(scaled.statistic, base.statistic * scale, rel_tol=1e-9)
+    assert scaled.p_value == base.p_value

@@ -59,6 +59,22 @@ matches = report.matches
 
 If a gene has more than one sequence, make the set with `SequenceSet.from_records(records, gene_ids=...)`.
 
+`ecdf_test` compares the `log2FoldChange` values of two gene sets. This example compares the genes with a seed match to the genes without a match. A small p-value shows that the genes with a seed match go down.
+
+```python
+from seedmatch import ecdf_test
+
+# The genes with a seed match, and the genes without a match.
+seed_genes = de.loc[de["mer7m8"] >= 1, "gene_id"]
+background = de.loc[de["mer7m8"] == 0, "gene_id"]
+
+# The KS test of R. The default alternative is GREATER, as in R.
+ecdf_result = ecdf_test(de, target=seed_genes, background=background)
+print(ecdf_result.statistic, ecdf_result.p_value)
+```
+
+Import the members with `from seedmatch import EcdfTest`. Then use `test=EcdfTest.WILCOXON`, `EcdfTest.WASSERSTEIN`, or `EcdfTest.DTS` for another test. The DTS test needs `rng`, a `numpy.random.Generator` or an int seed, because its p-value comes from permutations. `assign_groups(de, groups)` gives the group of each row of `de`.
+
 To get the sequences from an annotation, open a `Reference`. A `Reference` joins an EnsDb file and a genome file of the same build. The genome file is a 2bit file, or a FASTA file with its index files.
 
 ```python
@@ -86,6 +102,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - `full_search_ranges` gives a result for each input. R stops if each search finds a match, or if no search finds a match (D-022).
 - `wobble=True` with `fixed_pattern=True` raises `InputError`, because a fixed pattern matches the wobble letter R only to the letter R (D-026).
 - A sequence from an annotation keeps its transcript ID and its gene ID. In R, `load_annotations` gives the name `NA` to each sequence of a gene union (D-002), and `tx.names` is `NULL` (D-009).
+- `ecdf_test` drops the rows without a fold change for each test. R drops them for the KS and Wilcoxon tests only, and it stops for DTS and Wasserstein (D-036). `ecdf_test` raises `InputError` for an `alternative` with DTS or Wasserstein, but R ignores it without a message (D-035).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -98,10 +115,11 @@ This version has the core path:
 - the annotation: the EnsDb file or an Ensembl or GENCODE GTF file, the 2bit and FASTA genome files, and the feature sequences of a `Reference`
 - the DE table: the reader and the filter
 - the seed counts, `full_search`, `full_search_ranges`, and `seed_match_report`
+- the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and `ecdf_test` for two gene sets
 
 These parts of SeedMatchR are not in this version:
 
-- the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and the PR and ROC curves
+- the PR and ROC curves
 - the downloads
 - the wobble and bulge search, the 3' compensatory search, the network scores, and the other small analyses
 - the plots and the HTML report

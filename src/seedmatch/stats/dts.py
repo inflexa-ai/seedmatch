@@ -1,6 +1,7 @@
 """The DTS two-sample test."""
 
 import operator
+import sys
 from typing import Final
 
 import numpy as np
@@ -9,7 +10,7 @@ from numpy.typing import ArrayLike
 
 from seedmatch._checks import as_limit, check_at_least, check_not_negative, shown
 from seedmatch.errors import InputError
-from seedmatch.stats.types import PValueMethod, TwoSampleResult, as_sample
+from seedmatch.stats.types import PValueMethod, TwoSampleResult, as_sample, check_range
 
 _BLOCK_SIZE: Final = 64
 
@@ -25,11 +26,12 @@ def dts_test(
     gap. The p-value is the fraction of `n_boot` random choices of the positions of `x` in z whose
     statistic is not less than the observed statistic. If no choice reaches it, the p-value is
     `1 / (2 * n_boot)`. The permutations come from `rng`, a `Generator` or an int seed, so the
-    p-value agrees with R only within the error of the permutations. An infinite value and an empty
-    sample raise `InputError` (`D-034`).
+    p-value agrees with R only within the error of the permutations. An infinite value, an empty
+    sample, and a pooled range above the largest float divided by 2 n raise `InputError` (`D-034`).
     """
     sample_x = as_sample("x", x, finite=True)
     sample_y = as_sample("y", y, finite=True)
+    check_dts_range("x", "y", sample_x, sample_y)
     generator = _as_generator(rng)
     boots = as_limit("n_boot", n_boot)
     check_at_least("n_boot", boots, 1)
@@ -52,6 +54,20 @@ def dts_test(
         n_x=m,
         n_y=n,
     )
+
+
+def check_dts_range(
+    first: str,
+    second: str,
+    x: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
+) -> None:
+    """Raise `InputError` if the pooled range is above the largest float divided by 2 n.
+
+    Each term of the statistic is at most the width of its gap times n, so the statistic is at most
+    the range times n. The limit keeps it at half of the largest float, and the sum cannot overflow.
+    """
+    check_range(first, second, x, y, sys.float_info.max / (2 * (x.size + y.size)))
 
 
 def _as_generator(rng: object) -> np.random.Generator:
@@ -77,12 +93,17 @@ def _gaps(
     values counts. `ends[g]` is the index of the left value of gap g, and k = `ends[g] + 1` values
     lie at or below it. With c of them from `x`, E - F = (c N - k m) / (m n), where N = m + n, and
     G = k / N. Thus the term of the gap is `scale[g] * |c N - expected[g]|`, with `expected` = k m.
+
+    The factor that multiplies the width is at most N / (N - 1), because m n is at least N - 1. The
+    product with the width stays below the largest float if the range is within the limit of
+    `check_dts_range`.
     """
     pooled_size = m + n
     width = np.diff(values)
     ends = np.flatnonzero(width > 0)
     below = ends + 1
-    scale = width[ends] * pooled_size**1.5 / (m * n * np.sqrt(2.0 * below * (pooled_size - below)))
+    factor = pooled_size**1.5 / (m * n * np.sqrt(2.0 * below * (pooled_size - below)))
+    scale = width[ends] * factor
     return ends, below * m, scale
 
 

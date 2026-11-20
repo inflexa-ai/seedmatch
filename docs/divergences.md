@@ -181,7 +181,7 @@ The IDs of the known divergences have the same order as the rows of the table in
   - A `log2FoldChange` column of text gives 5 off-target predictions, and a `padj` column of text gives 0. R compares the text with the cutoff as text. For example, `"-2" <= -0.7655347` is `FALSE`, and `"-0.5" <= -0.7655347` is `TRUE`.
   - A `baseMean` column of text gives 42, because R only copies this column to `matches`.
   - R has no number that a double cannot hold: R reads `1e400` as `Inf`.
-- New behavior: `ReportOptions` raises `InputError` for a NaN cutoff, for a cutoff that is a bool or text, and for an int that a float cannot hold. `seed_match_report` raises `InputError` that names the column and the dtype, if `log2FoldChange`, `padj`, or `baseMean` is not numeric. The port does not compare `baseMean`, but `matches` gives it with the type `float64`. A Python int can be too large for a float, thus the port rejects it.
+- New behavior: `ReportOptions` raises `InputError` for a NaN cutoff, for a cutoff that is a bool or text, and for an int that a float cannot hold. `seed_match_report` raises `InputError` that names the column and the dtype, if `log2FoldChange`, `padj`, or `baseMean` is not numeric. A bool column and a complex column are not numeric, as for `is.numeric` of R. `filter_de` and `ecdf_test` use the same check. The port does not compare `baseMean`, but `matches` gives it with the type `float64`. A Python int can be too large for a float, thus the port rejects it.
 - Reason: A NaN cutoff gives no off-target, and a bool or text cutoff gives a wrong count. A text `log2FoldChange` or `padj` column also gives a wrong count. R shows none of these in an error, and a table that a caller read as text is a likely cause.
 - Test: `test_a_nan_cutoff_is_an_error_D024`, `test_a_cutoff_that_is_not_an_int_or_a_float_is_an_error_D024`, `test_a_cutoff_that_a_float_cannot_hold_is_an_error_D024`, and `test_a_column_that_is_not_numeric_is_an_error_that_names_the_column_and_the_dtype_D024` in `tests/report/test_report.py`.
 
@@ -299,7 +299,7 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: Two samples of equal values show no difference, thus 1 is the correct p-value. A NaN p-value fails each comparison with a threshold. R already gives 1 for the one-sided tests.
 - Test: `test_wilcoxon_with_all_values_equal_gives_1_D033` in `tests/stats/test_wilcoxon.py`. `test_wilcoxon_matches_r` in the same file covers each other row of `wilcoxon.tsv`.
 
-## D-034: The DTS test rejects an infinite value and an empty sample
+## D-034: The DTS test rejects an infinite value, an empty sample, and a range that overflows
 
 - ID: `D-034`
 - R location: `ecdf_stat_test` calls `twosamples::dts_test` (`R/deseq_fc_ecdf.R:259-264`). The version of twosamples is 2.0.1.
@@ -307,9 +307,36 @@ The IDs of the known divergences have the same order as the rows of the table in
   - `dts_test(c(a, Inf), b)`, `dts_test(c(a, -Inf), b)`, and `dts_test(a, c(b, Inf))` give the statistic `Inf` and the p-value 1.
   - `dts_test(numeric(0), b)` gives the statistic 3.9986665900519656 and the p-value 1. `dts_test(a, numeric(0))` gives 3.3254468626107201 and the p-value 1.
   - A NaN or an NA makes the function stop with the message `missing value where TRUE/FALSE needed`. The port also raises an error, and its message gives the sample and the index.
-- New behavior: `dts_test` raises `InputError` for an empty sample and for an infinite value, `Inf` or `-Inf`. The message gives the sample and the index of the value.
-- Reason: An infinite value makes a statistic that does not measure a difference, and the p-value 1 states that the samples agree. An empty sample has no distribution to compare. R gives a result and no message, thus the mistake of the caller stays hidden. `ks_test` and `wilcoxon_test` accept an infinite value, because they use only the order of the values.
-- Test: `test_dts_rejects_an_infinite_value_D034` and `test_dts_rejects_an_empty_sample_D034` in `tests/stats/test_dts.py`.
+  - Finite values near the limit of float64 overflow. With `set.seed(1)`, `dts_test(c(-1e308, rnorm(5)), c(1e308, rnorm(5)))` gives the statistic `Inf` and the p-value 1. The same holds for `c(-8e307, rnorm(5))` and `c(8e307, rnorm(5))`, with the range 1.6e308.
+- New behavior: `dts_test` raises `InputError` for an empty sample and for an infinite value, `Inf` or `-Inf`. The message gives the sample and the index of the value. It also raises `InputError` for a pooled range above the largest float divided by 2 n, where n is the pooled size. A range that overflows to `Inf` is above this limit. The message is `x and y span from -1e+308 to 1e+308; expected a range of at most` and the limit. `ecdf_test` gives the names `target` and `background`.
+- Reason: An infinite value makes a statistic that does not measure a difference, and the p-value 1 states that the samples agree. An empty sample has no distribution to compare. R gives a result and no message, thus the mistake of the caller stays hidden. `ks_test` and `wilcoxon_test` accept an infinite value, because they use only the order of the values. Each term of the statistic is at most the width of its gap times n, thus the statistic is at most the range times n. The limit keeps the statistic at half of the largest float. The port multiplies the width by a factor of at most n / (n - 1). It does not multiply by n^1.5 first. Thus no product overflows below the limit.
+- Test: `test_dts_rejects_an_infinite_value_D034`, `test_dts_rejects_an_empty_sample_D034`, `test_dts_rejects_a_range_that_overflows_D034`, `test_dts_names_the_limit_of_the_range_as_the_largest_float_over_2_n_D034`, and `test_dts_is_finite_and_scales_with_the_values_up_to_the_limit_D034` in `tests/stats/test_dts.py`. `test_ecdf_test_rejects_a_range_that_a_float_cannot_hold_with_the_names_of_the_sets` in `tests/stats/test_ecdf.py` covers the names `target` and `background`.
+
+## D-035: ecdf_test rejects an alternative for DTS and Wasserstein
+
+- ID: `D-035`
+- R location: `ecdf_stat_test` passes `alternative` only to `stats::ks.test` (`R/deseq_fc_ecdf.R:255-257`) and to `stats::wilcox.test` (`R/deseq_fc_ecdf.R:274-276`). The branches of `twosamples::dts_test` (`R/deseq_fc_ecdf.R:259-264`) and `wass_dist` (`R/deseq_fc_ecdf.R:266-271`) do not use it.
+- R behavior: R ignores `alternative` for `DTS` and `Wass`, and it gives no message. An R probe with R 4.5.3 and `set.seed(1)` on `tests/data/DESEQ2_results.tsv` gives the evidence. The target is the genes with `mer7m8 >= 1`, and the background is the genes with `mer7m8 == 0`:
+  - `stats_test = "DTS"` gives the statistic 74.911568929640467 and the p-value 0.00025 for `greater`, `less`, and `two.sided`.
+  - `stats_test = "Wass"` gives the statistic 2.1960000000000002 for `greater`, `less`, and `two.sided`.
+  - `stats_test = "KS"` gives a different result for each `alternative`. The statistic is 0.51035196687370576 for `greater` and 1.1015494072452725e-15 for `less`.
+- New behavior: `ecdf_test` raises `InputError` for an `alternative` that is not `None`, if the test is `DTS` or `WASSERSTEIN`. The message names the value and the test. The result has `alternative=None` for `DTS` and `WASSERSTEIN`.
+- Reason: An argument that has no effect, and no message, hides a mistake of the caller. A caller who asks for `LESS` with DTS gets a result that does not depend on `LESS`.
+- Test: `test_ecdf_test_rejects_an_alternative_for_dts_and_wasserstein_D035` in `tests/stats/test_ecdf.py`. `test_ecdf_test_matches_r` in the same file covers the rows of `ecdf.tsv` for `DTS` and `WASSERSTEIN`, which have no alternative.
+
+## D-036: ecdf_test drops the rows without a fold change for each test
+
+- ID: `D-036`
+- R location: `ecdf_stat_test` selects the samples with `res$log2FoldChange[res$gene_id %in% unlist(target_list)]` (`R/deseq_fc_ecdf.R:247-252`). It then calls the test (`R/deseq_fc_ecdf.R:254-277`).
+- R behavior: The samples keep the NA values, and each test reacts in its own way. An R probe with R 4.5.3 gives the evidence. The table is `tests/data/DESEQ2_results.tsv` with 5 more rows whose `log2FoldChange` is NA: 2 rows for the target and 3 rows for the background:
+  - `stats::ks.test` and `stats::wilcox.test` drop the NA values. The result is equal to the result for the table without the 5 rows. The KS statistic is 0.51035196687370576, and the p-value is 0.00010377312440832125. The Wilcoxon statistic is 748, and the p-value is 0.99961672019886205.
+  - `twosamples::dts_test` stops with the message `missing value where TRUE/FALSE needed`.
+  - `wass_dist` stops with the message `'from' must be a finite number`.
+  - Direct calls with NA values give the same reactions. For example, `ks.test(c(x, NA), c(y, NA, NA))` is equal to `ks.test(x, y)`.
+  - A sample without a value after the drop makes `ks.test` stop with `not enough 'x' data`, and `wilcox.test` stop with `not enough (non-missing) 'x' observations`.
+- New behavior: `ecdf_test` drops each row whose `log2FoldChange` is NaN, for each test. The fields `n_target` and `n_background` count the rows that remain. A set with no row after the drop raises `InputError` that names the set and gives the count 0. The functions `ks_test`, `wilcoxon_test`, `dts_test`, and `wasserstein_areas` drop no value. Each of them raises `InputError` for NaN, and the message names the sample and the index.
+- Reason: A row without a fold change has no value to compare, thus the result must not depend on the test. A function that takes values must not drop a value in silence, because the number of values changes the p-value. The drop belongs to the selection of the rows of a table, in `ecdf_test`.
+- Test: `test_ecdf_test_drops_rows_without_a_fold_change_D036` and `test_ecdf_test_rejects_a_set_whose_rows_have_no_fold_change` in `tests/stats/test_ecdf.py`. `test_the_direct_tests_raise_for_nan_where_ecdf_test_drops_the_row_D036` in the same file covers `ks_test`, `wilcoxon_test`, `dts_test`, and `wasserstein_areas`. Each module of a direct function also has its own test: `test_ks_rejects_nan`, `test_wilcoxon_rejects_nan`, `test_dts_rejects_nan`, and `test_wasserstein_rejects_nan_and_an_infinite_value`.
 
 ## D-037: The statistical tests give no warning for ties
 
@@ -333,6 +360,30 @@ The IDs of the known divergences have the same order as the rows of the table in
   - `wass_dist(a, b, n.interp = -5)` stops with the message `'length.out' must be a non-negative number`.
   - `wass_dist(c(-1e308, a), c(1e308, b))` gives the areas 1.74825173985846e+307, 1.74825173985846e+307, and 0, and no message. The width of the range is `Inf` in float64.
   - `wass_dist(seq(-6e307, -6.6e307, length.out = 10), seq(6e307, 6.6e307, length.out = 10), n.interp = 100)` gives the areas `Inf`, `Inf`, and 0, and no message. The range is 1.32e308, which float64 can hold, but the sum of `trapz` before the division by 2 is about 2.4e308.
-- New behavior: `wasserstein_areas` raises `InputError` for an `n_interp` below 2, with the message `n_interp 1 is less than 2; expected 2 or more`. It raises `InputError` if the range of the pooled values is above half of the largest float, 8.988465674311579e+307. The message is `seed and non_seed span from -1e+308 to 1e+308; expected a range of at most 8.988465674311579e+307`.
+- New behavior: `wasserstein_areas` raises `InputError` for an `n_interp` below 2, with the message `n_interp 1 is less than 2; expected 2 or more`. It raises `InputError` if the range of the pooled values is above half of the largest float, 8.988465674311579e+307. The message is `seed and non_seed span from -1e+308 to 1e+308; expected a range of at most 8.988465674311579e+307`. `ecdf_test` gives the names `target` and `background`.
 - Reason: An `NA` area or a number from an overflow hides the mistake of the caller. A grid of 1 point has no trapezoid, and the area of an overflowed range has no meaning. Each product of the trapezoid rule is a width times a sum of two heights from 0 to 1. Thus the sum is at most twice the range, and a range above half of the largest float can overflow it. The messages of R for 0 and for a negative value do not name `n.interp`.
-- Test: `test_wasserstein_rejects_n_interp_below_2_D038`, `test_wasserstein_rejects_a_range_that_a_float_cannot_hold_D038`, and `test_wasserstein_rejects_a_finite_range_whose_sum_overflows_D038` in `tests/stats/test_wasserstein.py`. `test_wasserstein_accepts_a_range_just_below_the_limit_D038` in the same file shows that the limit is not too low.
+- Test: `test_wasserstein_rejects_n_interp_below_2_D038`, `test_wasserstein_rejects_a_range_that_a_float_cannot_hold_D038`, and `test_wasserstein_rejects_a_finite_range_whose_sum_overflows_D038` in `tests/stats/test_wasserstein.py`. `test_wasserstein_accepts_a_range_just_below_the_limit_D038` in the same file shows that the limit is not too low. `test_ecdf_test_rejects_a_range_that_a_float_cannot_hold_with_the_names_of_the_sets` in `tests/stats/test_ecdf.py` covers the names `target` and `background`.
+
+## D-039: assign_groups warns only if two groups share a gene
+
+- ID: `D-039`
+- R location: `.check_gene_list_overlap` (`R/deseq_fc_ecdf.R:165-169`). `deseq_fc_ecdf` calls it (`R/deseq_fc_ecdf.R:97`) before `.assign_groups` (`R/deseq_fc_ecdf.R:171-182`).
+- R behavior: R warns `Gene lists overlap!` if `any(duplicated(unlist(gene_lists)))`. Thus R also warns for a gene that occurs two times in one list. An R probe with R 4.5.3 gives the evidence:
+  - `list(a = c("g1", "g1"), b = c("g2"))` gives the warning `Gene lists overlap!`, but no two lists share a gene.
+  - `list(a = "g1", b = "g1")` gives the same warning, and here two lists share a gene.
+  - `.assign_groups` labels the genes of `list(a = c("g1", "g1", "g2"), b = c("g2", "g3"))` as `a` for `g1` and `b` for `g2` and `g3`. The last list wins. The second `g1` in `a` does not change a label.
+- New behavior: `assign_groups` warns with `SeedMatchWarning` only if two groups share a gene. The message names the first two groups that share a gene, and one shared gene. A gene that occurs two times in one group gives no warning. The last group wins, as in R.
+- Reason: The warning tells the caller that the label of a gene depends on the order of the groups. A gene that occurs two times in one group keeps its label, thus the R warning is false for it. The message names the groups and a gene, thus the caller can find the overlap.
+- Test: `test_assign_groups_gives_no_warning_for_a_repeat_inside_one_group_D039` and `test_assign_groups_gives_the_last_group_and_warns_for_an_overlap` in `tests/stats/test_ecdf.py`.
+
+## D-040: assign_groups keeps a group named NA apart from the genes in no group
+
+- ID: `D-040`
+- R location: `.assign_groups` (`R/deseq_fc_ecdf.R:171-182`) and the `factor` call of `deseq_fc_ecdf` (`R/deseq_fc_ecdf.R:109`).
+- R behavior: `.assign_groups` writes the text `"NA"` as the group of each gene in no group. The `factor` call turns this text into a level only if a group has the name `NA`. Then this level holds the genes of that group and each gene in no group. An R probe with R 4.5.3 gives the evidence. The table has the genes `g1`, `g2`, `g3`, `g4`, `g2`, `g5`, and `g6` in this order. The groups are `list(a = c("g1"), "NA" = c("g2"))`:
+  - The levels are `a` and `NA`.
+  - The label of `g1` is `a`. The label of each other row is `NA`, also for `g3`, `g4`, `g5`, and `g6`, which are in no group.
+  - Without a group named `NA`, the same rows have no value, as in the probe `list(a = c("g1"), b = c("g2"))`.
+- New behavior: `assign_groups` gives no value to a gene in no group, also if a group has the name `NA`. A group named `NA` holds only its own genes.
+- Reason: A gene in no group is not a member of a group named `NA`. The mix gives wrong group sizes and a wrong comparison of the groups. The name of a group is data of the caller, thus it must not change the meaning of a gene in no group.
+- Test: `test_assign_groups_keeps_a_group_named_na_apart_D040` in `tests/stats/test_ecdf.py`.

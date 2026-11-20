@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 from numpy.typing import ArrayLike
 
-from seedmatch._checks import as_number, check_one_dimensional, shown
+from seedmatch._checks import as_member, as_number, check_one_dimensional
 from seedmatch.errors import InputError
 
 
@@ -41,11 +41,27 @@ class TwoSampleResult:
 
 def as_alternative(value: object) -> Alternative:
     """Return the value if it is a member of `Alternative`. Its text is not a member."""
-    if isinstance(value, Alternative):
-        return value
-    expected = ", ".join(f"Alternative.{member.name}" for member in Alternative)
-    message = f"alternative {shown(value)} is not valid; expected one of {expected}"
-    raise InputError(message)
+    return as_member("alternative", value, Alternative)
+
+
+def check_range(
+    first: str,
+    second: str,
+    x: npt.NDArray[np.float64],
+    y: npt.NDArray[np.float64],
+    maximum: float,
+) -> None:
+    """Raise `InputError` if the two samples together span more than `maximum`.
+
+    A range that overflows to infinity is above each maximum. The message names the two samples.
+    """
+    low = float(min(x.min(), y.min()))
+    high = float(max(x.max(), y.max()))
+    if high - low > maximum:
+        message = (
+            f"{first} and {second} span from {low} to {high}; expected a range of at most {maximum}"
+        )
+        raise InputError(message)
 
 
 def as_sample(name: str, values: ArrayLike, *, finite: bool) -> npt.NDArray[np.float64]:

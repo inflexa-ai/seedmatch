@@ -1,9 +1,12 @@
+import math
 import re
 import shutil
 from pathlib import Path
 
 import pytest
-from helpers import DATA, golden, sirna_de
+from helpers import DATA, STATISTIC_TOLERANCE, ecdf_golden_row, golden, sirna_de
+
+from seedmatch import Alternative, EcdfTest
 
 README = Path(__file__).parents[1] / "README.md"
 PYTHON_BLOCK = re.compile(r"^```python\n(.*?)^```$", re.MULTILINE | re.DOTALL)
@@ -53,3 +56,13 @@ def test_readme_annotation_example_gives_the_r_sequences(readme_namespace):
     assert list(utr3.ids) == expected["name_tx"].tolist()
     assert [utr3.sequence(i) for i in range(len(utr3))] == expected["sequence"].tolist()
     assert len(readme_namespace["utr3_counts"]) == len(utr3)
+
+
+def test_readme_ecdf_example_gives_the_r_result(readme_namespace):
+    result = readme_namespace["ecdf_result"]
+    row = ecdf_golden_row("readme", "KS", "greater")
+    assert (result.test, result.alternative) == (EcdfTest.KS, Alternative.GREATER)
+    assert (result.n_target, result.n_background) == (int(row.n_target), int(row.n_background))
+    assert math.isclose(result.statistic, float(row.statistic), **STATISTIC_TOLERANCE)
+    assert result.p_value is not None
+    assert math.isclose(result.p_value, float(row.p_value), rel_tol=1e-9)

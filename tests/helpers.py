@@ -65,6 +65,29 @@ def golden_row(path: str, case: str, alternative: str) -> Any:
     return row
 
 
+def ecdf_golden_row(input_name: str, test: str, alternative: str) -> Any:
+    (row,) = (
+        row
+        for row in golden_rows("stats/ecdf.tsv")
+        if (row.input, row.test, row.alternative) == (input_name, test, alternative)
+    )
+    return row
+
+
+# R finds D of the KS test with a cumulative sum of 1/m and -1/n, and it takes the weights of the
+# DTS statistic from floating-point divisions. Thus each statistic differs from its exact form by
+# rounding errors. A p-value has no such noise.
+STATISTIC_TOLERANCE = {"rel_tol": 1e-9, "abs_tol": 1e-12}
+
+
+def dts_p_value_error(p_r: float, n_boot: int) -> float:
+    """Return the largest difference that is plausible between two DTS p-values of n_boot draws.
+
+    Each p-value is a fraction of n draws, so the difference has the variance 2 p (1 - p) / n.
+    """
+    return 4 * math.sqrt(2 * p_r * (1 - p_r) / n_boot) + 2 / n_boot
+
+
 # The cache shares one dict of lists, so a test must not change them.
 @cache
 def stats_samples() -> dict[str, tuple[list[float], list[float]]]:
