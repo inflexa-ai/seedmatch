@@ -1,11 +1,13 @@
 """The FASTA genome, plain or BGZF: a reader that decodes only the bytes of the requested range."""
 
+import io
 import os
 import struct
 import zlib
 from bisect import bisect_right
 from collections.abc import Iterator
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final
@@ -13,6 +15,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
+from seedmatch._io import INT64_MAX, open_binary, parse_int64, too_large_error
 from seedmatch.annotation.genome import Genome, duplicate_contig_error
 from seedmatch.errors import InputError
 from seedmatch.sequence.alphabet import MASKS, encode_dna
@@ -24,6 +27,7 @@ _FEXTRA: Final = 4
 _BLOCK_SIZE_TAG: Final = b"BC"
 _BLOCK_SIZE_FIELD: Final = 2
 _TRAILER_SIZE: Final = 8
+_ISIZE: Final = struct.Struct("<I")
 # The BGZF specification limits the uncompressed data of a block to 65536 bytes.
 _BGZF_BLOCK_LIMIT: Final = 65536
 _READ_SIZE: Final = 1 << 20
@@ -32,9 +36,6 @@ _FAI_NUMBERS: Final = ("length", "offset", "line bases", "line width")
 _TERMINATOR_SIZES: Final = (1, 2)
 _LINE_ENDS: Final = b"\r\n"
 _LETTERS: Final = "".join(MASKS)
-_INT64_MAX: Final = 2**63 - 1
-_INT64_DIGITS: Final = len(str(_INT64_MAX))
-_SHOWN_DIGITS: Final = 40
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,7 +71,7 @@ class FastaGenome(Genome):
         self._compressed: list[int] = []
         self._uncompressed: list[int] = []
         self._cached: tuple[int, bytes] | None = None
-        self._handle = self.path.open("rb")
+        self._handle = open_binary(self.path)
         try:
             self._bgzf = self._handle.read(len(GZIP_MAGIC)) == GZIP_MAGIC
             if self._bgzf:
@@ -158,8 +159,21 @@ class FastaGenome(Genome):
     def _read_block(self, offset: int) -> bytes:
         """Return the deflate data and the trailer of the BGZF block at the compressed offset.
 
-        A header that the file cuts short, a block without the extra field `BC`, and a block that
-        the file cuts short raise `InputError`.
+        A block that the file cuts short, and each error of `_read_header`, raise `InputError`.
+        """
+        size, header_size = self._read_header(offset)
+        body_size = size - header_size
+        body = self._handle.read(body_size)
+        if len(body) < body_size:
+            raise self._damaged(offset, "the file ends inside it")
+        return body
+
+    def _read_header(self, offset: int) -> tuple[int, int]:
+        """Return the size of the BGZF block at the compressed offset, and the size of its header.
+
+        The file stays at the end of the header. A header that the file cuts short, a block
+        without the extra field `BC`, and a size too small for the header and the trailer raise
+        `InputError`.
         """
         self._handle.seek(offset)
         fixed = self._handle.read(_GZIP_HEADER.size)
@@ -178,13 +192,10 @@ class FastaGenome(Genome):
                 "expected the extra field BC that `bgzip` writes"
             )
             raise InputError(message)
-        body_size = size - _GZIP_HEADER.size - extra_size
-        if body_size < _TRAILER_SIZE:
+        header_size = _GZIP_HEADER.size + extra_size
+        if size - header_size < _TRAILER_SIZE:
             raise self._damaged(offset, f"its size {size} is too small for its header and trailer")
-        body = self._handle.read(body_size)
-        if len(body) < body_size:
-            raise self._damaged(offset, "the file ends inside it")
-        return body
+        return size, header_size
 
     def _inflate(self, index: int) -> bytes:
         """Return the uncompressed bytes of a block. The last block that it inflated is kept."""
@@ -202,14 +213,20 @@ class FastaGenome(Genome):
         if index + 1 < len(self._uncompressed):
             expected = self._uncompressed[index + 1] - self._uncompressed[index]
             if len(block) != expected:
-                message = (
-                    f"{os.fspath(self._gzi)!r}: the block at compressed offset {offset} has "
-                    f"{_plural(len(block), 'byte')}, but the .gzi gives {expected}; expected the "
-                    f".gzi of this file. Make it with `bgzip -r {self._shown}`"
+                problem = (
+                    f"the block at compressed offset {offset} has {_plural(len(block), 'byte')}, "
+                    f"but the .gzi gives {expected}"
                 )
-                raise InputError(message)
+                raise self._gzi_error(problem)
         self._cached = (index, block)
         return block
+
+    def _gzi_error(self, problem: str) -> InputError:
+        message = (
+            f"{os.fspath(self._gzi)!r}: {problem}; expected the .gzi of this file. "
+            f"Make it with `bgzip -r {self._shown}`"
+        )
+        return InputError(message)
 
     def _cut_header(self, offset: int) -> InputError:
         message = (
@@ -230,7 +247,7 @@ class FastaGenome(Genome):
         shown = os.fspath(self._fai)
         entries: dict[str, _Entry] = {}
         try:
-            with self._fai.open(encoding="utf-8", newline="\n") as handle:
+            with io.TextIOWrapper(open_binary(self._fai), encoding="utf-8", newline="\n") as handle:
                 for number, line in enumerate(handle, start=1):
                     name, entry = _parse_fai_line(shown, number, line.removesuffix("\n"))
                     if name in entries:
@@ -271,10 +288,15 @@ class FastaGenome(Genome):
                 raise InputError(message)
 
     def _read_gzi(self) -> None:
-        """Read the `.gzi`: a count, then the compressed and uncompressed offset of each block."""
+        """Read the `.gzi`: a count, then the compressed and uncompressed offset of each block.
+
+        Offsets that do not increase, and the errors of `_check_uncompressed_offsets`, raise
+        `InputError`.
+        """
         shown = os.fspath(self._gzi)
         try:
-            data = self._gzi.read_bytes()
+            with open_binary(self._gzi) as handle:
+                data = handle.read()
         except FileNotFoundError:
             message = (
                 f"{shown!r}: the index file does not exist; make it with `bgzip -r {self._shown}`"
@@ -293,15 +315,55 @@ class FastaGenome(Genome):
         size = os.fstat(self._handle.fileno()).st_size
         if offsets and max(offsets) >= size:
             offset = next(offset for offset in offsets if offset >= size)
-            message = (
-                f"{shown!r}: compressed offset {offset} is not below the size of the file, "
-                f"{_plural(size, 'byte')}; expected the .gzi of this file. "
-                f"Make it with `bgzip -r {self._shown}`"
+            problem = (
+                f"compressed offset {offset} is not below the size of the file, "
+                f"{_plural(size, 'byte')}"
             )
-            raise InputError(message)
+            raise self._gzi_error(problem)
         # The first block has no entry in the file.
         self._compressed = [0, *offsets]
         self._uncompressed = [0, *values[1::2]]
+        for column, column_offsets in (
+            ("compressed", self._compressed),
+            ("uncompressed", self._uncompressed),
+        ):
+            for previous, offset in pairwise(column_offsets):
+                if offset <= previous:
+                    problem = (
+                        f"{column} offset {offset} is not above the offset before it, {previous}"
+                    )
+                    raise self._gzi_error(problem)
+        self._check_uncompressed_offsets()
+
+    def _check_uncompressed_offsets(self) -> None:
+        """Make sure that each uncompressed offset is the sum of the ISIZE of the blocks before it.
+
+        The test reads the header and the ISIZE field of each block before the last `.gzi` entry,
+        and inflates no block. A `.gzi` entry inside a block raises `InputError`.
+        """
+        offset = total = 0
+        for listed, expected in zip(self._compressed[1:], self._uncompressed[1:], strict=True):
+            while offset < listed:
+                size, _header_size = self._read_header(offset)
+                end = offset + size
+                if end > listed:
+                    problem = (
+                        f"compressed offset {listed} is inside the block at compressed offset "
+                        f"{offset}; the next block starts at {end}"
+                    )
+                    raise self._gzi_error(problem)
+                # The block ends at or before an entry that is below the file size, so the read
+                # gets the 4 bytes.
+                self._handle.seek(end - _ISIZE.size)
+                (isize,) = _ISIZE.unpack(self._handle.read(_ISIZE.size))
+                total += isize
+                offset = end
+            if total != expected:
+                problem = (
+                    f"uncompressed offset {expected} of the block at compressed offset {listed} is "
+                    f"not {total}, the sum of the ISIZE fields of the blocks before it"
+                )
+                raise self._gzi_error(problem)
 
 
 def _block_size(extra: bytes) -> int | None:
@@ -343,17 +405,7 @@ def _count(shown: str, number: int, label: str, text: str) -> int:
             "expected digits only"
         )
         raise InputError(message)
-    digits = text.lstrip("0") or "0"
-    # Python does not convert a string of more than 4300 digits, so the length comes first.
-    if len(digits) > _INT64_DIGITS or int(digits) > _INT64_MAX:
-        shown_text = text if len(text) <= _SHOWN_DIGITS else f"{text[:_SHOWN_DIGITS]}..."
-        raise _too_large(shown, number, label, shown_text)
-    return int(digits)
-
-
-def _too_large(shown: str, number: int, what: str, value: str) -> InputError:
-    message = f"{shown!r}: line {number}: {what} {value} is too large; expected at most 2^63 - 1"
-    return InputError(message)
+    return parse_int64(shown, number, label, text)
 
 
 def _parse_fai_line(shown: str, number: int, line: str) -> tuple[str, _Entry]:
@@ -382,6 +434,6 @@ def _parse_fai_line(shown: str, number: int, line: str) -> tuple[str, _Entry]:
         raise InputError(message)
     entry = _Entry(length, offset, line_bases, line_width)
     last = entry.position(length - 1) if length else 0
-    if last > _INT64_MAX:
-        raise _too_large(shown, number, "the byte of the last base", str(last))
+    if last > INT64_MAX:
+        raise too_large_error(shown, number, "the byte of the last base", str(last))
     return name, entry

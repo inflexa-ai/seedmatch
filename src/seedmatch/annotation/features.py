@@ -80,7 +80,7 @@ class Features:
 
     def widths(self) -> NDArray[np.int64]:
         """Return the sum of the range widths of each feature, thus the length of its sequence."""
-        return np.diff(_running_sum(self.ends - self.starts + 1)[self.offsets])
+        return np.diff(running_sum(self.ends - self.starts + 1)[self.offsets])
 
     def at_least(self, min_width: int) -> "Features":
         """Return the features whose sequence has at least `min_width` bases, in the same order."""
@@ -135,7 +135,7 @@ def derive_features(rows: ExonRows, feature: FeatureType, per_gene: PerGene) -> 
             chosen = candidates
         case PerGene.LONGEST:
             row_widths = np.where(in_feature, ends - starts + 1, 0)
-            chosen = _longest(rows, bounds, candidates, np.diff(_running_sum(row_widths)[bounds]))
+            chosen = _longest(rows, bounds, candidates, np.diff(running_sum(row_widths)[bounds]))
         case PerGene.UNION:
             return _union(rows, bounds, candidates, (starts, ends), in_feature)
         case _:
@@ -143,7 +143,7 @@ def derive_features(rows: ExonRows, feature: FeatureType, per_gene: PerGene) -> 
     first = bounds[chosen]
     taken = _runs(first, bounds[chosen + 1])
     taken = taken[in_feature[taken]]
-    counts = np.diff(_running_sum(in_feature.astype(np.int64))[bounds])
+    counts = np.diff(running_sum(in_feature.astype(np.int64))[bounds])
     return Features(
         ids=tuple(rows.tx_id[first].tolist()),
         gene_ids=tuple(rows.gene_id[first].tolist()),
@@ -151,7 +151,7 @@ def derive_features(rows: ExonRows, feature: FeatureType, per_gene: PerGene) -> 
         strands=rows.strand[first],
         starts=starts[taken],
         ends=ends[taken],
-        offsets=_running_sum(counts[chosen]),
+        offsets=running_sum(counts[chosen]),
     )
 
 
@@ -213,7 +213,7 @@ def _union(
     taken = np.flatnonzero(in_feature & (row_gene >= 0))
     merged_gene, merged_starts, merged_ends = _merge(row_gene[taken], cut[0][taken], cut[1][taken])
     counts = np.bincount(merged_gene, minlength=len(gene_ids))
-    offsets = _running_sum(counts)
+    offsets = running_sum(counts)
     gene_rows = first[gene_first]
     strands = rows.strand[gene_rows]
     position = np.arange(len(merged_starts))
@@ -277,11 +277,11 @@ def _run_starts(values: NDArray[np.int64]) -> NDArray[np.int64]:
 def _runs(starts: NDArray[np.int64], stops: NDArray[np.int64]) -> NDArray[np.int64]:
     """Return the positions `starts[k]` to `stops[k] - 1` for each k, one run after the other."""
     lengths = stops - starts
-    run_starts = _running_sum(lengths)[:-1]
+    run_starts = running_sum(lengths)[:-1]
     return np.arange(int(lengths.sum())) - np.repeat(run_starts - starts, lengths)
 
 
-def _running_sum(values: NDArray[np.int64]) -> NDArray[np.int64]:
+def running_sum(values: NDArray[np.int64]) -> NDArray[np.int64]:
     """Return 0, then the sum of the first value, of the first two values, and so on."""
     total = np.zeros(len(values) + 1, dtype=np.int64)
     np.cumsum(values, out=total[1:])

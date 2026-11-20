@@ -24,6 +24,15 @@ def duplicate_contig_error(shown: str, contig: str) -> InputError:
     return InputError(message)
 
 
+def outside_contig_error(place: str, first: int, last: int, length: int) -> InputError:
+    """Return the error for the range `first..last` outside a contig. `place` names the contig."""
+    message = (
+        f"{place}: range {first}..{last} is outside the contig of length {length}; "
+        f"expected 1 <= start and end <= {length}"
+    )
+    return InputError(message)
+
+
 def listed_names(names: Iterable[str]) -> str:
     """Return the first names in sorted order as text for an error message, with `...` for more."""
     ordered = sorted(names)
@@ -109,9 +118,6 @@ class Genome(ABC):
             )
             raise InputError(message)
         if first < 1 or last > length:
-            message = (
-                f"contig {contig!r}: range {first}..{last} is outside the contig of length "
-                f"{length}; expected 1 <= start and end <= {length}"
-            )
-            raise InputError(message)
+            place = f"contig {contig!r}"
+            raise outside_contig_error(place, first, last, length)
         return first, last

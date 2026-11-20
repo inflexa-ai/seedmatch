@@ -183,12 +183,19 @@ def test_reader_gets_only_checked_ranges_with_plain_ints():
 
 
 @pytest.mark.parametrize(
-    ("contig", "start", "end"),
-    [("Y", 1, 5), ("Y", 1, 0), ("1", 0, 5), ("1", 5, 11), ("1", 6, 4), ("1", "1", 5)],
+    ("contig", "start", "end", "message"),
+    [
+        ("Y", 1, 5, "contig 'Y' is not in the genome"),
+        ("Y", 1, 0, "contig 'Y' is not in the genome"),
+        ("1", 0, 5, r"range 0\.\.5 is outside the contig"),
+        ("1", 5, 11, r"range 5\.\.11 is outside the contig"),
+        ("1", 6, 4, r"range 6\.\.4 ends before it starts"),
+        ("1", "1", 5, "start '1' has type str; expected an integer"),
+    ],
 )
-def test_reader_is_not_called_for_an_unknown_contig_or_a_bad_range(contig, start, end):
+def test_reader_is_not_called_for_an_unknown_contig_or_a_bad_range(contig, start, end, message):
     genome = Names(["1"])
-    with pytest.raises(InputError):
+    with pytest.raises(InputError, match=message):
         genome.codes(contig, start, end)
     assert genome.calls == []
 

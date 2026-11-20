@@ -1,3 +1,4 @@
+import os
 import re
 import shutil
 
@@ -93,6 +94,64 @@ def test_extract_joins_the_ranges_in_list_order_and_complements_each_range_on_th
     assert got.lengths().tolist() == [17, 15, 0]
 
 
+class RecordingGenome(TwoBitGenome):
+    """A 2bit genome that records the contig and the start of each range that it reads."""
+
+    def __init__(self, path):
+        super().__init__(path)
+        self.reads = []
+
+    def codes(self, contig, start, end):
+        self.reads.append((contig, start))
+        return super().codes(contig, start, end)
+
+
+def test_extract_reads_the_ranges_in_the_contig_order_of_the_genome_then_by_start():
+    features = Features(
+        ids=("minus", "plus", "empty"),
+        gene_ids=("g1", "g2", "g3"),
+        contigs=("X", "1", "X"),
+        strands=np.array([-1, 1, 1], dtype=np.int8),
+        starts=np.array([200, 100, 1101, 1001], dtype=np.int64),
+        ends=np.array([209, 104, 1105, 1012], dtype=np.int64),
+        offsets=np.array([0, 2, 4, 4], dtype=np.int64),
+    )
+    with RecordingGenome(ANNOTATION / "synthetic.2bit") as genome:
+        assert list(genome.contigs)[:2] == ["1", "X"]
+        got = extract_sequences(features, genome)
+        reads = genome.reads
+        genome.reads = []
+        first_x, second_x = genome.sequence("X", 200, 209), genome.sequence("X", 100, 104)
+        first_one, second_one = genome.sequence("1", 1101, 1105), genome.sequence("1", 1001, 1012)
+    assert reads == [("1", 1001), ("1", 1101), ("X", 100), ("X", 200)]
+    assert got.sequence(0) == reverse_complement(first_x) + reverse_complement(second_x)
+    assert got.sequence(1) == first_one + second_one
+    assert got.sequence(2) == ""
+    assert got.offsets.tolist() == [0, 15, 32, 32]
+
+
+@pytest.mark.parametrize("end", [5004, 2**62])
+def test_extract_raises_for_a_range_after_the_end_of_its_contig_before_a_read(end):
+    features = Features(
+        ids=("inside", "outside"),
+        gene_ids=("g1", "g2"),
+        contigs=("1", "chrX"),
+        strands=np.array([1, -1], dtype=np.int8),
+        starts=np.array([100, 5000, 10], dtype=np.int64),
+        ends=np.array([200, end, 20], dtype=np.int64),
+        offsets=np.array([0, 1, 3], dtype=np.int64),
+    )
+    path = ANNOTATION / "synthetic.2bit"
+    message = (
+        f"contig 'X' of 'outside' in the genome {os.fspath(path)!r}: range 5000..{end} is "
+        "outside the contig of length 5003; expected 1 <= start and end <= 5003"
+    )
+    with RecordingGenome(path) as genome:
+        with pytest.raises(InputError, match=re.escape(message)):
+            extract_sequences(features, genome)
+        assert genome.reads == []
+
+
 def test_a_filter_without_a_transcript_gives_an_empty_set():
     with fixture_reference() as ref:
         got = ref.sequences(FeatureType.UTR3, TranscriptFilter(tx_ids=("absent",)))
@@ -167,6 +226,17 @@ def test_sequences_reject_a_feature_of_another_type():
     message = "feature '3UTR' has type str; expected a FeatureType"
     with fixture_reference() as ref, pytest.raises(InputError, match=re.escape(message)):
         ref.sequences("3UTR")
+
+
+@pytest.mark.parametrize("value", [None, {"canonical": False}, "default"])
+@pytest.mark.parametrize("method", ["transcripts", "features", "sequences"])
+def test_a_filter_that_is_not_a_transcript_filter_raises(method, value):
+    message = (
+        f"transcript_filter {value!r} has type {type(value).__name__}; expected a TranscriptFilter"
+    )
+    feature = () if method == "transcripts" else (FeatureType.UTR3,)
+    with fixture_reference() as ref, pytest.raises(InputError, match=re.escape(message)):
+        getattr(ref, method)(*feature, value)
 
 
 @pytest.mark.parametrize("genome", [("synthetic.2bit",), FA_GZ], ids=["2bit", "fa.gz"])

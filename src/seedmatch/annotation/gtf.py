@@ -3,21 +3,22 @@
 import os
 import re
 import sqlite3
-from collections.abc import Iterable
-from typing import Final, NamedTuple, NoReturn
+from functools import partial
+from typing import Final, NamedTuple, NoReturn, TextIO
 
-from seedmatch._io import local_path, open_text
-from seedmatch.annotation.ensdb import AnnotationDb
+from seedmatch._io import COORDINATE_MAX, local_path, open_text, parse_int64
+from seedmatch.annotation.ensdb import STRAND_SYMBOLS, AnnotationDb
 from seedmatch.errors import InputError
 
 _FIELDS: Final = 9
 _BATCH_ROWS: Final = 10_000
+_LINE_LIMIT: Final = 1 << 20
 # One pair of a key and a value. A quoted value can hold a semicolon, so the quotes come first.
 _ATTRIBUTE: Final = re.compile(r'([^\s;"]+)\s+(?:"([^"]*)"|([^\s;"]*))')
 _SUPPORT_LEVEL: Final = re.compile(r"\d+")
 _NOT_ASSIGNED: Final = re.compile(r"NA\b")
 _CANONICAL_TAG: Final = "Ensembl_canonical"
-_STRANDS: Final = {"+": 1, "-": -1}
+_STRANDS: Final = {symbol: strand for strand, symbol in STRAND_SYMBOLS.items()}
 _SCHEMA: Final = """
 CREATE TABLE gene (
   gene_id TEXT, gene_name TEXT, gene_biotype TEXT, seq_name TEXT, seq_strand INTEGER
@@ -30,7 +31,8 @@ CREATE TABLE tx (
 CREATE TABLE exon (exon_id TEXT, exon_seq_start INTEGER, exon_seq_end INTEGER);
 CREATE TABLE tx2exon (tx_id TEXT, exon_id TEXT, exon_idx INTEGER);
 CREATE TABLE gtf_exon (
-  tx_id TEXT, exon_id TEXT, exon_seq_start INTEGER, exon_seq_end INTEGER, line INTEGER
+  tx_id TEXT, exon_id TEXT, exon_seq_start INTEGER, exon_seq_end INTEGER, line INTEGER,
+  seq_name TEXT, seq_strand INTEGER
 );
 """
 # The statements run after the last line, so that the inserts do not maintain an index.
@@ -39,18 +41,52 @@ CREATE UNIQUE INDEX gene_gene_id_idx ON gene (gene_id);
 CREATE UNIQUE INDEX tx_tx_id_idx ON tx (tx_id);
 CREATE INDEX tx_gene_id_idx ON tx (gene_id);
 """
-_TX2EXON: Final = """
-INSERT INTO tx2exon
-SELECT staged.tx_id, staged.exon_id, ROW_NUMBER() OVER (
-    PARTITION BY staged.tx_id
-    ORDER BY CASE gene.seq_strand WHEN 1 THEN staged.exon_seq_start ELSE -staged.exon_seq_start END,
-             staged.line
-)
+_MISPLACED_EXON: Final = """
+SELECT staged.line, staged.tx_id, staged.exon_id, staged.seq_name, staged.seq_strand,
+       gene.seq_name, gene.seq_strand
 FROM gtf_exon AS staged
-JOIN tx ON tx.tx_id = staged.tx_id
-JOIN gene ON gene.gene_id = tx.gene_id
-ORDER BY staged.line
+LEFT JOIN tx ON tx.tx_id = staged.tx_id
+LEFT JOIN gene ON gene.gene_id = tx.gene_id
+WHERE gene.gene_id IS NULL OR staged.seq_name != gene.seq_name
+   OR staged.seq_strand != gene.seq_strand
+ORDER BY staged.line LIMIT 1
 """
+# The exons of a transcript in transcript order. The check of _MISPLACED_EXON runs first, so each
+# exon line has the strand of its transcript.
+_TRANSCRIPT_ORDER: Final = """
+PARTITION BY tx_id
+ORDER BY CASE seq_strand WHEN 1 THEN exon_seq_start ELSE -exon_seq_start END, line
+"""
+# If two exons of a transcript overlap, then two exons that are adjacent in the order of the start
+# also overlap, up or down. Thus each exon is compared only with the exon before it. The insert
+# leaves out each exon that overlaps the exon before it, so the row count shows an overlap without
+# a second sort. The f-strings join only the fixed SQL texts of this module.
+_TX2EXON: Final = f"""
+INSERT INTO tx2exon
+SELECT tx_id, exon_id, exon_idx FROM (
+  SELECT line, tx_id, exon_id, ROW_NUMBER() OVER by_order AS exon_idx,
+         MAX(exon_seq_start, LAG(exon_seq_start) OVER by_order)
+           <= MIN(exon_seq_end, LAG(exon_seq_end) OVER by_order) AS overlaps
+  FROM gtf_exon
+  WINDOW by_order AS ({_TRANSCRIPT_ORDER})
+)
+WHERE overlaps IS NOT 1
+ORDER BY line
+"""  # noqa: S608
+_OVERLAPPING_EXONS: Final = f"""
+SELECT line, tx_id, exon_id, exon_seq_start, exon_seq_end,
+       other_line, other_id, other_start, other_end
+FROM (
+  SELECT line, tx_id, exon_id, exon_seq_start, exon_seq_end,
+         LAG(line) OVER by_order AS other_line, LAG(exon_id) OVER by_order AS other_id,
+         LAG(exon_seq_start) OVER by_order AS other_start,
+         LAG(exon_seq_end) OVER by_order AS other_end
+  FROM gtf_exon
+  WINDOW by_order AS ({_TRANSCRIPT_ORDER})
+)
+WHERE MAX(exon_seq_start, other_start) <= MIN(exon_seq_end, other_end)
+ORDER BY line LIMIT 1
+"""  # noqa: S608
 
 
 class _Gene(NamedTuple):
@@ -82,8 +118,11 @@ def load_gtf(path: str | os.PathLike[str]) -> AnnotationDb:
     `transcript_support_level`. The database has no `chromosome` table and no `entrezgene` table.
     The reader writes no file.
 
-    A URL, a line that is not valid, a repeated transcript, and an exon without a transcript line
-    raise `InputError`, and a missing file raises `FileNotFoundError`.
+    A URL, a line that is not valid, a line of more than 2^20 characters with its line end, a
+    coordinate above 2^62 - 1, and a repeated transcript raise `InputError`. After the last line,
+    an exon, `CDS`, or `stop_codon` line without a transcript line, an exon on another contig or
+    strand than its transcript, and two exons of a transcript that overlap raise `InputError`. A
+    missing file raises `FileNotFoundError`.
     """
     local = local_path(path)
     source = os.fspath(local)
@@ -121,13 +160,27 @@ class _Reader:
         self._genes: dict[str, _Gene] = {}
         self._transcripts: dict[str, _Transcript] = {}
         self._cds: dict[str, tuple[int, int]] = {}
-        self._exons: list[tuple[str, str, int, int, int]] = []
+        # The line number and the feature of the first coding line that comes before the line of
+        # its transcript.
+        self._early_coding: dict[str, tuple[int, str]] = {}
+        self._exons: list[tuple[str, str, int, int, int, str, int]] = []
+        self._exon_lines = 0
         self._has_support_level = False
         self._has_canonical = False
 
-    def read(self, lines: Iterable[str]) -> None:
-        """Parse each line once. The exons go to the database in batches of `_BATCH_ROWS`."""
-        for number, line in enumerate(lines, start=1):
+    def read(self, lines: TextIO) -> None:
+        """Parse each line once. The exons go to the database in batches of `_BATCH_ROWS`.
+
+        A read holds at most `_LINE_LIMIT + 1` characters of a line, so a file without line ends
+        does not become one string.
+        """
+        for number, line in enumerate(iter(partial(lines.readline, _LINE_LIMIT + 1), ""), start=1):
+            if len(line) > _LINE_LIMIT:
+                self._fail(
+                    number,
+                    f"the line has more than {_LINE_LIMIT} characters; "
+                    f"expected at most {_LINE_LIMIT}, with the line end",
+                )
             if line.startswith("#"):
                 continue
             fields = line.rstrip("\r\n").split("\t")
@@ -148,6 +201,9 @@ class _Reader:
 
     def finish(self) -> None:
         """Write the genes, the transcripts, and the exon tables, then the indexes."""
+        for tx_id, (number, feature) in self._early_coding.items():
+            if tx_id not in self._transcripts:
+                self._fail(number, _no_transcript_line(feature, tx_id))
         connection = self._connection
         connection.executemany(
             "INSERT INTO gene VALUES (?, ?, ?, ?, ?)",
@@ -184,9 +240,7 @@ class _Reader:
         attributes = _attributes(fields[8])
         tx_id = self._required(number, attributes, "transcript_id", "transcript")
         gene_id = self._required(number, attributes, "gene_id", "transcript")
-        strand = _STRANDS.get(fields[6])
-        if strand is None:
-            self._fail(number, f"strand {fields[6]!r}; expected + or -")
+        strand = self._strand(number, fields)
         if tx_id in self._transcripts:
             self._fail(
                 number,
@@ -204,10 +258,9 @@ class _Reader:
         elif (gene.seq_name, gene.strand) != (fields[0], strand):
             self._fail(
                 number,
-                f"transcript {tx_id!r} is on contig {fields[0]!r} and strand {fields[6]!r}, "
-                f"but its gene {gene_id!r} is on contig {gene.seq_name!r} and strand "
-                f"{'+' if gene.strand == 1 else '-'!r}, from its first transcript line; "
-                "expected one contig and one strand for each gene",
+                f"transcript {tx_id!r} is on {_place(fields[0], strand)}, but its gene "
+                f"{gene_id!r} is on {_place(gene.seq_name, gene.strand)}, from its first "
+                "transcript line; expected one contig and one strand for each gene",
             )
         level = attributes.get("transcript_support_level")
         canonical = _CANONICAL_TAG in _tags(fields[8])
@@ -227,33 +280,39 @@ class _Reader:
         attributes = _attributes(fields[8])
         tx_id = self._required(number, attributes, "transcript_id", "exon")
         exon_id = self._required(number, attributes, "exon_id", "exon")
-        self._exons.append((tx_id, exon_id, start, end, number))
+        strand = self._strand(number, fields)
+        self._exons.append((tx_id, exon_id, start, end, number, fields[0], strand))
         if len(self._exons) >= _BATCH_ROWS:
             self._flush()
 
     def _coding(self, number: int, fields: list[str]) -> None:
         start, end = self._span(number, fields)
         tx_id = self._required(number, _attributes(fields[8]), "transcript_id", fields[2])
+        if tx_id not in self._transcripts:
+            self._early_coding.setdefault(tx_id, (number, fields[2]))
         first, last = self._cds.get(tx_id, (start, end))
         self._cds[tx_id] = (min(first, start), max(last, end))
 
     def _flush(self) -> None:
-        self._connection.executemany("INSERT INTO gtf_exon VALUES (?, ?, ?, ?, ?)", self._exons)
+        self._connection.executemany(
+            "INSERT INTO gtf_exon VALUES (?, ?, ?, ?, ?, ?, ?)", self._exons
+        )
+        self._exon_lines += len(self._exons)
         self._exons.clear()
 
     def _write_exons(self) -> None:
-        """Move the exon lines to `exon` and `tx2exon`, and drop the staging table."""
+        """Check the exon lines, move them to `exon` and `tx2exon`, and drop the staging table."""
         connection = self._connection
-        orphan = connection.execute(
-            "SELECT tx_id, line FROM gtf_exon WHERE tx_id NOT IN (SELECT tx_id FROM tx) "
-            "ORDER BY line LIMIT 1"
-        ).fetchone()
-        if orphan is not None:
-            tx_id, number = orphan
+        misplaced = connection.execute(_MISPLACED_EXON).fetchone()
+        if misplaced is not None:
+            number, tx_id, exon_id, contig, strand, tx_contig, tx_strand = misplaced
+            if tx_contig is None:
+                self._fail(number, _no_transcript_line("exon", tx_id))
             self._fail(
                 number,
-                f"the exon of transcript {tx_id!r} has no transcript line; "
-                "expected a line with the feature transcript",
+                f"exon {exon_id!r} of transcript {tx_id!r} is on {_place(contig, strand)}, but "
+                f"the transcript is on {_place(tx_contig, tx_strand)}; "
+                "expected the contig and the strand of the transcript line",
             )
         conflict = connection.execute(
             "SELECT exon_id FROM gtf_exon GROUP BY exon_id "
@@ -267,9 +326,21 @@ class _Reader:
             "FROM gtf_exon GROUP BY exon_id ORDER BY MIN(line)"
         )
         connection.execute("CREATE UNIQUE INDEX exon_exon_id_idx ON exon (exon_id)")
-        connection.execute(_TX2EXON)
+        if connection.execute(_TX2EXON).rowcount != self._exon_lines:
+            self._fail_overlap()
         connection.execute("CREATE INDEX tx2exon_tx_id_idx ON tx2exon (tx_id)")
         connection.execute("DROP TABLE gtf_exon")
+
+    def _fail_overlap(self) -> NoReturn:
+        number, tx_id, exon_id, start, end, other_line, other_id, other_start, other_end = (
+            self._connection.execute(_OVERLAPPING_EXONS).fetchone()
+        )
+        self._fail(
+            number,
+            f"exon {exon_id!r} ({start}-{end}) of transcript {tx_id!r} overlaps exon "
+            f"{other_id!r} ({other_start}-{other_end}) at line {other_line}; "
+            "expected exons of a transcript that do not overlap",
+        )
 
     def _fail_conflict(self, exon_id: str) -> NoReturn:
         rows = self._connection.execute(
@@ -287,11 +358,21 @@ class _Reader:
 
     def _span(self, number: int, fields: list[str]) -> tuple[int, int]:
         start, end = fields[3], fields[4]
-        if not (start.isdecimal() and end.isdecimal() and 0 < int(start) <= int(end)):
+        first = last = 0
+        if start.isdecimal() and end.isdecimal():
+            first = parse_int64(self._source, number, "start", start, COORDINATE_MAX)
+            last = parse_int64(self._source, number, "end", end, COORDINATE_MAX)
+        if not 0 < first <= last:
             self._fail(
                 number, f"start {start!r} and end {end!r}; expected integers with 1 <= start <= end"
             )
-        return int(start), int(end)
+        return first, last
+
+    def _strand(self, number: int, fields: list[str]) -> int:
+        strand = _STRANDS.get(fields[6])
+        if strand is None:
+            self._fail(number, f"strand {fields[6]!r}; expected + or -")
+        return strand
 
     def _required(self, number: int, attributes: dict[str, str], key: str, feature: str) -> str:
         value = attributes.get(key)
@@ -319,6 +400,17 @@ class _Reader:
     def _fail_at(self, text: str) -> NoReturn:
         message = f"{self._source!r}: {text}"
         raise InputError(message)
+
+
+def _place(contig: str, strand: int) -> str:
+    return f"contig {contig!r} and strand {STRAND_SYMBOLS[strand]!r}"
+
+
+def _no_transcript_line(feature: str, tx_id: str) -> str:
+    return (
+        f"the {feature} of transcript {tx_id!r} has no transcript line; "
+        "expected a line with the feature transcript"
+    )
 
 
 def _attributes(text: str) -> dict[str, str]:

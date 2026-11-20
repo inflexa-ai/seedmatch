@@ -10,6 +10,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
+from seedmatch._io import open_binary
 from seedmatch.annotation.genome import Genome, duplicate_contig_error
 from seedmatch.errors import InputError
 from seedmatch.sequence.alphabet import MASKS
@@ -48,7 +49,7 @@ class TwoBitGenome(Genome):
         super().__init__(path)
         self._shown = os.fspath(self.path)
         self._records: dict[str, _Record] = {}
-        with self.path.open("rb") as handle:
+        with open_binary(self.path) as handle:
             self._order = self._byte_order(handle.read(4))
             self._data = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
         try:

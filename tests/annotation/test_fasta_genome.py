@@ -73,8 +73,12 @@ def bgzf_bytes(data, block_size, subfields=b""):
             pairs.append((len(out), start))
         out += bgzf_block(data[start : start + block_size], subfields)
     out += bgzf_block(b"", subfields)
-    gzi = struct.pack("<Q", len(pairs)) + b"".join(struct.pack("<QQ", *pair) for pair in pairs)
-    return bytes(out), gzi
+    return bytes(out), gzi_bytes(pairs)
+
+
+def gzi_bytes(pairs):
+    """Return the .gzi bytes of the (compressed, uncompressed) offsets of the later blocks."""
+    return struct.pack("<Q", len(pairs)) + b"".join(struct.pack("<QQ", *pair) for pair in pairs)
 
 
 def write_genome(directory, sequences, ending="\n", block_size=None, subfields=b""):
@@ -799,28 +803,130 @@ def test_block_with_bad_data_or_a_bad_checksum_raises(tmp_path, edit, reason):
         genome.codes("a", 1, 4)
 
 
-def test_gzi_that_gives_another_block_length_raises(tmp_path):
-    path = copy_as(tmp_path, "synthetic.fa.gz", "synthetic.fa.gz")
-    gzi = bytearray((ANNOTATION / "synthetic.fa.gz.gzi").read_bytes())
-    gzi[16:24] = struct.pack("<Q", 65272)
-    (tmp_path / "synthetic.fa.gz.gzi").write_bytes(bytes(gzi))
-    message = (
-        r"synthetic\.fa\.gz\.gzi': the block at compressed offset 0 has 65273 bytes, "
-        r"but the \.gzi gives 65272"
+def gzi_error(path, problem):
+    shown = os.fspath(path)
+    return re.escape(
+        f"{shown}.gzi': {problem}; expected the .gzi of this file. Make it with `bgzip -r {shown}`"
     )
-    with FastaGenome(path) as genome, pytest.raises(InputError, match=message):
-        genome.codes("1", 1, 4)
 
 
-def test_gzi_that_points_into_a_block_raises(tmp_path):
+@pytest.mark.parametrize(
+    ("pairs", "problem"),
+    [
+        ([(0, 65273), (39090, 130543)], "compressed offset 0 is not above the offset before it, 0"),
+        (
+            [(39090, 65273), (18906, 130543)],
+            "compressed offset 18906 is not above the offset before it, 39090",
+        ),
+        (
+            [(18906, 65273), (18906, 130543)],
+            "compressed offset 18906 is not above the offset before it, 18906",
+        ),
+        (
+            [(18906, 0), (39090, 130543)],
+            "uncompressed offset 0 is not above the offset before it, 0",
+        ),
+        (
+            [(18906, 65273), (39090, 60000)],
+            "uncompressed offset 60000 is not above the offset before it, 65273",
+        ),
+    ],
+)
+def test_gzi_with_offsets_that_do_not_increase_raises_at_open(tmp_path, pairs, problem):
     path = copy_as(tmp_path, "synthetic.fa.gz", "synthetic.fa.gz")
-    gzi = bytearray((ANNOTATION / "synthetic.fa.gz.gzi").read_bytes())
-    gzi[8:16] = struct.pack("<Q", 18907)
-    (tmp_path / "synthetic.fa.gz.gzi").write_bytes(bytes(gzi))
+    (tmp_path / "synthetic.fa.gz.gzi").write_bytes(gzi_bytes(pairs))
+    with pytest.raises(InputError, match=gzi_error(path, problem)):
+        FastaGenome(path)
+
+
+@pytest.mark.parametrize(
+    ("pairs", "problem"),
+    [
+        (
+            [(18906, 65273), (39090, 100000)],
+            "uncompressed offset 100000 of the block at compressed offset 39090 is not 130543",
+        ),
+        (
+            [(18906, 65272), (39090, 130543)],
+            "uncompressed offset 65272 of the block at compressed offset 18906 is not 65273",
+        ),
+    ],
+)
+def test_gzi_with_an_uncompressed_offset_that_is_not_the_sum_of_the_block_sizes_raises_at_open(
+    tmp_path, inflations, pairs, problem
+):
+    path = copy_as(tmp_path, "synthetic.fa.gz", "synthetic.fa.gz")
+    (tmp_path / "synthetic.fa.gz.gzi").write_bytes(gzi_bytes(pairs))
+    problem += ", the sum of the ISIZE fields of the blocks before it"
+    with pytest.raises(InputError, match=gzi_error(path, problem)):
+        FastaGenome(path)
+    assert inflations == []
+
+
+@pytest.mark.parametrize(
+    ("offset", "block", "end"), [(5, 0, 18906), (18907, 18906, 39090), (39089, 18906, 39090)]
+)
+def test_gzi_that_points_into_a_block_raises_at_open(tmp_path, offset, block, end):
+    path = copy_as(tmp_path, "synthetic.fa.gz", "synthetic.fa.gz")
+    pairs = [(offset, 65273)] if offset < 18906 else [(18906, 65273), (offset, 130543)]
+    (tmp_path / "synthetic.fa.gz.gzi").write_bytes(gzi_bytes(pairs))
+    problem = (
+        f"compressed offset {offset} is inside the block at compressed offset {block}; "
+        f"the next block starts at {end}"
+    )
+    with pytest.raises(InputError, match=gzi_error(path, problem)):
+        FastaGenome(path)
+
+
+def test_gzi_that_skips_a_block_raises_at_the_read_of_the_block_before_the_gap(tmp_path):
+    path = copy_as(tmp_path, "synthetic.fa.gz", "synthetic.fa.gz")
+    (tmp_path / "synthetic.fa.gz.gzi").write_bytes(gzi_bytes([(39090, 130543)]))
+    problem = "the block at compressed offset 0 has 65273 bytes, but the .gzi gives 130543"
     with FastaGenome(path) as genome:
-        assert genome.sequence("1", 1, 4) == fasta_sequences()["1"][:4]
-        with pytest.raises(InputError, match=r"compressed offset 18907 is not BGZF.*bgzip"):
-            genome.codes("1", 64000, 64450)
+        assert genome.sequence("X", 1, 100) == fasta_sequences()["X"][:100]
+        with pytest.raises(InputError, match=gzi_error(path, problem)):
+            genome.codes("1", 1, 4)
+
+
+def test_open_of_a_bgzf_file_inflates_no_block(tmp_path, inflations):
+    path = write_genome(tmp_path, {"a": "ACGT" * 100}, block_size=50)
+    with FastaGenome(path):
+        assert inflations == []
+
+
+def test_concatenated_bgzf_files_with_an_end_block_inside_are_valid(tmp_path):
+    sequences = {"a": "ACGT" * 30, "b": "TTGCA" * 20}
+    data, fai = fasta_bytes(sequences, "\n")
+    middle = len(data) // 2
+    first, first_gzi = bgzf_bytes(data[:middle], 50)
+    second, second_gzi = bgzf_bytes(data[middle:], 50)
+    # `bgzip -r` lists no empty block, so the end block of the first file is between two entries.
+    pairs = [
+        *struct.iter_unpack("<QQ", first_gzi[8:]),
+        (len(first), middle),
+        *((c + len(first), u + middle) for c, u in struct.iter_unpack("<QQ", second_gzi[8:])),
+    ]
+    path = tmp_path / "genome.fa"
+    path.write_bytes(first + second)
+    (tmp_path / "genome.fa.gzi").write_bytes(gzi_bytes(pairs))
+    (tmp_path / "genome.fa.fai").write_text(fai)
+    with FastaGenome(path) as genome:
+        found = {name: genome.sequence(name, 1, len(bases)) for name, bases in sequences.items()}
+    assert found == sequences
+
+
+@pytest.mark.parametrize(
+    ("name", "suffix"),
+    [("synthetic.fa", ".fai"), ("synthetic.fa.gz", ".fai"), ("synthetic.fa.gz", ".gzi")],
+)
+def test_a_directory_as_an_index_file_raises(tmp_path, name, suffix):
+    path = copy_as(tmp_path, name, name)
+    index = tmp_path / f"{name}{suffix}"
+    index.unlink()
+    index.mkdir()
+    message = f"{os.fspath(index)!r}: the path is a directory; expected a file"
+    with pytest.raises(InputError, match=re.escape(message)):
+        FastaGenome(path)
 
 
 @pytest.mark.parametrize(("cut", "size"), [(3, "37 bytes"), (12, "28 bytes"), (39, "1 byte")])
@@ -954,3 +1060,11 @@ def test_open_genome_missing_file_raises_file_not_found(tmp_path):
 def test_open_genome_refuses_a_url():
     with pytest.raises(InputError, match="the path is a URL; expected a local path"):
         open_genome("https://example.org/genome.2bit")
+
+
+@pytest.mark.parametrize("reader", [open_genome, TwoBitGenome, FastaGenome])
+def test_a_directory_as_the_genome_raises(tmp_path, reader):
+    message = f"{os.fspath(tmp_path)!r}: the path is a directory; expected a file"
+    with pytest.raises(InputError, match=re.escape(message)) as raised:
+        reader(tmp_path)
+    assert isinstance(raised.value.__cause__, IsADirectoryError)

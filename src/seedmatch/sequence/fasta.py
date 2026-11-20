@@ -1,10 +1,12 @@
 """FASTA files."""
 
+import io
 import os
 import re
 from collections.abc import Iterator
 from pathlib import Path
 
+from seedmatch._io import open_binary
 from seedmatch.errors import InputError
 from seedmatch.sequence.sequence_set import SequenceSet
 
@@ -15,7 +17,7 @@ def _records(path: Path) -> Iterator[tuple[str, str]]:
     """Yield (ID, text) for each record, and read the file one line at a time."""
     name: str | None = None
     lines: list[str] = []
-    with path.open(encoding="utf-8") as handle:
+    with io.TextIOWrapper(open_binary(path), encoding="utf-8") as handle:
         for number, raw in enumerate(handle, start=1):
             line = raw.rstrip("\r\n")
             if not line:

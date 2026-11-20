@@ -104,6 +104,7 @@ class Reference:
 
         The default filter is the default of `load_annotations`.
         """
+        _check_types(("transcript_filter", transcript_filter, TranscriptFilter))
         return self.annotation.transcripts(transcript_filter)
 
     def features(
@@ -118,16 +119,11 @@ class Reference:
         `per_gene` selects the transcripts of each gene. The default filter is the default of
         `load_annotations`.
         """
-        for name, value, kind in (
+        _check_types(
             ("feature", feature, FeatureType),
+            ("transcript_filter", transcript_filter, TranscriptFilter),
             ("per_gene", per_gene, PerGene),
-        ):
-            if not isinstance(value, kind):
-                message = (
-                    f"{name} {shown(value)} has type {type(value).__name__}; "
-                    f"expected a {kind.__name__}"
-                )
-                raise InputError(message)
+        )
         rows = self.annotation.exon_rows(
             transcript_filter, coding_only=feature is not FeatureType.EXONS
         )
@@ -168,6 +164,16 @@ class Reference:
     def __exit__(self, *_exc_info: object) -> None:
         """Close the reference."""
         self.close()
+
+
+def _check_types(*checks: tuple[str, object, type]) -> None:
+    """Raise `InputError` for the first value of the (name, value, type) checks of another type."""
+    for name, value, kind in checks:
+        if not isinstance(value, kind):
+            message = (
+                f"{name} {shown(value)} has type {type(value).__name__}; expected a {kind.__name__}"
+            )
+            raise InputError(message)
 
 
 def _check_agreement(annotation: AnnotationDb, genome: Genome) -> None:

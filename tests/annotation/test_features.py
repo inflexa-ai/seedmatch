@@ -375,6 +375,67 @@ def test_exon_rows_with_a_strand_that_is_not_plus_or_minus_raise(tmp_path):
     db.close()
 
 
+def test_exon_rows_with_an_exon_start_after_its_end_raise(tmp_path):
+    path = copy_ensdb(
+        tmp_path, "UPDATE exon SET exon_seq_start = 80401 WHERE exon_id = 'ENSSYNE00000000025'"
+    )
+    db = AnnotationDb.open(path)
+    message = (
+        f"{os.fspath(path)!r}: exon 'ENSSYNE00000000025' of transcript {T12!r} has start "
+        "80401 and end 80400; expected integers with start <= end"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        db.exon_rows(EVERYTHING, coding_only=False)
+    db.close()
+
+
+@pytest.mark.parametrize(
+    ("table", "change", "problem"),
+    [
+        ("exon", "exon_seq_start = NULL", "exon.exon_seq_start None; expected an integer from 1"),
+        ("exon", "exon_seq_end = NULL", "exon.exon_seq_end None; expected an integer from 1"),
+        ("exon", "exon_seq_start = 'one'", "exon.exon_seq_start 'one'; expected an integer from 1"),
+        ("exon", "exon_seq_start = 0", "exon.exon_seq_start 0; expected an integer from 1"),
+        (
+            "exon",
+            f"exon_seq_end = {2**62}",
+            f"exon.exon_seq_end {2**62}; expected an integer from 1",
+        ),
+        ("tx", "tx_seq_start = NULL", "tx.tx_seq_start None; expected an integer from 1"),
+        ("tx", "tx_seq_start = 1.5", "tx.tx_seq_start 1.5; expected an integer from 1"),
+        (
+            "tx",
+            "tx_cds_seq_end = 'x'",
+            "tx.tx_cds_seq_end 'x'; expected NULL or an integer from 0",
+        ),
+        (
+            "tx",
+            "tx_cds_seq_start = -5",
+            "tx.tx_cds_seq_start -5; expected NULL or an integer from 0",
+        ),
+        (
+            "tx",
+            f"tx_cds_seq_end = {2**62}",
+            f"tx.tx_cds_seq_end {2**62}; expected NULL or an integer from 0",
+        ),
+    ],
+)
+def test_exon_rows_with_a_coordinate_that_is_not_an_integer_in_the_limits_raise(
+    tmp_path, table, change, problem
+):
+    where = "exon_id = 'ENSSYNE00000000025'" if table == "exon" else f"tx_id = {T12!r}"
+    # The statement has a change and a condition that this test fixes, so no input reaches it.
+    path = copy_ensdb(tmp_path, f"UPDATE {table} SET {change} WHERE {where}")  # noqa: S608
+    db = AnnotationDb.open(path)
+    message = (
+        f"{os.fspath(path)!r}: exon 'ENSSYNE00000000025' of transcript {T12!r} has {problem} "
+        "to 2^62 - 1"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        db.exon_rows(EVERYTHING, coding_only=False)
+    db.close()
+
+
 @pytest.mark.parametrize("per_gene", PerGene)
 @pytest.mark.parametrize("feature", FeatureType)
 def test_a_filter_without_a_match_gives_no_feature(feature, per_gene):

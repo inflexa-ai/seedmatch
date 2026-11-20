@@ -3,7 +3,7 @@
 import os
 from typing import Final
 
-from seedmatch._io import local_path
+from seedmatch._io import local_path, open_binary
 from seedmatch.annotation.fasta_genome import GZIP_MAGIC, FastaGenome
 from seedmatch.annotation.genome import Genome
 from seedmatch.annotation.twobit import SIGNATURES, TwoBitGenome
@@ -20,7 +20,7 @@ def open_genome(path: str | os.PathLike[str]) -> Genome:
     a `FastaGenome`. Other bytes raise `InputError`.
     """
     local = local_path(path)
-    with local.open("rb") as handle:
+    with open_binary(local) as handle:
         head = handle.read(_HEAD_SIZE)
     if not head:
         message = f"{os.fspath(local)!r}: the file is empty; expected a 2bit or FASTA file"

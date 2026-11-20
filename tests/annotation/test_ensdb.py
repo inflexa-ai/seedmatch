@@ -465,6 +465,139 @@ def test_sqlite_file_without_a_required_table_raises(tmp_path, table):
         AnnotationDb.open(path)
 
 
+REQUIRED_COLUMNS = {
+    "gene": ["gene_id", "gene_name", "gene_biotype", "seq_name", "seq_strand"],
+    "tx": [
+        "tx_id",
+        "tx_biotype",
+        "tx_seq_start",
+        "tx_seq_end",
+        "tx_cds_seq_start",
+        "tx_cds_seq_end",
+        "gene_id",
+    ],
+    "tx2exon": ["tx_id", "exon_id", "exon_idx"],
+    "exon": ["exon_id", "exon_seq_start", "exon_seq_end"],
+}
+OPTIONAL_COLUMNS = {"chromosome": ["seq_name", "seq_length"], "entrezgene": ["gene_id", "entrezid"]}
+EACH_FIELD = TranscriptFilter(
+    support_level=1,
+    gene_ids=("ENSSYNG00000000001",),
+    tx_ids=("ENSSYNT00000000001",),
+    symbols=("Syn1",),
+    tx_biotypes=("protein_coding",),
+    gene_biotypes=("protein_coding",),
+    entrez_ids=(1001,),
+)
+
+
+def test_the_queries_read_only_the_required_columns_and_the_optional_columns():
+    connection = sqlite3.connect(f"{ENSDB.resolve().as_uri()}?mode=ro", uri=True)
+    db = AnnotationDb(connection, "fixture")
+    read = set()
+
+    def record(action, table, column, *_):
+        if action == sqlite3.SQLITE_READ:
+            read.add((table, column))
+        return sqlite3.SQLITE_OK
+
+    connection.set_authorizer(record)
+    db.contig_names()
+    db.contig_lengths()
+    for transcript_filter in (EACH_FIELD, EVERYTHING):
+        db.transcripts(transcript_filter)
+        db.exon_rows(transcript_filter, coding_only=True)
+    db.close()
+    # Each table of an EnsDb has a rowid, and the optional tx columns have their own check.
+    optional = {("tx", "tx_is_canonical"), ("tx", "tx_support_level")}
+    tables = {**REQUIRED_COLUMNS, **OPTIONAL_COLUMNS}
+    assert {
+        (table, column)
+        for table, column in read - optional
+        if table in tables and column != "ROWID"
+    } == {(table, column) for table, columns in tables.items() for column in columns}
+
+
+@pytest.mark.parametrize(
+    ("table", "column"),
+    [(table, column) for table, columns in OPTIONAL_COLUMNS.items() for column in columns],
+)
+def test_an_optional_table_without_a_column_that_the_queries_read_raises_at_open(
+    tmp_path, table, column
+):
+    path = copy_ensdb(tmp_path, f"ALTER TABLE {table} RENAME COLUMN {column} TO renamed")
+    message = (
+        f"{os.fspath(path)!r}: the table {table!r} has no column {column!r}; "
+        f"expected the EnsDb columns {', '.join(OPTIONAL_COLUMNS[table])}"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        AnnotationDb.open(path)
+
+
+@pytest.mark.parametrize(
+    ("table", "column"),
+    [(table, column) for table, columns in REQUIRED_COLUMNS.items() for column in columns],
+)
+def test_a_required_table_without_a_column_that_the_queries_read_raises_at_open(
+    tmp_path, table, column
+):
+    path = copy_ensdb(tmp_path, f"ALTER TABLE {table} RENAME COLUMN {column} TO renamed")
+    message = (
+        f"{os.fspath(path)!r}: the table {table!r} has no column {column!r}; "
+        f"expected the EnsDb columns {', '.join(REQUIRED_COLUMNS[table])}"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        AnnotationDb.open(path)
+
+
+@pytest.mark.parametrize(
+    ("change", "problem"),
+    [
+        ("tx_seq_start = NULL", "tx.tx_seq_start None; expected an integer from 1 to 2^62 - 1"),
+        ("tx_seq_start = 0", "tx.tx_seq_start 0; expected an integer from 1 to 2^62 - 1"),
+        ("tx_seq_end = 'x'", "tx.tx_seq_end 'x'; expected an integer from 1 to 2^62 - 1"),
+        ("tx_seq_end = 1.5", "tx.tx_seq_end 1.5; expected an integer from 1 to 2^62 - 1"),
+        (
+            f"tx_seq_end = {2**62}",
+            f"tx.tx_seq_end {2**62}; expected an integer from 1 to 2^62 - 1",
+        ),
+        (
+            "tx_cds_seq_start = 'x'",
+            "tx.tx_cds_seq_start 'x'; expected NULL or an integer from 0 to 2^62 - 1",
+        ),
+        (
+            f"tx_cds_seq_end = {2**62}",
+            f"tx.tx_cds_seq_end {2**62}; expected NULL or an integer from 0 to 2^62 - 1",
+        ),
+        ("tx_support_level = 'x'", "tx.tx_support_level 'x'; expected NULL or an integer"),
+        ("tx_support_level = 1.5", "tx.tx_support_level 1.5; expected NULL or an integer"),
+        (
+            "tx_seq_start = 81601",
+            "start 81601 and end 81600; expected integers with start <= end",
+        ),
+    ],
+)
+def test_transcripts_with_a_number_that_is_not_valid_raise(tmp_path, change, problem):
+    # The statement has a change that this test fixes, so no input reaches it.
+    path = copy_ensdb(tmp_path, f"UPDATE tx SET {change} WHERE tx_id = 'ENSSYNT00000000012'")  # noqa: S608
+    message = f"{os.fspath(path)!r}: transcript 'ENSSYNT00000000012' has {problem}"
+    db = AnnotationDb.open(path)
+    with pytest.raises(InputError, match=re.escape(message) + "$"):
+        db.transcripts(EVERYTHING)
+    db.close()
+
+
+@pytest.mark.parametrize("level", [-3, 0, 99, 2**62])
+def test_transcripts_keep_a_support_level_outside_the_range_of_the_filter(tmp_path, level):
+    # The statement has a level that this test fixes, so no input reaches it.
+    change = f"UPDATE tx SET tx_support_level = {level} WHERE tx_id = 'ENSSYNT00000000012'"  # noqa: S608
+    path = copy_ensdb(tmp_path, change)
+    db = AnnotationDb.open(path)
+    frame = db.transcripts(EVERYTHING).set_index("tx_id")
+    db.close()
+    assert frame.loc["ENSSYNT00000000012", "support_level"] == level
+
+
 def test_sqlite_file_without_the_tx_table_raises(tmp_path):
     path = tmp_path / "other.sqlite"
     with sqlite3.connect(path) as connection:
@@ -616,7 +749,11 @@ def test_from_paths_closes_what_it_opened_when_it_fails(tmp_path, monkeypatch, f
 
     monkeypatch.setattr(AnnotationDb, "close", record_annotation)
     monkeypatch.setattr(FastaGenome, "close", record_genome)
-    with pytest.raises(InputError):
+    messages = {
+        "length": "contig 'X': the genome .* has length 4000",
+        "format": r"notes\.txt': not a 2bit or FASTA file",
+    }
+    with pytest.raises(InputError, match=messages[failure]):
         Reference.from_paths(ensdb=ENSDB, genome=genome)
     assert closed == (["genome", "annotation"] if failure == "length" else ["annotation"])
 

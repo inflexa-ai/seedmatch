@@ -263,11 +263,13 @@ The port copies the algorithm of `R/wass_dist.R:61-81`:
 - The GTF reader streams the file. It writes the transcripts and the exons into an in-memory SQLite database with the EnsDb tables. Thus the GTF path uses the same filters, feature derivation, and order rules as the EnsDb path. The memory is linear in the number of exon lines.
 - The row order of the in-memory tables is the line order of the GTF.
 - An Ensembl GTF CDS line excludes the stop codon, but an EnsDb CDS includes it. Thus the CDS of a transcript goes from the first base to the last base of its `CDS` and `stop_codon` lines.
-- The canonical flag comes from the `Ensembl_canonical` tag. The support level is the integer at the start of `transcript_support_level`. The biotypes come from `gene_biotype` and `transcript_biotype`, or from the GENCODE attributes `gene_type` and `transcript_type`.
+- The GTF reader raises `InputError` for a transcript with lines that do not agree (two exons that overlap, an exon with a contig or a strand different from the transcript line, or a `CDS` or `stop_codon` line without a transcript line).
+- The canonical flag comes from the `Ensembl_canonical` tag. The support level is the integer at the start of `transcript_support_level`. If the value starts with `NA`, the transcript has no support level. If the value starts with neither an integer nor `NA`, the reader raises `InputError`. The biotypes come from `gene_biotype` and `transcript_biotype`, or from the GENCODE attributes `gene_type` and `transcript_type`.
 - A GTF has no Entrez IDs, thus a filter on `entrez_ids` raises `InputError`.
 - The IDs stay as the GTF gives them. Thus a GENCODE ID keeps its version suffix.
-- The FASTA genome reader reads a plain FASTA file with its `.fai` index, or a BGZF file with its `.fai` and `.gzi` indexes. It uses only `zlib` and `mmap`. It decompresses only the blocks of the requested range. A gzip file that is not BGZF raises `InputError`.
+- The FASTA genome reader reads a plain FASTA file with its `.fai` index, or a BGZF file with its `.fai` and `.gzi` indexes. It uses only `zlib` and the file functions of Python. It decompresses only the blocks of the requested range. A gzip file that is not BGZF raises `InputError`.
 - GENCODE contig names have the prefix `chr`, but the Ensembl FASTA names do not. For each contig, the extraction uses the first genome name that exists: the same name, the name without `chr`, or the name with `chr`. `chrM` and `MT` are the same contig. If no contig name of the annotation agrees with a genome contig, `Reference` raises `InputError`.
+- A GTF has no contig lengths. Thus, on this path, `Reference` does not compare the contig lengths with the genome.
 - This path makes no parity claim, because the catalog has a different Ensembl release from SeedMatchR. A consistency test compares this path with the EnsDb path on one Ensembl release.
 
 ### Reference objects

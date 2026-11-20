@@ -1,5 +1,6 @@
 import re
 import sqlite3
+import tracemalloc
 
 import pandas as pd
 import pytest
@@ -257,8 +258,8 @@ def test_exon_order_follows_the_strand_and_not_the_line_order(tmp_path):
         line("exon", 800, 900, EXON1.replace("E1", "E2")),
         line("exon", 100, 200, EXON1),
         line("transcript", 100, 900, minus, strand="-"),
-        line("exon", 100, 200, 'gene_id "G2"; transcript_id "T2"; exon_id "E3";'),
-        line("exon", 800, 900, 'gene_id "G2"; transcript_id "T2"; exon_id "E4";'),
+        line("exon", 100, 200, 'gene_id "G2"; transcript_id "T2"; exon_id "E3";', strand="-"),
+        line("exon", 800, 900, 'gene_id "G2"; transcript_id "T2"; exon_id "E4";', strand="-"),
     )
     assert rows.tx_id.tolist() == ["T1", "T1", "T2", "T2"]
     assert rows.exon_start.tolist() == [100, 800, 800, 100]
@@ -267,7 +268,13 @@ def test_exon_order_follows_the_strand_and_not_the_line_order(tmp_path):
 def many_exons(count):
     lines = [line("transcript", 1, 10 * count, TX1, strand="-")]
     lines += [
-        line("exon", 10 * i + 1, 10 * i + 5, f'gene_id "G1"; transcript_id "T1"; exon_id "E{i}";')
+        line(
+            "exon",
+            10 * i + 1,
+            10 * i + 5,
+            f'gene_id "G1"; transcript_id "T1"; exon_id "E{i}";',
+            strand="-",
+        )
         for i in range(count)
     ]
     return lines
@@ -429,6 +436,180 @@ def test_a_line_with_a_bad_field_or_a_missing_attribute_raises_with_its_line_num
     assert expected in str(raised.value)
 
 
+@pytest.mark.parametrize(
+    ("feature", "start", "end", "message"),
+    [
+        ("transcript", 100, 2**62, "end 4611686018427387904 is too large"),
+        ("transcript", 100, 2**63, "end 9223372036854775808 is too large"),
+        ("exon", 2**64, 2**64, "start 18446744073709551616 is too large"),
+        ("transcript", 100, "9" * 5000, f"end {'9' * 40}... is too large"),
+        ("CDS", "0" * 30 + "1", 2**62, "end 4611686018427387904 is too large"),
+    ],
+)
+def test_a_coordinate_above_2_62_minus_1_raises_with_its_line_number(
+    tmp_path, feature, start, end, message
+):
+    gtf = write_gtf(tmp_path, "# header", line(feature, start, end, f'{TX1} exon_id "E1";'))
+    expected = f"{str(gtf)!r}: line 2: {message}; expected at most 2^62 - 1"
+    with pytest.raises(InputError, match=re.escape(expected)):
+        load_gtf(gtf)
+
+
+def test_a_coordinate_of_2_62_minus_1_is_valid(tmp_path):
+    got = transcripts_of(tmp_path, line("transcript", "0009", 2**62 - 1, TX1))
+    assert got["start"].tolist() == [9]
+    assert got["end"].tolist() == [2**62 - 1]
+
+
+def long_transcript_line(length):
+    """Return a transcript line of `length` characters with its line end."""
+    head = line("transcript", 100, 500, f'{TX1} note "')
+    return head + "x" * (length - len(head) - len('";\n')) + '";\n'
+
+
+@pytest.mark.parametrize(("length", "valid"), [(2**20, True), (2**20 + 1, False)])
+def test_a_line_of_more_than_1_mib_with_its_line_end_raises(tmp_path, length, valid):
+    path = tmp_path / "long.gtf"
+    path.write_text(line("exon", 100, 500, EXON1) + "\n" + long_transcript_line(length))
+    if valid:
+        annotation = load_gtf(path)
+        annotation.close()
+    else:
+        message = (
+            f"{str(path)!r}: line 2: the line has more than 1048576 characters; "
+            "expected at most 1048576, with the line end"
+        )
+        with pytest.raises(InputError, match=re.escape(message)):
+            load_gtf(path)
+
+
+def test_a_long_line_raises_before_the_reader_holds_more_than_about_1_mib_of_it(tmp_path):
+    path = tmp_path / "long.gtf"
+    path.write_text(line("transcript", 100, 500, TX1) + "\n" + "x" * (16 << 20))
+    tracemalloc.start()
+    try:
+        with pytest.raises(InputError, match=re.escape("line 2: the line has more than 1048576")):
+            load_gtf(path)
+        _current, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 3 << 20
+
+
+@pytest.mark.parametrize(
+    ("exons", "message"),
+    [
+        (
+            [line("exon", 201, 210, EXON1), line("exon", 201, 210, EXON1)],
+            "line 3: exon 'E1' (201-210) of transcript 'T1' overlaps exon 'E1' (201-210) at line 2",
+        ),
+        (
+            [line("exon", 100, 200, EXON1), line("exon", 200, 300, EXON1.replace("E1", "E2"))],
+            "line 3: exon 'E2' (200-300) of transcript 'T1' overlaps exon 'E1' (100-200) at line 2",
+        ),
+        (
+            [line("exon", 300, 400, EXON1), line("exon", 100, 900, EXON1.replace("E1", "E2"))],
+            "line 2: exon 'E1' (300-400) of transcript 'T1' overlaps exon 'E2' (100-900) at line 3",
+        ),
+        (
+            [
+                line("exon", 700, 900, EXON1, strand="-"),
+                line("exon", 100, 200, EXON1.replace("E1", "E2"), strand="-"),
+                line("exon", 150, 160, EXON1.replace("E1", "E3"), strand="-"),
+            ],
+            "line 3: exon 'E2' (100-200) of transcript 'T1' overlaps exon 'E3' (150-160) at line 4",
+        ),
+    ],
+    ids=["same line twice", "one base", "inside another", "minus strand"],
+)
+def test_exons_of_a_transcript_that_overlap_raise(tmp_path, exons, message):
+    strand = exons[0].split("\t")[6]
+    gtf = write_gtf(tmp_path, line("transcript", 100, 900, TX1, strand=strand), *exons)
+    expected = f"{str(gtf)!r}: {message}; expected exons of a transcript that do not overlap"
+    with pytest.raises(InputError, match=re.escape(expected)):
+        load_gtf(gtf)
+
+
+def test_exons_of_a_transcript_that_touch_are_valid(tmp_path):
+    rows = exons_of(
+        tmp_path,
+        line("transcript", 100, 300, TX1),
+        line("exon", 100, 200, EXON1),
+        line("exon", 201, 300, EXON1.replace("E1", "E2")),
+    )
+    assert rows.exon_start.tolist() == [100, 201]
+
+
+@pytest.mark.parametrize(
+    ("lines", "message"),
+    [
+        (
+            [line("transcript", 100, 500, TX1), line("exon", 100, 200, EXON1).replace("1", "X", 1)],
+            (
+                "line 2: exon 'E1' of transcript 'T1' is on contig 'X' and strand '+', but the "
+                "transcript is on contig '1' and strand '+'"
+            ),
+        ),
+        (
+            [line("transcript", 100, 500, TX1), line("exon", 100, 200, EXON1, strand="-")],
+            (
+                "line 2: exon 'E1' of transcript 'T1' is on contig '1' and strand '-', but the "
+                "transcript is on contig '1' and strand '+'"
+            ),
+        ),
+        (
+            [line("exon", 100, 200, EXON1, strand="-"), line("transcript", 100, 500, TX1)],
+            (
+                "line 1: exon 'E1' of transcript 'T1' is on contig '1' and strand '-', but the "
+                "transcript is on contig '1' and strand '+'"
+            ),
+        ),
+    ],
+    ids=["contig", "strand", "exon before its transcript"],
+)
+def test_an_exon_on_another_contig_or_strand_than_its_transcript_raises(tmp_path, lines, message):
+    gtf = write_gtf(tmp_path, *lines)
+    expected = f"{str(gtf)!r}: {message}; expected the contig and the strand of the transcript line"
+    with pytest.raises(InputError, match=re.escape(expected)):
+        load_gtf(gtf)
+
+
+def test_an_exon_with_a_strand_that_is_not_plus_or_minus_raises(tmp_path):
+    gtf = write_gtf(
+        tmp_path, line("transcript", 100, 500, TX1), line("exon", 100, 200, EXON1, strand=".")
+    )
+    with pytest.raises(InputError, match=re.escape(f"{str(gtf)!r}: line 2: strand '.'; expected")):
+        load_gtf(gtf)
+
+
+@pytest.mark.parametrize("feature", ["CDS", "stop_codon"])
+def test_a_coding_line_without_a_transcript_line_raises(tmp_path, feature):
+    other = 'gene_id "G2"; transcript_id "T9";'
+    gtf = write_gtf(
+        tmp_path,
+        line("transcript", 100, 500, TX1),
+        line("exon", 100, 500, EXON1),
+        line(feature, 120, 200, other),
+        line(feature, 300, 400, other),
+    )
+    message = (
+        f"{str(gtf)!r}: line 3: the {feature} of transcript 'T9' has no transcript line; "
+        "expected a line with the feature transcript"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        load_gtf(gtf)
+
+
+def test_a_cds_line_before_its_transcript_line_is_read(tmp_path):
+    got = transcripts_of(
+        tmp_path,
+        line("CDS", 120, 200, 'gene_id "G1"; transcript_id "T1";'),
+        line("transcript", 100, 500, TX1),
+    )
+    assert got["cds_start"].tolist() == [120]
+    assert got["cds_end"].tolist() == [200]
+
+
 @pytest.mark.parametrize("text", ["NA", "NA (assigned to previous version 3)"])
 def test_a_support_level_that_starts_with_na_is_missing(tmp_path, text):
     attributes = f'{TX1} transcript_support_level "{text}";'
@@ -479,8 +660,8 @@ def test_features_of_a_gtf_with_the_exons_of_a_minus_strand_gene_come_in_transcr
     gtf = write_gtf(
         tmp_path,
         line("transcript", 100, 900, TX1, strand="-"),
-        line("exon", 100, 200, EXON1),
-        line("exon", 800, 900, EXON1.replace("E1", "E2")),
+        line("exon", 100, 200, EXON1, strand="-"),
+        line("exon", 800, 900, EXON1.replace("E1", "E2"), strand="-"),
         line("CDS", 150, 200, attributes),
         line("stop_codon", 147, 149, attributes),
     )
@@ -546,7 +727,11 @@ def test_load_gtf_closes_its_connection_when_it_raises(tmp_path, monkeypatch, fa
         "repeated transcript": [line("transcript", 1, 9, TX1), line("transcript", 1, 9, TX1)],
         "exon without a transcript": [line("exon", 1, 9, EXON1)],
     }
-    with pytest.raises(InputError):
+    messages = {
+        "repeated transcript": "line 2: transcript 'T1' occurs twice",
+        "exon without a transcript": "line 1: the exon of transcript 'T1' has no transcript line",
+    }
+    with pytest.raises(InputError, match=messages[fault]):
         load_gtf(write_gtf(tmp_path, *faults[fault]))
     assert len(connections) == 1
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):

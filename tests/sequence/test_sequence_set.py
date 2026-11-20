@@ -216,6 +216,12 @@ def test_read_fasta_of_an_empty_file_gives_an_empty_set(tmp_path):
     assert len(read_fasta(tmp_path / "x.fa")) == 0
 
 
+def test_read_fasta_of_a_directory_raises_input_error(tmp_path):
+    message = f"{str(tmp_path)!r}: the path is a directory; expected a file"
+    with pytest.raises(InputError, match=re.escape(message)):
+        read_fasta(tmp_path)
+
+
 def test_read_fasta_rejects_a_sequence_line_before_the_first_header(tmp_path):
     (tmp_path / "x.fa").write_text("\nACGT\n>a\nAC\n")
     with pytest.raises(InputError, match=r"x\.fa.*line 2.*before the first header"):
