@@ -16,6 +16,11 @@ double_to_string <- function(x) {
   sprintf("%.17g", x)
 }
 
+# write_golden writes a NaN as text. A script that has no NaN in a golden file stops at one.
+stop_on_nan <- function(df) {
+  stopifnot(!any(vapply(df, function(col) is.double(col) && any(is.nan(col)), logical(1))))
+}
+
 write_golden <- function(df, path, script, notes = character(0)) {
   df[] <- lapply(df, function(col) if (is.double(col) && !is.object(col)) double_to_string(col) else col)
   out <- file.path(GOLDEN_DIR, path)
@@ -46,4 +51,23 @@ with_seedmatchr_patch <- function(patch, code) {
   for (name in names) utils::assignInNamespace(name, patched[[name]], ns = "SeedMatchR")
   on.exit(for (name in names) utils::assignInNamespace(name, originals[[name]], ns = "SeedMatchR"))
   code
+}
+
+# A note is one comment line, thus a message of R with line breaks becomes one line.
+one_line <- function(text) gsub("[[:space:]]+", " ", text)
+
+# dplyr chains its errors. The message of the first error in the chain is the message of the cause.
+root_message <- function(e) {
+  while (!is.null(e$parent)) e <- e$parent
+  one_line(conditionMessage(e))
+}
+
+# The message of the error of expr. The script stops if expr gives no error.
+error_of <- function(expr) {
+  message <- tryCatch({
+    expr
+    NULL
+  }, error = root_message)
+  if (is.null(message)) stop("an expected error did not occur")
+  message
 }

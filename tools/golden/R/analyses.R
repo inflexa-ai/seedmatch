@@ -4,27 +4,8 @@ PRROC_NOTE <- paste0("PRROC: ", packageVersion("PRROC"))
 PATCH_DIR <- "tools/golden/patches"
 
 write_analysis <- function(df, path, notes = character(0)) {
-  stopifnot(!any(vapply(df, function(col) is.double(col) && any(is.nan(col)), logical(1))))
+  stop_on_nan(df)
   write_golden(df, file.path("analyses", path), "analyses.R", notes)
-}
-
-# A note is one comment line, thus a message of R with line breaks becomes one line.
-one_line <- function(text) gsub("[[:space:]]+", " ", text)
-
-# dplyr chains its errors. The message of the first error in the chain is the message of the cause.
-root_message <- function(e) {
-  while (!is.null(e$parent)) e <- e$parent
-  one_line(conditionMessage(e))
-}
-
-# The message of the error of expr. The script stops if expr gives no error.
-error_of <- function(expr) {
-  message <- tryCatch({
-    expr
-    NULL
-  }, error = root_message)
-  if (is.null(message)) stop("an expected error did not occur")
-  message
 }
 
 data <- load_test_data()

@@ -300,6 +300,75 @@ The comment lines give the R result for these lines of a file:
 - a field with `#`
 - a field with `'`
 
+## Golden files of the non-canonical searches
+
+The script `noncanonical.R` writes the golden files in `tests/golden/noncanonical/`. They give the R results of `get_compensatory_sequences` and of the wobble and bulge pipeline:
+
+```bash
+tools/golden/run.sh tools/golden/R/noncanonical.R
+```
+
+The script reads `Test_seqs.fa` and `DESEQ2_results.tsv` from `tests/data/`. It also reads the synthetic fixtures `compensatory_cases.tsv` and `wobble_bulge_cases.tsv` from the same directory. The script draws no random numbers, thus the second run writes the same bytes as the first run.
+
+The script stops if the R result of a note changes from the value that this section gives. The notes `wobble_seeds_*` and `formals_get_target_bulged_guides` have no such check.
+
+### Patch of get_compensatory_sequences
+
+`get_compensatory_sequences` of SeedMatchR always returns an empty data frame (`D-004`). The file `tools/golden/patches/get_compensatory_sequences.R` is a copy of the function with these changes. `noncanonical.R` puts it into the SeedMatchR namespace with `with_seedmatchr_patch`.
+
+- The patch removes the test `if (nrow(compensatory_regions_captured) == 0)`, its early return, the `else {`, and the brace that closes the `else` (`R/get_compensatory_sequences.R:67-77` and `:130`). The frame of `:57-66` is always empty, thus the test is always true. The patch keeps the body of the `else` (`:78-129`).
+- At `:99`, the patch writes `Biostrings::reverseComplement(Biostrings::DNAString(seed))`. The `gsub` at `:34` makes `seed` a character string, and `reverseComplement` has no method for it. Without this change, the function stops at the first match.
+
+### Compensatory search
+
+`compensatory.tsv` has the column `case`, then each R column of the result in R order, from `Seed_in_Transcript` to `relative_position_guide_seq_end` (`R/get_compensatory_sequences.R:116-128`). In each case, the seed is `get_seed(guide, <seed>)$Target.Seq`.
+
+The test-data cases use `GUIDE` and the sequences of `Test_seqs.fa`. An argument that a case does not name has the R default: `compensatory_region_length_min = 6`, `compensatory_region_length_max = NA`, `limit = 100`, `mismatch_ = 1`, and `mismatch_compensatory_region_ = 0`.
+
+- `vignette`: the seed `mer7m8` and the defaults.
+- `seed_mm0`: `mer7m8` and `mismatch_ = 0`.
+- `min8_max10`: `mer7m8`, `compensatory_region_length_min = 8`, and `compensatory_region_length_max = 10`.
+- `limit40`: `mer7m8` and `limit = 40`.
+- `region_mm1`: `mer7m8`, `compensatory_region_length_min = 9`, and `mismatch_compensatory_region_ = 1`.
+- `mer6`: the seed `mer6` and the defaults.
+
+The synthetic cases come from `tests/data/compensatory_cases.tsv`. Each case ID of this file is a case of the golden file. The seed is `mer7m8` of the guide of the case, and the fields of the file give the other arguments:
+
+- `min_length` is `compensatory_region_length_min`, and `max_length` is `compensatory_region_length_max`. The text `NA` is the R default.
+- `limit` is `limit`, and `seed_mismatch` is `mismatch_`.
+- `seq_id` gives the names of the `DNAStringSet`, and `sequence` gives its sequences.
+
+A case where the patched function stops has no row. The file has a note `<case>: the patched function stops with: <message>` for it. The case `no_site` has such a note, because no seed match has a region.
+
+The comment lines of `compensatory.tsv` give the version of `dplyr`, the patch, and these R results:
+
+- `original_vignette`: the unpatched function for the `vignette` case gives 0 rows and the message `No compensatory regions found.`
+- `line_99`: the error of `Biostrings::reverseComplement(gsub("U", "T", get_seed(GUIDE, "mer7m8")$Target.Seq))`. This is the error that the second change of the patch prevents.
+- `repeated_name_r`: the number of times that `seqs[c("g", "g")]` holds the first sequence. The value is 2. R selects the sequences with a seed match by name.
+- `relative_position_seq_g6`: `SeedMatchR:::relative_position_seq("TATAGA", "UUAUAGAUAUAGACACUGUUUUA")`, with the guide of `region_at_g2_r`, gives the start `2,8` and the end `7,13`.
+- `min_17`: the substrings that the loop of `R/get_compensatory_sequences.R:52-54` makes for `compensatory_region_length_min = 17`. These are the 16 bases of g8 to g23, three times. The maximum is 16, thus the loop runs the lengths 17 and 16. The length 17 gives the starts 1 and 0, and the length 16 gives the start 1.
+- `gc_content`: `.gc_content("GCAT")` gives 50, and `.gc_content("")` gives `NaN`.
+
+### Wobble and bulge pipeline
+
+`wobble_bulge_r.tsv` has the columns `case`, `guide`, and `sequence` of `tests/data/wobble_bulge_cases.tsv`. It also has the columns `r_rule_bulges_lim_1` and `r_rule_bulges_lim_4`. They hold the count of the R rule for `bulges_lim` 1 and 4, with `nt = 3`.
+
+R stops before it counts. The pipeline gives `.get_target_bulged_guides` its arguments in the wrong order (`R/run_wobble_bulges_pipeline.R:27`). Also, `.sequence_with_tb` reads `bulge_allowance` from the global environment, where the variable does not exist.
+
+To show the count rule of `:35-55`, the script does the loop of `.get_target_bulged_guides` itself. It gives the length of the guide and `bulges_lim` in the documented order. Before each call of `.sequence_with_tb`, it sets `bulge_allowance` in the global environment. After the call, it removes the variable.
+
+The count of a case is a sum of `vcountPattern(..., fixed = FALSE)` for the sequence of the case. The sum goes over the wobble seeds of `.get_all_combination_w_b` and over the strings that `check_bulges_nt(..., 3)` keeps.
+
+A bulged string of R has `N` in place of seed letters (`.sequence_with_tb`). Thus R counts a mismatch and not an extra target base. Each wobble seed adds its own count, thus one site counts more than one time.
+
+The comment lines of `wobble_bulge_r.tsv` give the version of `gtools` and these R results:
+
+- `pipeline_error` and `pipeline_error_bulges_lim_1`: the error of `run_wobble_bulges_pipeline(GUIDE, res = d$res, features = d$seqs, silent = TRUE)`, with the default `bulges_lim` and with 1. Each gives `object 'bulge_allowance' not found`. The script wraps each call in `utils::capture.output`, because the pipeline prints a line also with `silent = TRUE` (`:22`).
+- `wobble_seeds_guide`, `wobble_seeds_4_u`, and `wobble_seeds_5_u_in_seed`: the `seed_combinations` of `.get_all_combination_w_b` for `GUIDE`, for `AUAUAGAGCAAGAACACAGAUAU`, and for `AUUUUUAGCAAGAACACAGAUAA`.
+- `wobble_seeds_2_u` and `wobble_seeds_0_u`: the error of `.get_all_combination_w_b` for `AUAGAGAGCAAGAACACAGAUAA` and for `CAGAGAGCAAGAACACAGACAAC`.
+- `formals_get_target_bulged_guides`: the names of the formals of `.get_target_bulged_guides`, in their order.
+- `check_bulges_nt`: `check_bulges_nt(RNAStringSet(c("CNUCUAUA", "CUCUANUA", "CUCNUAUA")), 3)` keeps `CUCUANUA` and `CUCNUAUA`.
+
 ## Patch of vmatchPattern2
 
 `vmatchPattern2` of SeedMatchR ignores `with.indels` and `min.mismatch` (`docs/divergences.md`, `D-001`). The file `tools/golden/patches/vmatchPattern2.R` defines a patched function with the same arguments and the same data frame. `full_search.R` puts it into the SeedMatchR namespace with `assignInNamespace`. As a result, the ranges in the golden files obey the same rules as the counts. A script that needs the original function does not source the patch.
@@ -318,6 +387,9 @@ A script in `tools/golden/R/` starts with `source("tools/golden/R/common.R")`. T
 - `load_test_data()` returns the list `res`, `seqs`, and `guide` from `tests/data/`.
 - `write_golden(df, path, script, notes)` writes the data frame `df` to `tests/golden/<path>`. The argument `script` is the file name of the script, for example `check_env.R`. Each text in the optional argument `notes` becomes one more comment line. If `path` ends with `.gz`, the file is gzip. The gzip header has no time stamp and no file name, thus each run writes the same bytes.
 - `with_seedmatchr_patch(patch, code)` puts each function of the file `patch` into the SeedMatchR namespace. Then it evaluates `code` and replaces the patched functions with the original functions.
+- `stop_on_nan(df)` stops the script if a double column of `df` holds `NaN`, because `write_golden` writes a `NaN` as text.
+- `one_line(text)` replaces each run of white space with one space, thus a note stays one comment line.
+- `error_of(expr)` returns the message of the error of `expr`. For an error that dplyr chains, it returns the message of the first error in the chain. The script stops if `expr` gives no error.
 
 An annotation script also sources `tools/golden/R/annotation_common.R`, which has these values and functions:
 

@@ -1,0 +1,24 @@
+# generated-by: tools/golden/R/noncanonical.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# gtools: 3.9.5
+# pipeline_error: run_wobble_bulges_pipeline(GUIDE, res, seqs) stops with: object 'bulge_allowance' not found
+# pipeline_error_bulges_lim_1: with bulges_lim = 1, it stops with: object 'bulge_allowance' not found
+# wobble_seeds_guide: CTCTRTR,CTCTATR,CTCTRTA,CTCTATA
+# wobble_seeds_4_u: AUAUAGAGCAAGAACACAGAUAU (4 U) gives only CTCTRTR
+# wobble_seeds_2_u: AUAGAGAGCAAGAACACAGAUAA (2 U) stops with: v is either non-atomic or too short
+# wobble_seeds_0_u: CAGAGAGCAAGAACACAGACAAC (no U) stops with: bad value of n
+# wobble_seeds_5_u_in_seed: AUUUUUAGCAAGAACACAGAUAA gives CTARRRR,CTRARRR,CTAARRR,CTRRARR,CTARARR,CTRAARR,CTRRRAR,CTARRAR,CTRARAR,CTRRAAR,CTRRRRA,CTARRRA,CTRARRA,CTRRARA,CTRRRAA
+# formals_get_target_bulged_guides: guide.seq,guide_seq_length,bulges_lim; the pipeline passes (x, bulges_lim, guide_seq_length)
+# check_bulges_nt: of CNUCUAUA, CUCUANUA, and CUCNUAUA, nt = 3 keeps CUCUANUA,CUCNUAUA
+case	guide	sequence	r_rule_bulges_lim_1	r_rule_bulges_lim_4
+perfect	UUAUAGAGCAAGAACACUGUUUU	GGGGGGGGCTCTATAGGGGGGGG	12	24
+wobble_g4	UUAUAGAGCAAGAACACUGUUUU	GGGGGGGGCTCTGTAGGGGGGGG	8	20
+mismatch_t4	UUAUAGAGCAAGAACACUGUUUU	GGGGGGGGCTCCATAGGGGGGGG	4	12
+bulge_after_g5	UUAUAGAGCAAGAACACUGUUUU	GGGGGGGGCTCATATAGGGGGGG	0	0
+bulge_after_g4	UUAUAGAGCAAGAACACUGUUUU	GGGGGGGGCTCTGATAGGGGGGG	0	0
+bulge_4_after_g7	UUAUAGAGCAAGAACACUGUUUU	GGGGGGGGCAAAATCTATAGGGG	0	0
+bulge_5_after_g7	UUAUAGAGCAAGAACACUGUUUU	GGGGGGGGCAAAAATCTATAGGG	0	0
+one_start_two_patterns	UUAUAGAGCAAGAACACUGUUUU	GGGGGGGGCTCTATATATAGGGG	12	24
+five_wobbles	AUUUUUAGCAAGAACACAGAUAA	AAAACTGGGGGAAAA	3	25
