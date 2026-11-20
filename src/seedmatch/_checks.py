@@ -2,6 +2,7 @@
 
 import math
 import operator
+from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from enum import Enum
 from typing import SupportsIndex
@@ -118,6 +119,21 @@ def as_items[T](  # noqa: PLR0913
     return tuple(as_item(f"{name}[{position}]", item) for position, item in enumerate(items))
 
 
+def as_generator(rng: object) -> np.random.Generator:
+    """Return `rng` if it is a `Generator`, or a `Generator` that an int seed makes."""
+    if isinstance(rng, np.random.Generator):
+        return rng
+    if isinstance(rng, bool | np.bool_) or not isinstance(rng, int | np.integer):
+        message = (
+            f"rng {shown(rng)} has type {type(rng).__name__}; "
+            "expected a numpy.random.Generator or an int"
+        )
+        raise InputError(message)
+    seed = operator.index(rng)
+    check_not_negative("rng", seed)
+    return np.random.default_rng(seed)
+
+
 def as_number(name: str, value: object) -> float:
     """Return the value as a plain float. A bool is not a number. NaN and infinity are floats."""
     if isinstance(value, bool | np.bool_) or not isinstance(
@@ -143,13 +159,15 @@ def as_cutoff(name: str, value: object) -> float:
     return cutoff
 
 
-def as_data_frame(value: object, *, name: str = "de") -> pd.DataFrame:
+def as_data_frame(
+    value: object, *, name: str = "de", expected: str = "a pandas.DataFrame"
+) -> pd.DataFrame:
     """Return `value` if it is a DataFrame, and raise `InputError` otherwise.
 
-    `name` is the argument that the message names.
+    `name` is the argument that the message names, and `expected` is the end of the message.
     """
     if not isinstance(value, pd.DataFrame):
-        message = f"{name} has type {type(value).__name__}; expected a pandas.DataFrame"
+        message = f"{name} has type {type(value).__name__}; expected {expected}"
         raise InputError(message)
     return value
 
@@ -159,11 +177,21 @@ def check_columns(
 ) -> None:
     """Raise `InputError` if `table` is not a DataFrame, or if it lacks a required column.
 
-    The message for a missing column lists the missing columns in sorted order. `name` is the
-    argument that the message for a wrong type names, and `label` names the table in the other
-    message.
+    A required column whose label occurs more than once raises `InputError` first, because the
+    label would select a table and not a column. The message for a missing column lists the missing
+    columns in sorted order. `name` is the argument that the message for a wrong type names, and
+    `label` names the table in the other messages.
     """
-    missing = sorted(set(required) - set(as_data_frame(table, name=name).columns))
+    columns = as_data_frame(table, name=name).columns
+    occurrences = Counter(columns)
+    for column in dict.fromkeys(required):
+        if occurrences[column] > 1:
+            message = (
+                f"{label} has {occurrences[column]} columns {column!r}; "
+                "expected one column for each name"
+            )
+            raise InputError(message)
+    missing = sorted(set(required) - set(columns))
     if missing:
         message = f"{label} has missing columns: {missing}; expected {list(required)}"
         raise InputError(message)
@@ -202,7 +230,7 @@ def check_integer_columns(table: pd.DataFrame, names: Sequence[str]) -> None:
             raise InputError(message)
 
 
-def _is_text(values: pd.Series) -> bool:
+def is_text(values: pd.Series) -> bool:
     """Return True if each value that is present is a str. A missing value is permitted."""
     present = values.dropna()
     if present.empty:
@@ -217,7 +245,7 @@ def check_gene_ids_are_text(de: pd.DataFrame) -> None:
 
     The IDs of a `SequenceSet` are text, so a number column would match no gene in silence.
     """
-    if not _is_text(de["gene_id"]):
+    if not is_text(de["gene_id"]):
         message = (
             f"'gene_id' has dtype {de['gene_id'].dtype}; expected text values. "
             "Convert the column with astype(str)"

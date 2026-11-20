@@ -53,6 +53,18 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: The count of a gene must not depend on the order of its sequences. In R, the first sequence in the input decides the count. The DE table has one row for each gene. Thus a gene with more than one sequence must count once in the report.
 - Test: `test_gene_count_is_the_maximum_over_its_sequences_D003` and `test_the_maximum_does_not_depend_on_the_order_of_the_sequences_D003` in `tests/report/test_annotate.py`. `test_report_counts_genes_not_sequences_D003` and `test_the_best_match_of_a_gene_is_the_best_over_its_sequences_D003` in `tests/report/test_report.py`.
 
+## D-008: e_values has no default null, and genes match by gene_id
+
+- ID: `D-008`
+- R location: `generate_e_value` (`R/generate_e_value.R:12-24`).
+- R behavior: The default `random_siRNA_results_overall` does not exist. Thus a call without a null stops with `object 'random_siRNA_results_overall' not found`. SeedMatchR has no function that makes the null.
+  - Genes match by `symbol` (`:14`, `:18-20`).
+  - The e-value is the fraction of the null columns with `log(null) >= log(observed)`, and `log(0)` is `-Inf`.
+  - Evidence: the notes of `tests/golden/analyses/evalue.tsv`.
+- New behavior: The null is a required argument. `e_value_null` makes it from `n_random` shuffles of the guide (default 1000), with the random generator of the caller. Genes match by `gene_id`.
+- Reason: Without a null, R stops for each call. A symbol can name two genes, and a DE table can have no symbol.
+- Test: `test_e_values_match_genes_by_gene_id_D008`, `test_e_value_null_counts_each_shuffle_like_annotate_seed_counts_D008`, `test_e_value_null_uses_the_default_options_of_annotate_seed_counts_D008`, `test_each_shuffle_keeps_the_letters_of_the_guide_D008`, and `test_the_shuffles_are_the_permutations_of_the_generator_in_order_D008` in `tests/test_evalue.py`. `test_e_values_match_r` in the same file compares the e-values with the R values of the golden file.
+
 ## D-009: A sequence has its transcript ID, and hg38-old is not a reference
 
 - ID: `D-009`
@@ -472,3 +484,17 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: The target line and the pair line have a space for each position outside the sequence. Each pad must be at most the length of the sequence of the match, and a longer pad raises `InputError`. A pad above the length shows no base, and R stops for such a window too. A short sequence, also an empty sequence, accepts only a pad up to its length.
 - Reason: A seed match in the first N - b bases of a 3' UTR has no alignment in R. Here N is the length of the guide, and b is the last guide position of the seed window. `find_matches` also gives mismatch matches that start before 1 (search rule 2). The bound limits the window to N + 2L bases for a sequence of length L. It never rejects a call that R accepts.
 - Test: `test_alignment_text_puts_spaces_outside_the_sequence_D046`, `test_alignment_text_accepts_a_mismatch_match_before_the_start_D046`, `test_alignment_text_accepts_a_mismatch_match_after_the_end_D046`, and `test_alignment_text_rejects_a_pad_longer_than_the_sequence_D046` in `tests/test_alignment.py`.
+
+## D-047: e_values rejects a count that is not valid, and gives each row its own e-value
+
+- ID: `D-047`
+- R location: `generate_e_value` (`R/generate_e_value.R:16-21`).
+- R behavior: A count of `NA` gives the e-value 0. A negative count gives 0 and the warning `NaNs produced`.
+  - R probe with R 4.5.3 and SeedMatchR 2.0.0, with the null row `a = 1, 2, 3, 0`: `generate_e_value(data.frame(symbol = "a", overall_matches = Inf), null)` gives 0, because no finite value of the null is at least `Inf`. The count `-Inf` gives 0 and the warning `NaNs produced`.
+  - R probe, with the observed count `a = 1`: the null row `a = 1, 2, 3, 0` gives 0.75. If the first cell is `NA`, a negative number, or `-Inf`, R gives 0.5. R does not count the cell, but it keeps the cell in the denominator. A negative number and `-Inf` also give the warning `NaNs produced`. If the first cell is `Inf`, R gives 0.75, because R counts the cell.
+  - A gene with two rows in the null gives an e-value above 1. For the null rows `a = 1, 2, 3, 0` and `a = 5, 5, 5, 5`, the count `a = 2` gives 1.5.
+  - Two rows of one gene in `result_output` both get the value of a recycled comparison. For the null row `a = 1, 2, 3, 0`, the counts `a = 1` and `a = 3` both get 0.5, but one by one they get 0.75 and 0.25.
+  - Evidence: the notes of `tests/golden/analyses/evalue.tsv`, and the R probes above.
+- New behavior: `e_values` raises `InputError` for a count that is NaN, infinite, or negative. This rule covers `de` and the null. It raises `InputError` also for a gene with two rows in the null. The message names the column or the null, the value (`NaN`, `inf`, `-inf`, or the negative number), and the gene. A count that is not an integer, for example 1.5, is valid. Each row gets its own e-value.
+- Reason: The e-value 0 is the strongest result, thus a count that is not known must not give it. A count that is not finite is not a count. A fraction above 1 has no meaning.
+- Test: `test_e_values_reject_a_nan_count_D047`, `test_e_values_reject_a_negative_count_D047`, `test_e_values_reject_an_infinite_count_D047`, `test_e_values_reject_a_repeated_gene_of_the_null_D047`, and `test_each_row_of_a_gene_gets_its_own_e_value_D047` in `tests/test_evalue.py`. The tests `test_e_values_reject_a_nan_count_in_the_null_D047`, `test_e_values_reject_a_negative_count_in_the_null_D047`, and `test_e_values_reject_an_infinite_count_in_the_null_D047` in the same file cover the counts of the null.

@@ -17,6 +17,7 @@ from seedmatch import (
     alignment_text,
     annotate_seed_counts,
     count_matches,
+    e_value_null,
     filter_de,
     find_matches,
     full_search_ranges,
@@ -123,6 +124,7 @@ def run_core_pipeline() -> None:
     alignment_text(find_matches(Guide(GUIDE).target(Seed.MER7M8), seqs).iloc[0], Guide(GUIDE), seqs)
     match_distances(find_matches(Guide(GUIDE).target(Seed.MER6), seqs))
     seed_match_report(de, seqs, Guide(GUIDE))
+    e_value_null(Guide(GUIDE), seqs, rng=0, n_random=2)
     annotation = DATA / "annotation"
     with Reference.from_paths(
         ensdb=annotation / "synthetic.sqlite", genome=annotation / "synthetic.2bit"

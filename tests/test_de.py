@@ -83,6 +83,15 @@ def test_filter_de_names_the_missing_columns():
         filter_de(pd.DataFrame({"gene_id": [], "baseMean": [], "log2FoldChange": []}))
 
 
+def test_filter_de_rejects_a_repeated_padj_column():
+    """R stops too, with `Can't transform a data frame with duplicate names.` (dplyr 1.2.1)."""
+    cases = read_cases()
+    de = pd.concat([cases, cases[["padj"]]], axis=1)
+    message = "DE table has 2 columns 'padj'; expected one column for each name"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        filter_de(de)
+
+
 def test_required_columns_are_the_five_columns_of_filter_res():
     assert DE_REQUIRED_COLUMNS == ("gene_id", "baseMean", "log2FoldChange", "pvalue", "padj")
 

@@ -5,6 +5,7 @@ from seedmatch.annotation import Features, FeatureType, PerGene, Reference, Tran
 from seedmatch.de import filter_de, read_deseq2_table
 from seedmatch.distances import MatchAnchor, match_distances
 from seedmatch.errors import InputError, SeedMatchError, SeedMatchWarning
+from seedmatch.evalue import e_value_null, e_values
 from seedmatch.kmers import KmerCounts, kmer_counts, kmer_gene_counts
 from seedmatch.report import (
     DEFAULT_SEEDS,
@@ -69,6 +70,8 @@ __all__ = [
     "assign_groups",
     "best_match",
     "count_matches",
+    "e_value_null",
+    "e_values",
     "ecdf_test",
     "filter_de",
     "find_matches",

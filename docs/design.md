@@ -444,6 +444,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `sequence_kmer_counts` (the names) | A repeated sequence name stops the function with `duplicate 'row.names' are not allowed` (`R/kmer_hist.R:71`). | `kmer_counts` gives one row for each sequence, in the order of the set. |
 | `plotAlignment` | The guide target comes from `get_seed(..., "Full", ...)`, which starts at g2 (`R/plotAlignment.R:32`, `R/get_seed.R:121`). The window has one base more, thus each call with the default positions stops. A row of `SeedMatchR` with `res.format = "data.frame"` has no column `names`. | `alignment_text` shows g1 to gN, and it finds the sequence with `seq_id`. |
 | `plotAlignment` (a window past a sequence end) | `XVector::subseq` stops for a window that starts before 1 or ends after the sequence (`R/plotAlignment.R:43-45`). | `alignment_text` shows a space for each position outside the sequence. |
+| `generate_e_value` (the counts) | A count of `NA`, a negative count, `Inf`, and `-Inf` in `result_output` give the e-value 0 (`R/generate_e_value.R:16-21`). In the null, R does not count a cell with `NA`, a negative number, or `-Inf`, but the cell stays in the denominator. A gene with two rows in the null gives an e-value above 1. Two rows of one gene in `result_output` both get the value of a recycled comparison. | `e_values` raises `InputError` for a count that is NaN, infinite, or negative, and for a gene with two rows in the null. Each row gets its own e-value. |
 
 ## Tests
 
@@ -527,6 +528,8 @@ A test runs each code example in `README.md` and in `docs/`.
 - `KmerCounts.to_frame` is dense and holds n · 4^k · 8 bytes.
 - `alignment_text` takes O(W) time and memory for a window of W bases. Each pad is at most the length L of the sequence, thus W is at most N + 2L for a guide of N bases. It takes O(n) to find the sequence ID among n sequences, thus a loop over m matches costs O(m · n).
 - `match_distances` gives n(n − 1)/2 rows for a sequence with n matches, thus the result sets the memory. 10,000 matches in one sequence give 49,995,000 rows of 24 bytes. The function allocates the result one time. The work memory, without the result, is O(m) for m matches. The time is O(m log m + P) for P pairs.
+- `e_value_null` runs `n_random` searches of the set on `workers` threads. Its memory is the result, genes × `n_random` × 4 bytes, and O(`workers` × (genes + sequences)) more, for example 80 MB for 20,000 genes and 1000 shuffles. `map_in_pool` takes the shuffles one at a time from a generator, and the pool holds at most 2 × `workers` + 1 of them. The result exists before the first draw, thus a table that the system cannot allocate raises `MemoryError` before any search.
+- `e_values` compares blocks of 4096 rows of `de` with `null.index.get_indexer`, which it calls one time. The work memory is O(4096 × `n_random`), and the function makes no copy of the null. The time is O(R × `n_random`) for R rows.
 - `docs/performance.md` records the wall time and the peak memory of `seed_match_report` on the canonical 3' UTRs of `rnor7`, for Python and for R.
 - Target: after the JIT compilation, Python is not slower than R by more than a factor of 2.
 

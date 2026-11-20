@@ -228,6 +228,35 @@ def test_check_columns_keeps_the_message_of_the_de_table_by_default():
         check_columns(pd.DataFrame({"seq_id": ["s1"]}), ["seq_id", "width"])
 
 
+def test_check_columns_rejects_a_required_column_that_occurs_more_than_once():
+    table = pd.DataFrame([[1, 2, 3]], columns=["seq_id", "padj", "padj"])
+    message = "DE table has 2 columns 'padj'; expected one column for each name"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_columns(table, ["seq_id", "padj"])
+    message = "matches table has 2 columns 'padj'; expected one column for each name"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_columns(table, ["seq_id", "padj"], name="matches", label="matches table")
+
+
+def test_check_columns_gives_the_real_count_of_a_repeated_column():
+    table = pd.DataFrame([[1, 2, 3, 4]], columns=["padj", "padj", "padj", "seq_id"])
+    message = "DE table has 3 columns 'padj'; expected one column for each name"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_columns(table, ["seq_id", "padj"])
+
+
+def test_check_columns_rejects_a_repeated_column_before_it_lists_the_missing_columns():
+    table = pd.DataFrame([[1, 2]], columns=["padj", "padj"])
+    message = "DE table has 2 columns 'padj'; expected one column for each name"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_columns(table, ["pvalue", "padj"])
+
+
+def test_check_columns_accepts_a_repeated_column_that_is_not_required():
+    table = pd.DataFrame([[1, 2, 3]], columns=["seq_id", "other", "other"])
+    check_columns(table, ["seq_id"])
+
+
 def test_as_data_frame_names_the_argument():
     message = "matches has type list; expected a pandas.DataFrame"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
@@ -235,3 +264,9 @@ def test_as_data_frame_names_the_argument():
     message = "de has type list; expected a pandas.DataFrame"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         as_data_frame([1, 2])
+
+
+def test_as_data_frame_ends_the_message_with_the_expected_text_of_the_caller():
+    message = "null has type list; expected a pandas.DataFrame with one row for each gene"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        as_data_frame([1, 2], name="null", expected="a pandas.DataFrame with one row for each gene")

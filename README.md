@@ -138,6 +138,21 @@ print(distances.head())
 
 The columns are `seq_id`, `gene_id`, and `distance`. The default `anchor=MatchAnchor.FIVE_PRIME_END` is the R default `fivePrimeEnd`, and it uses the `end` of each match. `MatchAnchor.THREE_PRIME_END` uses the `start`, and `MatchAnchor.CENTER` uses the center. A sequence with n matches gives n(n − 1)/2 rows, thus a sequence with many matches gives a large result.
 
+`e_values` gives the e-value of the seed count of each gene. The e-value is the fraction of random guides whose count is at least the observed count. `e_value_null` makes the random counts. It shuffles the letters of the guide, and it counts the seed matches of each shuffle in each gene. This example uses the `de` table of the example above.
+
+```python
+from seedmatch import e_value_null, e_values
+
+# The null: the seed count of each gene for each of 100 shuffles of the guide.
+null = e_value_null(guide, sequences, rng=1, n_random=100)
+
+# The e-value of the column "mer7m8". A small e-value shows a count that shuffles rarely reach.
+scored = e_values(de, null, column="mer7m8")
+print(scored[["gene_id", "mer7m8", "e_value"]].head())
+```
+
+`rng` is a `numpy.random.Generator` or an int seed, and the default `n_random` is 1000. The null is a required argument of `e_values`, because the R default does not exist. Genes match by `gene_id` (D-008). The result has the rows of `de` whose gene is in the null. `e_value_null` runs its searches on a thread pool, and `workers` sets the width of the pool. The null holds genes x `n_random` x 4 bytes. A count that is NaN, infinite, or negative raises `InputError`, because R gives it the e-value 0 (D-047).
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -198,6 +213,7 @@ This version has the core path:
 - the k-mer counts of a sequence set, and the number of genes with each k-mer
 - the alignment text of a seed match
 - the distances between the matches of a sequence
+- the e-value of a seed count against a null of shuffled guides
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:

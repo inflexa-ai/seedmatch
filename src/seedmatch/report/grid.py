@@ -4,9 +4,6 @@ The searches of one call are independent, so a thread pool runs them in parallel
 kernels release the GIL. The output does not depend on the width of the pool.
 """
 
-import os
-from collections.abc import Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Final
 
@@ -14,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from seedmatch._checks import as_flag, as_limit, check_not_negative, shown
+from seedmatch._pool import map_in_pool, pool_width
 from seedmatch.errors import InputError
 from seedmatch.search import SearchOptions, count_matches, find_matches
 from seedmatch.seed import Guide, Seed, Target
@@ -116,17 +114,6 @@ def _check_indel_options(flags: tuple[bool, ...] | list[bool]) -> tuple[bool, ..
     return tuple(checked)
 
 
-def _pool_width(workers: int | None) -> int:
-    if workers is None:
-        # os.cpu_count() is None if the number of CPUs is unknown.
-        return os.cpu_count() or 1
-    width = as_limit("workers", workers)
-    if width < 1:
-        message = f"workers {width} is less than 1; expected an int of 1 or more"
-        raise InputError(message)
-    return width
-
-
 @dataclass(frozen=True)
 class FullSearchOptions:
     """The options of `full_search`, with the names of R in snake case.
@@ -209,12 +196,6 @@ class _Search:
     options: SearchOptions
 
 
-def _run[T](work: Callable[[_Search], T], searches: Sequence[_Search], width: int) -> list[T]:
-    """Return the result of each search, in the order of the searches."""
-    with ThreadPoolExecutor(max_workers=width) as pool:
-        return list(pool.map(work, searches))
-
-
 def best_match(counts: pd.DataFrame) -> pd.Series:
     """Return the best match of each row of a table of `full_search` counts.
 
@@ -246,7 +227,7 @@ def full_search(
     a seed raises `InputError` before any search. `workers` is the width of the thread pool, and
     `None` is the number of CPUs. The result does not depend on `workers`.
     """
-    width = _pool_width(workers)
+    width = pool_width(workers)
     searches: list[_Search] = []
     for seed in options.seeds:
         target = guide.target(seed, wobble=options.wobble)
@@ -266,7 +247,9 @@ def full_search(
             )
             for distance in distances
         )
-    counts = _run(lambda s: count_matches(s.target, sequences, s.options), searches, width)
+    counts = list(
+        map_in_pool(lambda s: count_matches(s.target, sequences, s.options), searches, width)
+    )
     result = pd.DataFrame(
         {
             # A list of no text would make a float64 column and break the merge on gene_id.
@@ -297,7 +280,7 @@ def full_search_ranges(
     `workers` is the width of the thread pool, and `None` is the number of CPUs. The result does
     not depend on `workers`.
     """
-    width = _pool_width(workers)
+    width = pool_width(workers)
     targets = {seed: guide.target(seed) for seed in options.seeds}
     searches = [
         _Search(
@@ -315,7 +298,9 @@ def full_search_ranges(
         for indels in options.indel_options
         if seed in NONSEED_SEEDS or distance <= options.max_seed_edit_distance
     ]
-    found = _run(lambda s: find_matches(s.target, sequences, s.options), searches, width)
+    found = list(
+        map_in_pool(lambda s: find_matches(s.target, sequences, s.options), searches, width)
+    )
     pieces = []
     for search, matches in zip(searches, found, strict=True):
         if matches.empty:

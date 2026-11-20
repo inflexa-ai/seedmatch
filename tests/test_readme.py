@@ -86,3 +86,9 @@ def test_readme_distance_example_runs(readme_namespace):
 def test_readme_alignment_example_gives_the_r_text(readme_namespace):
     rows = golden("analyses/alignment.tsv").query("case == 'mer7m8_1'")
     assert readme_namespace["alignment"] == "\n".join(rows.sort_values("line")["text"])
+
+
+def test_readme_e_value_example_runs(readme_namespace):
+    scored = readme_namespace["scored"]
+    assert len(scored) == len(readme_namespace["de"])
+    assert scored["e_value"].between(0, 1).all()

@@ -1,6 +1,5 @@
 """The DTS two-sample test."""
 
-import operator
 import sys
 from typing import Final
 
@@ -8,8 +7,7 @@ import numpy as np
 import numpy.typing as npt
 from numpy.typing import ArrayLike
 
-from seedmatch._checks import as_limit, check_at_least, check_not_negative, shown
-from seedmatch.errors import InputError
+from seedmatch._checks import as_generator, as_limit, check_at_least
 from seedmatch.stats.types import PValueMethod, TwoSampleResult, as_sample, check_range
 
 _BLOCK_SIZE: Final = 64
@@ -34,7 +32,7 @@ def dts_test(
     sample_x = as_sample("x", x, finite=True)
     sample_y = as_sample("y", y, finite=True)
     check_dts_range("x", "y", sample_x, sample_y)
-    generator = _as_generator(rng)
+    generator = as_generator(rng)
     boots = as_limit("n_boot", n_boot)
     check_at_least("n_boot", boots, 1)
     m, n = sample_x.size, sample_y.size
@@ -71,20 +69,6 @@ def check_dts_range(
     the range times n. The limit keeps it at half of the largest float, and the sum cannot overflow.
     """
     check_range(first, second, x, y, sys.float_info.max / (2 * (x.size + y.size)))
-
-
-def _as_generator(rng: object) -> np.random.Generator:
-    if isinstance(rng, np.random.Generator):
-        return rng
-    if isinstance(rng, bool | np.bool_) or not isinstance(rng, int | np.integer):
-        message = (
-            f"rng {shown(rng)} has type {type(rng).__name__}; "
-            "expected a numpy.random.Generator or an int"
-        )
-        raise InputError(message)
-    seed = operator.index(rng)
-    check_not_negative("rng", seed)
-    return np.random.default_rng(seed)
 
 
 def _gaps(
