@@ -233,13 +233,36 @@ The default `SeedMatchReport` uses indels with the edit distances 0 to 4 for `Fu
 
 The port copies the algorithm of `R/wass_dist.R:61-81`:
 
-- Evaluate each ECDF at its own data points.
-- Interpolate linearly with `stats::approx` rules: `ties = mean`, `yleft = 0`, `yright = 1`.
-- Use a grid of `n_interp` points from the minimum to the maximum of the pooled values.
-- Integrate with the trapezoid rule.
-- Round to 3 decimals with the R rounding rule.
+- Evaluate each ECDF at its own data points. The value at a point is the count of values at or below it, divided by the sample size.
+- Merge equal values to one point, as `stats::approx` does with `ties = mean`. The ECDF has the same value at equal points, thus the mean is that value. R warns if a sample has equal values. The port gives no warning (`D-037`).
+- Interpolate linearly between the merged points with the expression of `approx`: y_i + (y_j − y_i) · ((v − x_i) / (x_j − x_i)). The value is 0 below the first point and 1 above the last point (`yleft = 0`, `yright = 1`).
+- Use a grid of `n_interp` points from the minimum to the maximum of the pooled values, as `seq(from, to, length.out)` of R does. Point k is min + k · ((max − min) / (`n_interp` − 1)). The first point is the minimum and the last point is the maximum.
+- Let diff be the seed ECDF minus the non-seed ECDF. Integrate max(diff, 0), max(−diff, 0), and |diff| with the trapezoid rule of `caTools::trapz`. The areas are `negative_censored`, `positive_censored`, and `absolute`.
+- Round each area to 3 decimals with the R rounding rule.
 
-`numpy.interp` does not merge tied x values. Thus the port merges them first, as `approx` does.
+`numpy.interp` does not merge equal x values, and it uses another expression for the line. Thus the port does not call it.
+
+The R rounding rule (`r_round` in `seedmatch._rmath`) applies in R 4.0.0 and later. Python `round` is different:
+
+- Let p = 10^d. The two candidates are xd = floor(x · p) / p and xu = ceil(x · p) / p, in float64.
+- The result is xu if xu − x < x − xd. If the two differences are equal, the result is the candidate whose integer numerator is even. The numerator is floor(x · p) for xd, and ceil(x · p) for xu. Thus xu wins if floor(x · p) is odd. Otherwise, the result is xd.
+- Python `round` uses the exact binary value of x. For x = 0.0025 and d = 3, both float differences are 0.0005. Thus R gives 0.002, and Python gives 0.003.
+- NaN, an infinite value, and 0 stay the same. R rounds a negative x as −x, and then puts the sign back.
+- x stays the same if log10(2) · (0.5 + logb(x)) + d is greater than 15. Here logb(x) is the binary exponent of x. R uses this estimate, not log10(x).
+- d = 0 gives the nearest integer, and a tie goes to the even integer.
+- `r_round` accepts d from 0 to 22, because 10^d is exact in float64 up to 10^22. A different d raises `InputError`.
+
+These inputs raise `InputError`. The message gives the sample and the bad value:
+
+- A sample with fewer than 10 values. R stops with the same limit (`R/wass_dist.R:51-56`).
+- A sample with only one distinct value. R stops in `stats::approx` with the message `need at least two non-NA values to interpolate`.
+- NaN or an infinite value. R stops in `seq` with the message `'from' must be a finite number` for NaN and −Inf. For +Inf, R stops with the message `'to' must be a finite number`.
+- An `n_interp` below 2 (`D-038`).
+- A pooled range above 8.988465674311579e307, half of the largest float (`D-038`). The sum of the products of the trapezoid rule can be twice the range, and a larger sum overflows.
+
+Let n be the size of a sample. The time is O(n log n + `n_interp` log n), because `np.unique` sorts each sample and `np.searchsorted` searches for each grid point. The port processes the grid in chunks of 2^16 trapezoids, and numpy does the work of each chunk. Thus the memory does not grow with `n_interp`. For two samples of 20000 values, `n_interp` = 10^7 takes 0.4 seconds and 6.9 MB.
+
+The unrounded areas of R depend on the platform. R 4.5.3 on arm64 macOS uses a fused multiply-add in `approx` and in the product `%*%` of `trapz`. R on x86-64 uses no fused multiply-add. Thus the last bits of an unrounded area differ between the two platforms. The port uses the plain IEEE expression of `approx`. It adds the products of `trapz` in order, with `numpy.cumsum`, because `numpy.sum` adds in another order. A chunk adds the sum of the earlier chunks to its first product. Thus the order is the same as for one sum over the grid. On the goldens, the unrounded areas differ from the arm64 values by a relative 5e-16 at most. A rounded area can differ from R only if its unrounded area lies within about 1e-15 of a rounding boundary. The nearest golden area is 1.3e-5 from a boundary. Thus each rounded golden area is equal.
 
 ## Annotation
 
@@ -389,7 +412,8 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `stats::ks.test` (used by `ecdf_stat_test`) | The asymptotic p-value has numeric defects. The two-sided series keeps one term for `sqrt(en) * D` below 1 (`ks.c:100-111`). The one-sided value `1 - (-expm1(...))` gives 0 for a p-value below about 1e-16. D from a cumulative sum can be above 1, and then the p-value is 0. | The statistic comes from integer counts. The p-value is `scipy.special.kolmogorov(sqrt(en) * D)` for two-sided and `exp(-2 * en * D^2)` for one-sided. |
 | `stats::wilcox.test` (used by `ecdf_stat_test`) | If each value is equal, the variance is 0 (`R/deseq_fc_ecdf.R:274-276`). The two-sided z is 0/0, and the p-value is NaN. The one-sided p-values are 1. | The p-value is 1 for each alternative. |
 | `twosamples::dts_test` (used by `ecdf_stat_test`) | The function does not check its samples. An infinite value gives the statistic `Inf` and the p-value 1. An empty sample gives a statistic and the p-value 1 (`R/deseq_fc_ecdf.R:259-264`). | `dts_test` raises `InputError` for an infinite value and for an empty sample. |
-| `stats::ks.test`, `stats::wilcox.test` (used by `ecdf_stat_test`) | Each test warns if ties make the p-value approximate (`R/deseq_fc_ecdf.R:255-257`, `:274-276`). | No warning. The field `method` of the result is `EXACT` or `ASYMPTOTIC`. |
+| `stats::ks.test`, `stats::wilcox.test` (used by `ecdf_stat_test`), `stats::approx` (used by `wass_dist`) | Each test warns if ties make the p-value approximate (`R/deseq_fc_ecdf.R:255-257`, `:274-276`). `approx` warns `collapsing to unique 'x' values` for a sample with equal values (`R/wass_dist.R:70-71`). | No warning. The field `method` of a test result is `EXACT` or `ASYMPTOTIC`. The areas use the merged values, as in R. |
+| `wass_dist` (the areas) | `n.interp` of 1 gives `NA` areas. A value of 0 or less stops with a message that does not name the cause (`R/wass_dist.R:69`). A pooled range above half of the largest float can overflow the sum. R then gives `Inf` or a meaningless area, and no message. | `wasserstein_areas` raises `InputError` for an `n_interp` below 2 and for a range above half of the largest float. |
 
 ## Tests
 

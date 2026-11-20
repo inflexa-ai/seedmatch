@@ -8,8 +8,8 @@ from seedmatch._checks import (
     as_flag,
     as_limit,
     as_number,
+    check_at_least,
     check_not_negative,
-    check_positive,
 )
 from seedmatch.errors import InputError
 from seedmatch.report import FullSearchOptions
@@ -42,19 +42,26 @@ def test_a_huge_negative_int_is_a_limit_that_check_not_negative_rejects():
         check_not_negative("distance", limit)
 
 
-def test_check_positive_rejects_0_and_a_negative_int_and_accepts_1():
-    check_positive("n_boot", 1)
+def test_check_at_least_rejects_a_value_below_the_minimum_and_accepts_the_minimum():
+    check_at_least("n_boot", 1, 1)
+    check_at_least("n_interp", 2, 2)
+    check_at_least("n_interp", 3, 2)
     for value in (0, -3):
         with pytest.raises(
             InputError, match=rf"^n_boot {value} is less than 1; expected 1 or more$"
         ):
-            check_positive("n_boot", value)
+            check_at_least("n_boot", value, 1)
+    for value in (1, 0, -3):
+        with pytest.raises(
+            InputError, match=rf"^n_interp {value} is less than 2; expected 2 or more$"
+        ):
+            check_at_least("n_interp", value, 2)
 
 
-def test_a_huge_negative_int_is_a_limit_that_check_positive_rejects():
+def test_a_huge_negative_int_is_a_limit_that_check_at_least_rejects():
     limit = as_limit("n_boot", -HUGE)
     with pytest.raises(InputError, match=r"n_boot .*\d+ bits.* is less than 1; expected 1 or more"):
-        check_positive("n_boot", limit)
+        check_at_least("n_boot", limit, 1)
 
 
 def test_as_flag_gives_input_error_for_a_huge_int():

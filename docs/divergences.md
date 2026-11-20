@@ -311,13 +311,28 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: An infinite value makes a statistic that does not measure a difference, and the p-value 1 states that the samples agree. An empty sample has no distribution to compare. R gives a result and no message, thus the mistake of the caller stays hidden. `ks_test` and `wilcoxon_test` accept an infinite value, because they use only the order of the values.
 - Test: `test_dts_rejects_an_infinite_value_D034` and `test_dts_rejects_an_empty_sample_D034` in `tests/stats/test_dts.py`.
 
-## D-037: The KS and Wilcoxon tests give no warning for ties
+## D-037: The statistical tests give no warning for ties
 
 - ID: `D-037`
-- R location: `ecdf_stat_test` calls `stats::ks.test` (`R/deseq_fc_ecdf.R:255-257`) and `stats::wilcox.test` (`R/deseq_fc_ecdf.R:274-276`).
-- R behavior: R warns if ties make a p-value approximate. Two R probes with R 4.5.3 give the evidence:
+- R location: `ecdf_stat_test` calls `stats::ks.test` (`R/deseq_fc_ecdf.R:255-257`) and `stats::wilcox.test` (`R/deseq_fc_ecdf.R:274-276`). `wass_dist` calls `stats::approx` for each sample (`R/wass_dist.R:70-71`).
+- R behavior: R warns if ties make a p-value approximate. `approx` warns if it merges equal x values. R probes with R 4.5.3 give the evidence:
   - `ks.test(rep(c(1, 2, 3), 40), rep(c(2, 3, 4), 50))` uses the asymptotic method and gives the warning `p-value will be approximate in the presence of ties`. The exact method gives no warning, for example `ks.test(c(1, 2, 2, 3), c(2, 3, 4))`.
   - `wilcox.test(c(1, 2, 3, 3), c(3, 4, 5))` gives the warning `cannot compute exact p-value with ties`.
-- New behavior: `ks_test` and `wilcoxon_test` give no warning. The field `method` of the result is `EXACT` or `ASYMPTOTIC`, thus the caller can read how the p-value was made.
-- Reason: A caller that does many tests gets one warning for each call with ties. The result already holds this information, in a field that a program can read.
-- Test: `test_ks_gives_no_warning_for_ties_D037` in `tests/stats/test_ks.py` and `test_wilcoxon_gives_no_warning_for_ties_D037` in `tests/stats/test_wilcoxon.py`.
+  - Let `x` be `c(1, 2, 2, 3, 4, 5, 6, 7, 8, 9)`. Then `approx(x, ecdf(x)(x), xout = c(1.5, 2.5), yleft = 0, yright = 1)` gives the warning `collapsing to unique 'x' values`. `wass_dist` gives this warning for each sample that has equal values.
+- New behavior: `ks_test`, `wilcoxon_test`, and `wasserstein_areas` give no warning. The field `method` of a test result is `EXACT` or `ASYMPTOTIC`, thus the caller can read how the p-value was made. `wasserstein_areas` merges the equal values, as `approx` does.
+- Reason: A caller that does many tests gets one warning for each call with ties. The result already holds this information, in a field that a program can read. The areas use the merged values, as in R. Thus the warning does not say that the areas are approximate.
+- Test: `test_ks_gives_no_warning_for_ties_D037` in `tests/stats/test_ks.py`, `test_wilcoxon_gives_no_warning_for_ties_D037` in `tests/stats/test_wilcoxon.py`, and `test_wasserstein_gives_no_warning_for_ties_D037` in `tests/stats/test_wasserstein.py`.
+
+## D-038: The Wasserstein areas reject a grid of fewer than 2 points and a range that overflows
+
+- ID: `D-038`
+- R location: `wass_dist` builds the grid with `seq` (`R/wass_dist.R:69`). It integrates with `caTools::trapz` (`R/wass_dist.R:79-81`).
+- R behavior: R probes with R 4.5.3 give the evidence. Let `a` be `c(0.5, -0.2, 1.1, 0.3, -0.7, 0.9, -0.4, 0.1, 0.6, -0.9)`. Let `b` be `c(0.1, -0.4, 0.9, 0.2, -1, 0.6, -0.3, 0.05, 0.45, -0.15, 0.8, -0.6)`.
+  - `wass_dist(a, b, n.interp = 1)` gives `NA` for each area, and no message.
+  - `wass_dist(a, b, n.interp = 0)` stops with the message `only 0's may be mixed with negative subscripts`.
+  - `wass_dist(a, b, n.interp = -5)` stops with the message `'length.out' must be a non-negative number`.
+  - `wass_dist(c(-1e308, a), c(1e308, b))` gives the areas 1.74825173985846e+307, 1.74825173985846e+307, and 0, and no message. The width of the range is `Inf` in float64.
+  - `wass_dist(seq(-6e307, -6.6e307, length.out = 10), seq(6e307, 6.6e307, length.out = 10), n.interp = 100)` gives the areas `Inf`, `Inf`, and 0, and no message. The range is 1.32e308, which float64 can hold, but the sum of `trapz` before the division by 2 is about 2.4e308.
+- New behavior: `wasserstein_areas` raises `InputError` for an `n_interp` below 2, with the message `n_interp 1 is less than 2; expected 2 or more`. It raises `InputError` if the range of the pooled values is above half of the largest float, 8.988465674311579e+307. The message is `seed and non_seed span from -1e+308 to 1e+308; expected a range of at most 8.988465674311579e+307`.
+- Reason: An `NA` area or a number from an overflow hides the mistake of the caller. A grid of 1 point has no trapezoid, and the area of an overflowed range has no meaning. Each product of the trapezoid rule is a width times a sum of two heights from 0 to 1. Thus the sum is at most twice the range, and a range above half of the largest float can overflow it. The messages of R for 0 and for a negative value do not name `n.interp`.
+- Test: `test_wasserstein_rejects_n_interp_below_2_D038`, `test_wasserstein_rejects_a_range_that_a_float_cannot_hold_D038`, and `test_wasserstein_rejects_a_finite_range_whose_sum_overflows_D038` in `tests/stats/test_wasserstein.py`. `test_wasserstein_accepts_a_range_just_below_the_limit_D038` in the same file shows that the limit is not too low.

@@ -54,10 +54,10 @@ def check_not_negative(name: str, value: int) -> None:
         raise InputError(message)
 
 
-def check_positive(name: str, value: int) -> None:
-    """Raise `InputError` if the value is below 1."""
-    if value < 1:
-        message = f"{name} {shown(value)} is less than 1; expected 1 or more"
+def check_at_least(name: str, value: int, minimum: int) -> None:
+    """Raise `InputError` if the value is below the minimum."""
+    if value < minimum:
+        message = f"{name} {shown(value)} is less than {minimum}; expected {minimum} or more"
         raise InputError(message)
 
 

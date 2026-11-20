@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 from numpy.typing import ArrayLike
 
-from seedmatch._checks import as_limit, check_not_negative, check_positive, shown
+from seedmatch._checks import as_limit, check_at_least, check_not_negative, shown
 from seedmatch.errors import InputError
 from seedmatch.stats.types import PValueMethod, TwoSampleResult, as_sample
 
@@ -32,7 +32,7 @@ def dts_test(
     sample_y = as_sample("y", y, finite=True)
     generator = _as_generator(rng)
     boots = as_limit("n_boot", n_boot)
-    check_positive("n_boot", boots)
+    check_at_least("n_boot", boots, 1)
     m, n = sample_x.size, sample_y.size
     pooled = np.concatenate((sample_x, sample_y))
     order = np.argsort(pooled, kind="stable")
