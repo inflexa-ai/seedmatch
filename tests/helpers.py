@@ -14,9 +14,11 @@ from seedmatch import (
     Guide,
     Reference,
     Seed,
+    alignment_text,
     annotate_seed_counts,
     count_matches,
     filter_de,
+    find_matches,
     full_search_ranges,
     kmer_counts,
     seed_match_report,
@@ -117,6 +119,7 @@ def run_core_pipeline() -> None:
     annotate_seed_counts(de, seqs, Guide(GUIDE).target(Seed.MER7M8))
     full_search_ranges(Guide(GUIDE), seqs)
     kmer_counts(seqs, k=3)
+    alignment_text(find_matches(Guide(GUIDE).target(Seed.MER7M8), seqs).iloc[0], Guide(GUIDE), seqs)
     seed_match_report(de, seqs, Guide(GUIDE))
     annotation = DATA / "annotation"
     with Reference.from_paths(

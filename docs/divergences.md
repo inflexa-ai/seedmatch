@@ -437,3 +437,24 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `kmer_counts` gives one row for each sequence, in the order of the set.
 - Reason: A row of the matrix is a sequence, thus a repeated ID does not make a count ambiguous.
 - Test: `test_kmer_counts_keep_each_sequence_with_a_repeated_id_D044` in `tests/test_kmers.py`.
+
+## D-045: alignment_text shows the full guide
+
+- ID: `D-045`
+- R location: `plotAlignment` (`R/plotAlignment.R:28-57`), `get_seed` (`R/get_seed.R:121`), and `.matchStrings` (`R/plotAlignment.R:84`).
+- R behavior: `Full` is a canonical seed, thus `get_seed(guide.seq, "Full", start.pos = 1, stop.pos = guide.len)` ignores the positions. Its target is g2 to gN, with N - 1 letters, but the window has N letters.
+  - Each call with the default positions stops with `nchar(s1) == nchar(s2) is not TRUE`. Evidence: the notes of `tests/golden/analyses/alignment.tsv`.
+  - With `seq.start.pos = 1`, the call works, but the guide line omits g1.
+  - A row of `SeedMatchR(res.format = "data.frame")` has no column `names`, thus R stops with `subscript out of bounds`. Evidence: the notes of `tests/golden/analyses/alignment.tsv`.
+- New behavior: The guide line holds g1 to gN, and `match` gives the sequence by `seq_id`.
+- Reason: The R documentation calls `guide.seq` "The full siRNA guide sequence". `tests/testthat/helper.R:27-45` of SeedMatchR uses strings of 23 letters for the guide of 23 letters. The function must work for its documented input.
+- Test: `test_alignment_text_shows_the_full_guide_D045` in `tests/test_alignment.py`. `test_alignment_text_matches_r` in the same file compares the text with the R text of the patched function (`tools/golden/patches/plotAlignment.R`).
+
+## D-046: alignment_text shows a window past a sequence end
+
+- ID: `D-046`
+- R location: `plotAlignment` (`R/plotAlignment.R:43-45`, `XVector::subseq`).
+- R behavior: A window that starts before 1 stops with `solving row 1: the supplied start/end lead to a negative width`. A window that starts at 0 stops with `solving row 1: 'allow.nonnarrowing' is FALSE and the supplied start (0) is < 1`. A window that ends after the sequence stops with `solving row 1: 'allow.nonnarrowing' is FALSE and the supplied end (147) is > refwidth`. Evidence: the notes of `tests/golden/analyses/alignment.tsv`.
+- New behavior: The target line and the pair line have a space for each position outside the sequence. Each pad must be at most the length of the sequence of the match, and a longer pad raises `InputError`. A pad above the length shows no base, and R stops for such a window too. A short sequence, also an empty sequence, accepts only a pad up to its length.
+- Reason: A seed match in the first N - b bases of a 3' UTR has no alignment in R. Here N is the length of the guide, and b is the last guide position of the seed window. `find_matches` also gives mismatch matches that start before 1 (search rule 2). The bound limits the window to N + 2L bases for a sequence of length L. It never rejects a call that R accepts.
+- Test: `test_alignment_text_puts_spaces_outside_the_sequence_D046`, `test_alignment_text_accepts_a_mismatch_match_before_the_start_D046`, `test_alignment_text_accepts_a_mismatch_match_after_the_end_D046`, and `test_alignment_text_rejects_a_pad_longer_than_the_sequence_D046` in `tests/test_alignment.py`.

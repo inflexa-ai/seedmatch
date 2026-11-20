@@ -7,6 +7,7 @@ from helpers import GUIDE, golden_rows
 import seedmatch
 from seedmatch import CustomSeed, Guide, Seed, SeedSpec, Target
 from seedmatch.errors import InputError
+from seedmatch.seed import seed_window
 
 MIN_GUIDE_LENGTH = {
     Seed.MER7M8: 8,
@@ -175,3 +176,24 @@ def test_target_rejects_a_wobble_that_is_not_a_bool():
 def test_custom_seed_rejects_a_window_position_that_is_not_an_integer(start, stop, message):
     with pytest.raises(InputError, match=re.escape(message)):
         CustomSeed("x", start, stop)
+
+
+def test_seed_window_gives_g1_to_the_a_of_mer8_and_mer7a1():
+    assert seed_window(Seed.MER8, 23) == (1, 8)
+    assert seed_window(Seed.MER7A1, 23) == (1, 7)
+
+
+@pytest.mark.parametrize(
+    ("seed", "length", "window"),
+    [
+        (Seed.MER7M8, 23, (2, 8)),
+        (Seed.MER6, 23, (2, 7)),
+        (Seed.FULL, 23, (2, 23)),
+        (Seed.FULL, 30, (2, 30)),
+        (Seed.MER18, 23, (2, 19)),
+        (Seed.MER15, 23, (2, 16)),
+        (CustomSeed("custom", 3, 12), 23, (3, 12)),
+    ],
+)
+def test_seed_window_gives_the_guide_positions_of_the_target(seed, length, window):
+    assert seed_window(seed, length) == window

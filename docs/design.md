@@ -442,6 +442,8 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `kmer_hist` (the gene count) | `colSums` of the presence matrix counts the sequences with a k-mer, but the label says genes (`R/kmer_hist.R:24-28`, `:32`). | `kmer_gene_counts` counts the distinct gene IDs. |
 | `sequence_kmer_counts` (the width) | `oligonucleotideFrequency` accepts a width of 13 and more. It makes a dense matrix with 4^13 columns for each sequence (`R/kmer_hist.R:63-66`). | `kmer_counts` raises `InputError` for a `k` above 12, and its matrix is sparse. |
 | `sequence_kmer_counts` (the names) | A repeated sequence name stops the function with `duplicate 'row.names' are not allowed` (`R/kmer_hist.R:71`). | `kmer_counts` gives one row for each sequence, in the order of the set. |
+| `plotAlignment` | The guide target comes from `get_seed(..., "Full", ...)`, which starts at g2 (`R/plotAlignment.R:32`, `R/get_seed.R:121`). The window has one base more, thus each call with the default positions stops. A row of `SeedMatchR` with `res.format = "data.frame"` has no column `names`. | `alignment_text` shows g1 to gN, and it finds the sequence with `seq_id`. |
+| `plotAlignment` (a window past a sequence end) | `XVector::subseq` stops for a window that starts before 1 or ends after the sequence (`R/plotAlignment.R:43-45`). | `alignment_text` shows a space for each position outside the sequence. |
 
 ## Tests
 
@@ -523,6 +525,7 @@ A test runs each code example in `README.md` and in `docs/`.
 - The kernels use `nogil=True`. `full_search` runs its patterns on a thread pool of fixed width. The width is a parameter, with the CPU count as the default.
 - `kmer_counts` works in blocks of 2^20 window starts, and its matrix has at most one entry for each window.
 - `KmerCounts.to_frame` is dense and holds n · 4^k · 8 bytes.
+- `alignment_text` takes O(W) time and memory for a window of W bases. Each pad is at most the length L of the sequence, thus W is at most N + 2L for a guide of N bases. It takes O(n) to find the sequence ID among n sequences, thus a loop over m matches costs O(m · n).
 - `docs/performance.md` records the wall time and the peak memory of `seed_match_report` on the canonical 3' UTRs of `rnor7`, for Python and for R.
 - Target: after the JIT compilation, Python is not slower than R by more than a factor of 2.
 

@@ -1,5 +1,6 @@
 """seedmatch: a Python port of SeedMatchR."""
 
+from seedmatch.alignment import alignment_text
 from seedmatch.annotation import Features, FeatureType, PerGene, Reference, TranscriptFilter
 from seedmatch.de import filter_de, read_deseq2_table
 from seedmatch.errors import InputError, SeedMatchError, SeedMatchWarning
@@ -61,6 +62,7 @@ __all__ = [
     "Target",
     "TranscriptFilter",
     "WassersteinAreas",
+    "alignment_text",
     "annotate_seed_counts",
     "assign_groups",
     "best_match",

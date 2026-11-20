@@ -79,6 +79,18 @@ def _canonical_window(seed: Seed) -> tuple[int | None, str]:
     return stop, suffix
 
 
+def seed_window(seed: SeedSpec, guide_length: int) -> tuple[int, int]:
+    """Return the first and the last guide position, 1-based, that the target of `seed` pairs with.
+
+    The `A` at the end of the target of `Seed.MER8` and `Seed.MER7A1` pairs with g1. The function
+    does not check that the seed fits the guide: `Guide.target` does.
+    """
+    if isinstance(seed, CustomSeed):
+        return seed.start, seed.stop
+    last, suffix = _canonical_window(seed)
+    return (1 if suffix else _CANONICAL_START), (guide_length if last is None else last)
+
+
 def _check_custom_window(seed: CustomSeed, length: int) -> None:
     prefix = f"custom seed {seed.name!r}"
     if seed.start < 1:

@@ -114,6 +114,18 @@ print(genes_with_kmer[target.sequence])
 
 `kmers.matrix` is a `scipy.sparse.csr_array`. `kmers.to_frame()` gives the layout of `sequence_kmer_counts` in R. This frame is dense and holds n · 4^k · 8 bytes for n sequences. The value of `k` is at most 12 (D-043).
 
+`alignment_text` shows how the guide pairs with the sequence at one match. It takes a row of `find_matches` and the seed of the search. This example shows the first match of the example above.
+
+```python
+from seedmatch import alignment_text
+
+# The three lines: the guide, the pairs, and the sequence. The default seed is Seed.MER7M8.
+alignment = alignment_text(find_matches(target, sequences).iloc[0], guide, sequences)
+print(alignment)
+```
+
+Use `seed=` for the seed of another search. `left_pad` and `right_pad` show more bases of the sequence on each side, and each pad is at most the length of the sequence. A `|` shows a Watson-Crick pair. A position outside the sequence is a space (D-046).
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -157,6 +169,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - A sequence from an annotation keeps its transcript ID and its gene ID. In R, `load_annotations` gives the name `NA` to each sequence of a gene union (D-002), and `tx.names` is `NULL` (D-009).
 - `ecdf_test` drops the rows without a fold change for each test. R drops them for the KS and Wilcoxon tests only, and it stops for DTS and Wasserstein (D-036). `ecdf_test` raises `InputError` for an `alternative` with DTS or Wasserstein, but R ignores it without a message (D-035).
 - `kmer_gene_counts` counts the genes with a k-mer. The histogram of R counts the sequences, but its label says genes (D-042).
+- `alignment_text` shows the full guide, from g1 to the last base. In R, the guide line of `plotAlignment` has no g1, and the function stops for the default positions (D-045).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -171,6 +184,7 @@ This version has the core path:
 - the seed counts, `full_search`, `full_search_ranges`, and `seed_match_report`
 - the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and `ecdf_test` for two gene sets
 - the k-mer counts of a sequence set, and the number of genes with each k-mer
+- the alignment text of a seed match
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:
