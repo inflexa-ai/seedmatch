@@ -80,6 +80,68 @@ The script uses the configs `utr3`, `utr5`, `exons`, `cds`, `utr3_longest`, and 
 
 The script uses the R package `openssl`. SeedMatchR does not import it directly. If the package is not installed, the script stops at the start and names the package.
 
+## Golden files of the statistics
+
+The script `stats.R` writes the golden files in `tests/golden/stats/`. They give the R results of the KS test, the Wilcoxon rank-sum test, DTS, the Wasserstein areas, the `round` function, and `ecdf_stat_test`:
+
+```bash
+tools/golden/run.sh tools/golden/R/stats.R
+```
+
+`twosamples` and `caTools` are imports of SeedMatchR, thus `install.R` makes them available. The comment lines of each file give their versions.
+
+The script makes the samples with `set.seed(20261120)`. One random stream feeds each case in the order of the script. A new case that draws moves each later case, thus a new run changes the goldens of the later sections. Only a case without a random draw keeps the other cases. A case at the end of the Wass section moves no other case. The random values of `round.tsv` have their own `set.seed(20261120)`, thus no case moves them. The second run of the script writes the same bytes as the first run. The script stops if a value of the R snapshots of `ecdf_stat_test` changes (`D^+` 0.51035, `W` 2150, and the Wass statistic 0).
+
+The ID of a case is `<test>_<m>x<n>_<kind>`. The test is `ks`, `wilcoxon`, `dts`, or `wass`. The sizes of the samples `x` and `y` are `m` and `n`. The kind is one of these:
+
+- `plain`: no value occurs two times.
+- `ties`: the values of the `plain` case, rounded to 1 decimal. At least one value occurs in both samples.
+- `shift`: the sample `y` is 6 standard deviations above the sample `x`, thus D is near 1. Only KS has this kind.
+
+The sizes of the cases:
+
+- KS: (1, 12), (5, 7), (30, 40), (99, 101), (100, 100), (120, 150), and (400, 300). The sizes 99 × 101 give the exact p-value, and the sizes 100 × 100 give the asymptotic p-value. The kind `shift` exists for the sizes 99 × 101 and larger.
+- Wilcoxon: (1, 5), (10, 12), (49, 49), (49, 50), (50, 49), and (60, 80). Only a case without ties and with both sizes below 50 gives the exact p-value.
+- DTS: (5, 7), (30, 40), and (200, 300).
+- Wass: (10, 10), (10, 50), and (40, 300), each with `n.interp` 2, 100, and 10000.
+
+Some cases have a name that tells their purpose:
+
+- `ks_all_equal` and `wilcoxon_all_equal`: each value is equal.
+- `ks_inf` and `wilcoxon_inf`: the sample `x` has the value `Inf`.
+- `ks_asym_cut_series`: a two-sided asymptotic case with `sqrt(en) * D` between 0.9 and 1. R uses the cut series here.
+- `ks_asym_small_p`: a one-sided asymptotic case with a p-value below 1e-17. R gives 0.
+- `wass_seed_one_value` and `wass_non_seed_one_value`: R stops, because a sample has one distinct value. These cases have no row in `wasserstein.tsv`. The comment lines of the file give the message of R.
+
+The files:
+
+- `samples.tsv`: the columns `case`, `sample` (`x` or `y`), and `value`. Each value has one row, in the order of the sample. The text `Inf` is an infinite value, and Python `float()` reads it. Each other file refers to the `case` of this file.
+- `ks.tsv` and `wilcoxon.tsv`: the columns `case`, `alternative` (`two.sided`, `less`, or `greater`), `statistic`, `p_value`, and `method`. `method` is `exact` or `asymptotic`. The script maps the `method` text of R: `Exact` or `Asymptotic` for KS, and `exact` or `continuity correction` for Wilcoxon.
+- `dts.tsv`: the columns `case`, `statistic`, `p_value`, and `n_boot` (2000). The script calls `set.seed(1)` before each `dts_test`.
+- `wasserstein.tsv`: the columns `case`, `n_interp`, `abs_auc`, `neg_cens_auc`, and `pos_cens_auc`. The sample `x` is the seed sample, and the sample `y` is the non-seed sample. R rounds each area to 3 decimals.
+- `round.tsv`: the columns `x`, `digits`, and `r`. `r` is `round(x, digits)`. The values of `x` are the boundary values of the rule, the grid `(0:4000)/4000 + 0.0005`, and 200 random values.
+- `ecdf.tsv`: the columns `input`, `test`, `alternative`, `statistic`, `p_value`, `n_target`, and `n_background`.
+
+Notes on `ks.tsv` and `wilcoxon.tsv`:
+
+- For KS, `greater` gives `D^+` and `less` gives `D^-`.
+- R finds D with a cumulative sum, thus D can differ from the exact value by about 1e-15.
+- For Wilcoxon, `NA` in `p_value` means that R gives NaN, because each value is equal.
+
+The input of `ecdf.tsv` is one of these:
+
+- `test_data`: the table `tests/data/DESEQ2_results.tsv`. The target is the genes with `mer7m8 >= 1`, and the background is the genes with `mer7m8 == 0`.
+- `test_data_swapped`: the same table, with the target and the background in the other order. It has only the rows of the R snapshots: Wilcoxon `less` and Wass.
+- `readme`: the table that the first example of the README ports. It comes from `filter_res` with the defaults and the `mer7m8` counts of `SeedMatchR`. The target and the background are the same sets.
+
+The columns of `ecdf.tsv` obey these rules:
+
+- `test` is `KS`, `Wilcoxon`, `Wass`, or `DTS`. R spells the argument `Wilcoxen`.
+- `Wass` and `DTS` ignore the alternative in R. Their rows have `NA` in `alternative`.
+- The `statistic` of `Wass` is `neg_cens_auc`, and its `p_value` is `NA`.
+- The `p_value` of `DTS` comes from `set.seed(1)` before the call.
+- `n_target` and `n_background` count the fold changes that are not `NA`.
+
 ## Patch of vmatchPattern2
 
 `vmatchPattern2` of SeedMatchR ignores `with.indels` and `min.mismatch` (`docs/divergences.md`, `D-001`). The file `tools/golden/patches/vmatchPattern2.R` defines a patched function with the same arguments and the same data frame. `full_search.R` puts it into the SeedMatchR namespace with `assignInNamespace`. As a result, the ranges in the golden files obey the same rules as the counts. A script that needs the original function does not source the patch.

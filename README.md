@@ -15,7 +15,7 @@ Inflexa, Inc. builds an agentic toolchain for bioinformatics. The toolchain port
 A sandbox such as the Inflexa sandbox has no network egress, and an agent corrects its calls from the error messages. Thus seedmatch obeys these rules:
 
 - **No network in the core.** The core modules never use the network. Each function reads its input from a path or an object that you give. A later version adds a separate module that downloads the resources.
-- **Python only.** The package is pure Python on numpy, pandas, and numba. It does not use R or a system library.
+- **Python only.** The package is pure Python on numpy, pandas, numba, and scipy. It does not use R or a system library.
 - **Errors that an agent can use.** Each `InputError` names the bad value and the expected value. Thus an agent can correct the call.
 
 ## Example

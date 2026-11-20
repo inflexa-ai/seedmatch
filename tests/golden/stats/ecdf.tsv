@@ -1,0 +1,30 @@
+# generated-by: tools/golden/R/stats.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# twosamples: 2.0.1
+# caTools: 1.18.3
+# input: test_data is DESEQ2_results.tsv, with the target mer7m8 >= 1 and the background mer7m8 == 0
+# input: test_data_swapped has the target and the background of test_data in the other order
+# input: readme is filter_res with the defaults, then the mer7m8 counts of SeedMatchR, with the same sets
+# test: Wilcoxon is the stats_test Wilcoxen of R. Wass and DTS ignore the alternative in R, thus their alternative is NA
+# statistic of Wass is neg.cens.auc, and its p_value is NA. n_target and n_background count the fold changes that are not NA
+input	test	alternative	statistic	p_value	n_target	n_background
+test_data	KS	two.sided	0.51035196687370576	0.0002075462488166425	18	161
+test_data	KS	less	1.1015494072452725e-15	1	18	161
+test_data	KS	greater	0.51035196687370576	0.00010377312440832125	18	161
+test_data	Wilcoxon	two.sided	748	0.0007799914758168042	18	161
+test_data	Wilcoxon	less	748	0.0003899957379084021	18	161
+test_data	Wilcoxon	greater	748	0.99961672019886205	18	161
+test_data	Wass	NA	2.1960000000000002	NA	18	161
+test_data	DTS	NA	74.911568929640467	0.00025000000000000001	18	161
+test_data_swapped	Wilcoxon	less	2150	0.99961672019886205	161	18
+test_data_swapped	Wass	NA	0	NA	161	18
+readme	KS	two.sided	0.45989304812834275	0.0021470763560610235	17	121
+readme	KS	less	-1.3877787807814457e-15	1	17	121
+readme	KS	greater	0.45989304812834275	0.0010735381780312581	17	121
+readme	Wilcoxon	two.sided	569	0.0029435334304236051	17	121
+readme	Wilcoxon	less	569	0.0014717667152118025	17	121
+readme	Wilcoxon	greater	569	0.99855900486575888	17	121
+readme	Wass	NA	2.0329999999999999	NA	17	121
+readme	DTS	NA	58.818947891934684	0.00050000000000000001	17	121

@@ -1,0 +1,51 @@
+# generated-by: tools/golden/R/stats.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# twosamples: 2.0.1
+# caTools: 1.18.3
+# statistic: W. method: exact, or asymptotic for the normal approximation with the continuity correction
+# NA in p_value: R gives NaN, because each value is equal and z is 0/0
+case	alternative	statistic	p_value	method
+wilcoxon_1x5_plain	two.sided	0	0.33333333333333331	exact
+wilcoxon_1x5_plain	less	0	0.16666666666666666	exact
+wilcoxon_1x5_plain	greater	0	1	exact
+wilcoxon_1x5_ties	two.sided	0.5	0.36571229628151325	asymptotic
+wilcoxon_1x5_ties	less	0.5	0.18285614814075662	asymptotic
+wilcoxon_1x5_ties	greater	0.5	0.93416599198859285	asymptotic
+wilcoxon_10x12_plain	two.sided	90	0.050324288714381597	exact
+wilcoxon_10x12_plain	less	90	0.97871478366834408	exact
+wilcoxon_10x12_plain	greater	90	0.025162144357190799	exact
+wilcoxon_10x12_ties	two.sided	90	0.051292075706176138	asymptotic
+wilcoxon_10x12_ties	less	90	0.97805274581957091	asymptotic
+wilcoxon_10x12_ties	greater	90	0.025646037853088069	asymptotic
+wilcoxon_49x49_plain	two.sided	1045	0.27209191760395268	exact
+wilcoxon_49x49_plain	less	1045	0.13604595880197634	exact
+wilcoxon_49x49_plain	greater	1045	0.8655003627951785	exact
+wilcoxon_49x49_ties	two.sided	1036.5	0.24505846960364441	asymptotic
+wilcoxon_49x49_ties	less	1036.5	0.12252923480182221	asymptotic
+wilcoxon_49x49_ties	greater	1036.5	0.8789080489258454	asymptotic
+wilcoxon_49x50_plain	two.sided	1443	0.1279632556668015	asymptotic
+wilcoxon_49x50_plain	less	1443	0.93689026651219409	asymptotic
+wilcoxon_49x50_plain	greater	1443	0.06398162783340075	asymptotic
+wilcoxon_49x50_ties	two.sided	1433	0.14616951225661895	asymptotic
+wilcoxon_49x50_ties	less	1433	0.92788226917103522	asymptotic
+wilcoxon_49x50_ties	greater	1433	0.073084756128309475	asymptotic
+wilcoxon_50x49_plain	two.sided	1064	0.26132453476403605	asymptotic
+wilcoxon_50x49_plain	less	1064	0.13066226738201803	asymptotic
+wilcoxon_50x49_plain	greater	1064	0.87081761686924009	asymptotic
+wilcoxon_50x49_ties	two.sided	1059	0.246401732410053	asymptotic
+wilcoxon_50x49_ties	less	1059	0.1232008662050265	asymptotic
+wilcoxon_50x49_ties	greater	1059	0.8782205567207555	asymptotic
+wilcoxon_60x80_plain	two.sided	2169	0.33175742502401911	asymptotic
+wilcoxon_60x80_plain	less	2169	0.16587871251200956	asymptotic
+wilcoxon_60x80_plain	greater	2169	0.83516799127570096	asymptotic
+wilcoxon_60x80_ties	two.sided	2181.5	0.35831027284618538	asymptotic
+wilcoxon_60x80_ties	less	2181.5	0.17915513642309269	asymptotic
+wilcoxon_60x80_ties	greater	2181.5	0.82194514364967874	asymptotic
+wilcoxon_all_equal	two.sided	17.5	NA	asymptotic
+wilcoxon_all_equal	less	17.5	1	asymptotic
+wilcoxon_all_equal	greater	17.5	1	asymptotic
+wilcoxon_inf	two.sided	24	1	exact
+wilcoxon_inf	less	24	0.52514152514152512	exact
+wilcoxon_inf	greater	24	0.52514152514152512	exact
