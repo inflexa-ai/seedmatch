@@ -93,6 +93,7 @@ extend-immutable-calls = [
 
 [tool.ruff.lint.per-file-ignores]
 "src/seedmatch/fetch/**" = ["TID251"]
+"tests/fetch/**" = ["TID251"]
 # Numba cannot compile a dataclass argument, so each kernel takes its arrays and scalars one by one.
 "src/seedmatch/search/kernels.py" = ["PLR0913", "PLR0917"]
 # A test name can carry a divergence ID such as D001, and N802 requires a lowercase function name.
