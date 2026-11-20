@@ -5,9 +5,7 @@ import io
 import os
 import re
 from dataclasses import dataclass, field
-from functools import partial
-from itertools import compress, islice, repeat
-from typing import Final, TextIO
+from typing import Final
 
 import numpy as np
 import pandas as pd
@@ -15,11 +13,19 @@ from numpy.typing import NDArray
 
 from seedmatch._checks import concatenate_and_clear, shown
 from seedmatch._io import local_path, open_text
+from seedmatch._lines import (
+    data_bytes,
+    field_lines,
+    frame_of,
+    not_utf8,
+    read_chunks,
+    shared_texts,
+    vocabulary_codes,
+)
 from seedmatch.errors import InputError
 
 _FIELDS: Final = ("mirdb_id", "target_refseq_id", "target_score")
 _CHUNK_LINES: Final = 2**18
-_LINE_LIMIT: Final = 2**10
 _DECIMAL: Final = re.compile(r" *[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)? *")
 
 
@@ -70,13 +76,18 @@ def read_mirdb(path: str | os.PathLike[str], *, species: str | None = None) -> p
     rows = _Rows()
     try:
         with open_text(file) as handle:
-            _read_chunks(handle, source, wanted, rows)
+            for first, chunk in read_chunks(handle, _CHUNK_LINES):
+                is_data = field_lines(
+                    chunk,
+                    first,
+                    source,
+                    separator="\t",
+                    fields=len(_FIELDS),
+                    described="the miRDB ID, the RefSeq ID, and the score",
+                )
+                rows.add(chunk, is_data, first, source, wanted)
     except UnicodeDecodeError as exc:
-        message = (
-            f"{source!r}: the file is not valid UTF-8 text ({exc.reason}); "
-            "expected a text or gzip miRDB file"
-        )
-        raise InputError(message) from exc
+        raise not_utf8(source, exc, "miRDB") from exc
     return rows.table(source, wanted)
 
 
@@ -119,21 +130,8 @@ class _Rows:
         numbers = first + np.flatnonzero(is_data)
         if not numbers.size:
             return
-        flags = is_data.tolist()
-        text = "".join(compress(chunk, flags))
-        if "\0" in text:
-            bad = next(i for i, line in enumerate(compress(chunk, flags)) if "\0" in line)
-            message = (
-                f"{source!r}: line {numbers[bad]}: the line has a NUL character (U+0000); "
-                "expected text without NUL characters"
-            )
-            raise InputError(message)
-        # Bytes, not a StringIO: pandas holds a text buffer in 4-byte characters, and the peak
-        # memory of a chunk is then twice as large.
-        data = text.encode()
-        del text
         frame = pd.read_csv(
-            io.BytesIO(data),
+            io.BytesIO(data_bytes(chunk, is_data, first, source)),
             sep="\t",
             header=None,
             names=list(_FIELDS),
@@ -149,8 +147,8 @@ class _Rows:
             self.species.update(species_of_id)
             keep = np.array([code == wanted for code in species_of_id], dtype=np.bool_)[codes]
             frame, scores = frame[keep], scores[keep]
-        self.id_codes.append(_vocabulary_codes(frame["mirdb_id"], self.ids))
-        self.refseq_codes.append(_vocabulary_codes(frame["target_refseq_id"], self.refseqs))
+        self.id_codes.append(vocabulary_codes(frame["mirdb_id"], self.ids))
+        self.refseq_codes.append(vocabulary_codes(frame["target_refseq_id"], self.refseqs))
         self.scores.append(scores)
 
     def table(self, source: str, wanted: str | None) -> pd.DataFrame:
@@ -166,64 +164,21 @@ class _Rows:
         parts = [text.partition("-") for text in ids]
         id_codes = concatenate_and_clear(self.id_codes)
         mirdb_id = np.array(ids, dtype=object)[id_codes]
-        species = _shared([part[0] for part in parts])[id_codes]
-        mirna_name = _shared([part[2] for part in parts])[id_codes]
+        species = shared_texts(part[0] for part in parts)[id_codes]
+        mirna_name = shared_texts(part[2] for part in parts)[id_codes]
         del id_codes
         refseq_id = np.array(list(self.refseqs), dtype=object)[
             concatenate_and_clear(self.refseq_codes)
         ]
-        columns = {
-            "mirdb_id": mirdb_id,
-            "target_refseq_id": refseq_id,
-            "target_score": concatenate_and_clear(self.scores),
-            "species": species,
-            "mirna_name": mirna_name,
-        }
-        # A dict of object arrays makes pandas scan each array for dates, which allocates a copy of
-        # the table. A Series with its dtype set skips the scan.
-        return pd.DataFrame(
+        return frame_of(
             {
-                name: pd.Series(values, dtype=values.dtype, copy=False)
-                for name, values in columns.items()
-            },
-            copy=False,
+                "mirdb_id": mirdb_id,
+                "target_refseq_id": refseq_id,
+                "target_score": concatenate_and_clear(self.scores),
+                "species": species,
+                "mirna_name": mirna_name,
+            }
         )
-
-
-def _read_chunks(handle: TextIO, source: str, wanted: str | None, rows: _Rows) -> None:
-    next_line = partial(handle.readline, _LINE_LIMIT + 1)
-    first = 1
-    while chunk := list(islice(iter(next_line, ""), _CHUNK_LINES)):
-        if first == 1:
-            # R skips a byte order mark, also before a blank first line.
-            chunk[0] = chunk[0].removeprefix("\ufeff")
-        rows.add(chunk, _data_lines(chunk, first, source), first, source, wanted)
-        first += len(chunk)
-
-
-def _data_lines(chunk: list[str], first: int, source: str) -> NDArray[np.bool_]:
-    """Return which lines of the chunk are data lines. A bad line raises `InputError`."""
-    tabs = np.fromiter(map(str.count, chunk, repeat("\t")), dtype=np.int64, count=len(chunk))
-    lengths = np.fromiter(map(len, chunk), dtype=np.int64, count=len(chunk))
-    is_data: NDArray[np.bool_] = tabs == len(_FIELDS) - 1
-    for offset in np.flatnonzero(~is_data | (lengths > _LINE_LIMIT)):
-        line, number = chunk[offset], first + int(offset)
-        if len(line) > _LINE_LIMIT:
-            message = (
-                f"{source!r}: line {number}: the line has more than {_LINE_LIMIT} characters; "
-                f"expected at most {_LINE_LIMIT}, with the line end"
-            )
-            raise InputError(message)
-        text = line.rstrip("\r\n")
-        if text:
-            count = text.count("\t") + 1
-            noun = "field" if count == 1 else "fields"
-            message = (
-                f"{source!r}: line {number} has {count} {noun}; expected {len(_FIELDS)}: "
-                "the miRDB ID, the RefSeq ID, and the score"
-            )
-            raise InputError(message)
-    return is_data
 
 
 def _parse_scores(texts: list[str], numbers: NDArray[np.int64], source: str) -> NDArray[np.float64]:
@@ -242,20 +197,3 @@ def _parse_scores(texts: list[str], numbers: NDArray[np.int64], source: str) -> 
         "expected a decimal number"
     )
     raise InputError(message)
-
-
-def _vocabulary_codes(column: pd.Series, vocabulary: dict[str, int]) -> NDArray[np.int32]:
-    """Return the code of each text of the column. A new text takes the next code."""
-    codes, texts = pd.factorize(column)
-    lookup = np.fromiter(
-        (vocabulary.setdefault(text, len(vocabulary)) for text in texts),
-        dtype=np.int32,
-        count=len(texts),
-    )
-    return lookup[codes]
-
-
-def _shared(texts: list[str]) -> NDArray[np.object_]:
-    """Return the texts as an object array in which equal texts are one object."""
-    objects: dict[str, str] = {}
-    return np.array([objects.setdefault(text, text) for text in texts], dtype=object)

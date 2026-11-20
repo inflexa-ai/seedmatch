@@ -225,7 +225,7 @@ def test_read_mirdb_rejects_text_that_is_not_utf8(tmp_path):
 
 
 def test_read_mirdb_rejects_a_line_above_the_limit_D049(tmp_path, monkeypatch):
-    monkeypatch.setattr("seedmatch.mirdb._LINE_LIMIT", 20)
+    monkeypatch.setattr("seedmatch._lines.LINE_LIMIT", 20)
     path = write_lines(tmp_path, ["hsa-a\tNM_1\t50", "hsa-b\tNM_2\t" + "9" * 20])
     message = "line 2: the line has more than 20 characters; expected at most 20, with the line end"
     with pytest.raises(InputError, match=failure(path, message)):
@@ -234,7 +234,7 @@ def test_read_mirdb_rejects_a_line_above_the_limit_D049(tmp_path, monkeypatch):
 
 def test_read_mirdb_reads_a_line_of_the_limit_length(tmp_path, monkeypatch):
     line = "hsa-a\tNM_1\t50"
-    monkeypatch.setattr("seedmatch.mirdb._LINE_LIMIT", len(line) + 1)
+    monkeypatch.setattr("seedmatch._lines.LINE_LIMIT", len(line) + 1)
     assert len(read_mirdb(write_lines(tmp_path, [line, line]))) == 2
 
 
@@ -311,7 +311,7 @@ def test_read_mirdb_numbers_a_bad_line_across_chunks(tmp_path, monkeypatch, chun
     lines = ["hsa-a\tNM_1\t50", "", "hsa-b\tNM_2\t60", "", "", line]
     path = write_lines(tmp_path, lines)
     monkeypatch.setattr("seedmatch.mirdb._CHUNK_LINES", chunk)
-    monkeypatch.setattr("seedmatch.mirdb._LINE_LIMIT", 25)
+    monkeypatch.setattr("seedmatch._lines.LINE_LIMIT", 25)
     with pytest.raises(InputError, match=failure(path, message)):
         read_mirdb(path)
 
