@@ -55,6 +55,11 @@ def damaged_compressed_files() -> dict[str, tuple[bytes, type[Exception]]]:
     }
 
 
+def exactly(message: str) -> str:
+    """Return a `match` pattern that accepts only this message."""
+    return f"^{re.escape(message)}$"
+
+
 def golden(path: str) -> pd.DataFrame:
     return pd.read_csv(GOLDEN / path, sep="\t", comment="#", dtype=str, keep_default_na=False)
 

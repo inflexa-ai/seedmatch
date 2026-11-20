@@ -83,7 +83,7 @@ def test_filter_de_names_the_missing_columns():
         filter_de(pd.DataFrame({"gene_id": [], "baseMean": [], "log2FoldChange": []}))
 
 
-def test_filter_de_rejects_a_repeated_padj_column():
+def test_filter_de_rejects_a_repeated_padj_column_D051():
     """R stops too, with `Can't transform a data frame with duplicate names.` (dplyr 1.2.1)."""
     cases = read_cases()
     de = pd.concat([cases, cases[["padj"]]], axis=1)

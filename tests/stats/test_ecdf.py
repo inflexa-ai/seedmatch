@@ -13,6 +13,7 @@ from helpers import (
     STATISTIC_TOLERANCE,
     dts_p_value_error,
     ecdf_golden_row,
+    exactly,
     golden_rows,
     sirna_de,
     sirna_seqs,
@@ -431,6 +432,14 @@ def test_ecdf_test_rejects_a_fold_change_column_that_is_not_numeric():
         ecdf_test(de, target=target, background=background)
 
 
+def test_ecdf_test_rejects_a_repeated_fold_change_column_D051():
+    de, target, background = inputs("test_data")
+    de = pd.concat([de, de[["log2FoldChange"]] * 0], axis=1)
+    message = "DE table has 2 columns 'log2FoldChange'; expected one column for each name"
+    with pytest.raises(InputError, match=exactly(message)):
+        ecdf_test(de, target=target, background=background)
+
+
 @pytest.mark.parametrize("dtype", ["bool", "complex128"])
 def test_ecdf_test_rejects_a_bool_and_a_complex_fold_change_column(dtype):
     de, target, background = inputs("test_data")
@@ -548,6 +557,14 @@ def test_assign_groups_rejects_a_missing_column_and_gene_ids_that_are_not_text()
     numbers = GROUP_TABLE.assign(gene_id=range(len(GROUP_TABLE)))
     with pytest.raises(InputError, match=r"^'gene_id' has dtype int64; expected text values"):
         assign_groups(numbers, {"a": ["g1"]})
+
+
+def test_assign_groups_rejects_a_repeated_gene_id_column_D051():
+    other = pd.DataFrame({"gene_id": ["x1", "x2", "x3", "x4", "x5"]}, index=GROUP_TABLE.index)
+    de = pd.concat([GROUP_TABLE, other], axis=1)
+    message = "DE table has 2 columns 'gene_id'; expected one column for each name"
+    with pytest.raises(InputError, match=exactly(message)):
+        assign_groups(de, {"a": ["g1"]})
 
 
 @pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)

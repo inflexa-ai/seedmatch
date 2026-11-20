@@ -4,7 +4,7 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import DATA, GUIDE, golden, golden_note, sirna_seqs
+from helpers import DATA, GUIDE, exactly, golden, golden_note, sirna_seqs
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -55,10 +55,6 @@ def listed_cells(counts):
         (counts.ids[row], counts.gene_ids[row], labels[column], int(value))
         for row, column, value in zip(rows, matrix.indices, matrix.data, strict=True)
     ]
-
-
-def exactly(message):
-    return f"^{re.escape(message)}$"
 
 
 @pytest.mark.parametrize("case", CASES)

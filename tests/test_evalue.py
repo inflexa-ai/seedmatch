@@ -1,10 +1,9 @@
 import inspect
-import re
 
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import GUIDE, NOT_A_DATA_FRAME, golden, sirna_seqs
+from helpers import GUIDE, NOT_A_DATA_FRAME, exactly, golden, sirna_seqs
 
 from seedmatch import (
     Guide,
@@ -25,10 +24,6 @@ OBSERVED = golden("analyses/evalue_observed.tsv")
 SHUFFLES = NULL["shuffle"].astype(int).max()
 # The 4 counts of the gene a and of the gene b in the notes of evalue.tsv.
 NOTE_NULL = {"a": [1, 2, 3, 0], "b": [0, 1, 0, 0]}
-
-
-def exactly(message):
-    return f"^{re.escape(message)}$"
 
 
 def make_null(rows):
@@ -347,6 +342,17 @@ def test_e_values_reject_an_infinite_count_D047(value, text):
     """D-047: R gives the e-value 0 to the observed count Inf, and to -Inf with a warning."""
     de = make_de(["a", "b"], [1.0, value])
     message = f"column 'mer7m8' of de holds {text} for gene 'b'; expected a count of 0 or more"
+    with pytest.raises(InputError, match=exactly(message)):
+        e_values(de, make_null(NOTE_NULL), column="mer7m8")
+
+
+@pytest.mark.parametrize(
+    ("value", "text"), [(np.nan, "NaN"), (-1.0, "-1"), (np.inf, "inf"), (-np.inf, "-inf")]
+)
+def test_e_values_reject_an_invalid_count_for_a_gene_that_is_not_in_the_null_D047(value, text):
+    """D-047: R drops the row `zz`, which is not in the null, and gives no message."""
+    de = make_de(["a", "zz"], [1.0, value])
+    message = f"column 'mer7m8' of de holds {text} for gene 'zz'; expected a count of 0 or more"
     with pytest.raises(InputError, match=exactly(message)):
         e_values(de, make_null(NOTE_NULL), column="mer7m8")
 

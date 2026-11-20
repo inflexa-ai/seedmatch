@@ -1,6 +1,5 @@
 import dataclasses
 import math
-import re
 
 import numpy as np
 import pandas as pd
@@ -10,6 +9,7 @@ from helpers import (
     NOT_A_DATA_FRAME,
     STATISTIC_TOLERANCE,
     assert_curve_matches_golden,
+    exactly,
     golden,
     golden_note,
     sirna_de,
@@ -25,10 +25,6 @@ from seedmatch.stats.benchmark import Benchmark, benchmark_predictions
 BENCHMARK = golden("analyses/benchmark.tsv")
 BENCHMARK_FILE = "analyses/benchmark.tsv"
 UNPATCHED = r"the unpatched benchmark_preds\(res, padj = 1e-10\) "
-
-
-def exactly(message):
-    return f"^{re.escape(message)}$"
 
 
 def small_de(**columns):

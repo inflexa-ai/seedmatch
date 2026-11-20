@@ -9,7 +9,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from scipy.sparse import coo_array, csr_array
 
-from seedmatch._checks import as_limit, check_at_least, shown
+from seedmatch._checks import as_limit, check_at_least, concatenate_and_clear, shown
 from seedmatch.errors import InputError
 from seedmatch.sequence.alphabet import MASKS
 from seedmatch.sequence.sequence_set import SequenceSet
@@ -166,17 +166,11 @@ def _count_matrix(sequences: SequenceSet, k: int, step: int) -> csr_array:
         rows.append(block_rows.astype(index))
         columns.append(block_columns.astype(index))
         counts.append(block_counts)
-    # `_join` empties its list, so the parts of one array are free before the next array joins.
-    row, column, count = (_join(parts) for parts in (rows, columns, counts))
+    # `concatenate_and_clear` empties its list, so the parts of one array are free before the next
+    # array joins.
+    row, column, count = (concatenate_and_clear(parts) for parts in (rows, columns, counts))
     # A sequence that two blocks split has an entry in each block. The COO form sums them.
     return coo_array((count, (row, column)), shape=(len(sequences), 4**k), dtype=np.int64).tocsr()
-
-
-def _join[T: np.generic](parts: list[NDArray[T]]) -> NDArray[T]:
-    """Join the arrays and empty the list."""
-    joined = np.concatenate(parts)
-    parts.clear()
-    return joined
 
 
 def _count_block(

@@ -182,19 +182,29 @@ def check_columns(
     columns in sorted order. `name` is the argument that the message for a wrong type names, and
     `label` names the table in the other messages.
     """
-    columns = as_data_frame(table, name=name).columns
-    occurrences = Counter(columns)
-    for column in dict.fromkeys(required):
+    frame = as_data_frame(table, name=name)
+    check_unique_columns(frame, required, label=label)
+    missing = sorted(set(required) - set(frame.columns))
+    if missing:
+        message = f"{label} has missing columns: {missing}; expected {list(required)}"
+        raise InputError(message)
+
+
+def check_unique_columns(
+    table: pd.DataFrame, names: Sequence[str], *, label: str = "DE table"
+) -> None:
+    """Raise `InputError` for the first of `names` that labels more than one column of `table`.
+
+    A name that no column has is valid. `label` names the table in the message.
+    """
+    occurrences = Counter(table.columns)
+    for column in dict.fromkeys(names):
         if occurrences[column] > 1:
             message = (
                 f"{label} has {occurrences[column]} columns {column!r}; "
                 "expected one column for each name"
             )
             raise InputError(message)
-    missing = sorted(set(required) - set(columns))
-    if missing:
-        message = f"{label} has missing columns: {missing}; expected {list(required)}"
-        raise InputError(message)
 
 
 def number_text(value: float) -> str:
@@ -202,6 +212,13 @@ def number_text(value: float) -> str:
     if math.isnan(value):
         return "NaN"
     return str(int(value)) if value.is_integer() else repr(value)
+
+
+def concatenate_and_clear[T: np.generic](parts: list[NDArray[T]]) -> NDArray[T]:
+    """Return the parts as one array. The list is empty after the call, so the parts are freed."""
+    joined = np.concatenate(parts)
+    parts.clear()
+    return joined
 
 
 def column_values(

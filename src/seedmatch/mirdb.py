@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from seedmatch._checks import shown
+from seedmatch._checks import concatenate_and_clear, shown
 from seedmatch._io import local_path, open_text
 from seedmatch.errors import InputError
 
@@ -164,16 +164,18 @@ class _Rows:
             raise InputError(message)
         ids = list(self.ids)
         parts = [text.partition("-") for text in ids]
-        id_codes = _joined(self.id_codes)
+        id_codes = concatenate_and_clear(self.id_codes)
         mirdb_id = np.array(ids, dtype=object)[id_codes]
         species = _shared([part[0] for part in parts])[id_codes]
         mirna_name = _shared([part[2] for part in parts])[id_codes]
         del id_codes
-        refseq_id = np.array(list(self.refseqs), dtype=object)[_joined(self.refseq_codes)]
+        refseq_id = np.array(list(self.refseqs), dtype=object)[
+            concatenate_and_clear(self.refseq_codes)
+        ]
         columns = {
             "mirdb_id": mirdb_id,
             "target_refseq_id": refseq_id,
-            "target_score": _joined(self.scores),
+            "target_score": concatenate_and_clear(self.scores),
             "species": species,
             "mirna_name": mirna_name,
         }
@@ -251,13 +253,6 @@ def _vocabulary_codes(column: pd.Series, vocabulary: dict[str, int]) -> NDArray[
         count=len(texts),
     )
     return lookup[codes]
-
-
-def _joined[T: np.generic](parts: list[NDArray[T]]) -> NDArray[T]:
-    """Return the parts as one array. The list is empty after the call, so the parts are freed."""
-    joined = np.concatenate(parts)
-    parts.clear()
-    return joined
 
 
 def _shared(texts: list[str]) -> NDArray[np.object_]:

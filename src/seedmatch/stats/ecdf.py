@@ -77,12 +77,12 @@ def ecdf_test(  # noqa: PLR0913
 ) -> EcdfTestResult:
     """Compare the `log2FoldChange` of two gene sets, as `ecdf_stat_test` of R does.
 
-    `de` needs the columns `gene_id` and `log2FoldChange`. `target` and `background` are iterables
-    of gene IDs. A `str` is one ID, not a set, thus it raises `InputError`. A sample holds the
-    `log2FoldChange` of each row whose `gene_id` is in the set, in the order of `de`. A gene with
-    more than one row gives each row. Each test drops the rows with a NaN `log2FoldChange`
-    (`D-036`), and the result counts the rows that remain. A set without such a row raises
-    `InputError`.
+    `de` needs the columns `gene_id` and `log2FoldChange`, and each of them must occur once
+    (`D-051`). `target` and `background` are iterables of gene IDs. A `str` is one ID, not a set,
+    thus it raises `InputError`. A sample holds the `log2FoldChange` of each row whose `gene_id` is
+    in the set, in the order of `de`. A gene with more than one row gives each row. Each test drops
+    the rows with a NaN `log2FoldChange` (`D-036`), and the result counts the rows that remain. A
+    set without such a row raises `InputError`.
 
     `KS` and `WILCOXON` compare the target with the background. `alternative=None` gives `GREATER`,
     the default of R. But `GREATER` has another meaning for each test. For `KS`, it means that the
@@ -145,7 +145,8 @@ def assign_groups(de: pd.DataFrame, groups: Mapping[str, Iterable[str]]) -> pd.S
     the keys of `groups`, in their order. A row whose `gene_id` is in no group has no value. If a
     gene is in more than one group, the last group wins, as in R. Then the function warns with
     `SeedMatchWarning`, and the message names the first pair of groups that share a gene. A gene
-    that occurs two times in one group gives no warning (`D-039`).
+    that occurs two times in one group gives no warning (`D-039`). A repeated `gene_id` column
+    raises `InputError` (`D-051`).
     """
     if not isinstance(groups, Mapping):
         message = (

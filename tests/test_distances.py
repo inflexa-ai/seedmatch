@@ -1,11 +1,10 @@
 import itertools
-import re
 from typing import assert_never
 
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import GUIDE, NOT_A_DATA_FRAME, golden, sirna_seqs
+from helpers import GUIDE, NOT_A_DATA_FRAME, exactly, golden, sirna_seqs
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -16,10 +15,6 @@ RANGES = golden("analyses/distances_ranges.tsv")
 DISTANCES = golden("analyses/distances.tsv")
 CASES = list(dict.fromkeys(RANGES["case"]))
 COLUMNS = ["seq_id", "gene_id", "distance"]
-
-
-def exactly(message):
-    return f"^{re.escape(message)}$"
 
 
 def case_matches(case):

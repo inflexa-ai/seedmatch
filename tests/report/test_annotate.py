@@ -3,7 +3,7 @@ import re
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import GUIDE, NOT_A_DATA_FRAME, golden_rows, sirna_de, sirna_seqs
+from helpers import GUIDE, NOT_A_DATA_FRAME, exactly, golden_rows, sirna_de, sirna_seqs
 
 import seedmatch
 from seedmatch import Guide, SearchOptions, Seed, SequenceSet
@@ -152,6 +152,33 @@ def test_a_de_table_without_gene_id_names_the_column():
     message = "DE table has no 'gene_id' column; found ['symbol']"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         annotate_seed_counts(pd.DataFrame({"symbol": ["Ttr"]}), sirna_seqs(), MER7M8)
+
+
+@pytest.mark.parametrize("shared_genes", [True, False])
+def test_a_repeated_gene_id_column_is_an_error_D051(shared_genes):
+    de = pd.DataFrame([["Ttr", "x"]], columns=["gene_id", "gene_id"])
+    message = "DE table has 2 columns 'gene_id'; expected one column for each name"
+    with pytest.raises(InputError, match=exactly(message)):
+        annotate_seed_counts(de, sirna_seqs(), MER7M8, shared_genes=shared_genes)
+
+
+@pytest.mark.parametrize("shared_genes", [True, False])
+@pytest.mark.parametrize(("column", "name"), [(None, "mer7m8"), ("hits", "hits")])
+def test_a_repeated_count_column_is_an_error_D051(shared_genes, column, name):
+    de = pd.DataFrame([["g", 5, 6]], columns=["gene_id", name, name])
+    message = f"DE table has 2 columns '{name}'; expected one column for each name"
+    with pytest.raises(InputError, match=exactly(message)):
+        annotate_seed_counts(
+            de, seqs_with(("g", "CTCTATA")), MER7M8, column=column, shared_genes=shared_genes
+        )
+
+
+@pytest.mark.parametrize("shared_genes", [True, False])
+def test_a_repeated_column_that_is_not_read_is_kept_D051(shared_genes):
+    de = pd.DataFrame([["g", 5, 6]], columns=["gene_id", "extra", "extra"])
+    got = annotate_seed_counts(de, seqs_with(("g", "CTCTATA")), MER7M8, shared_genes=shared_genes)
+    assert got.columns.tolist() == ["gene_id", "extra", "extra", "mer7m8"]
+    assert got.to_numpy().tolist() == [["g", 5, 6, 1]]
 
 
 @pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)

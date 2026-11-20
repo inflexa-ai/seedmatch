@@ -23,7 +23,9 @@ from seedmatch._checks import (
     check_integer_columns,
     check_not_negative,
     check_numeric_columns,
+    check_unique_columns,
     column_values,
+    concatenate_and_clear,
     number_text,
 )
 from seedmatch.errors import InputError
@@ -230,7 +232,7 @@ def test_check_columns_keeps_the_message_of_the_de_table_by_default():
         check_columns(pd.DataFrame({"seq_id": ["s1"]}), ["seq_id", "width"])
 
 
-def test_check_columns_rejects_a_required_column_that_occurs_more_than_once():
+def test_check_columns_rejects_a_required_column_that_occurs_more_than_once_D051():
     table = pd.DataFrame([[1, 2, 3]], columns=["seq_id", "padj", "padj"])
     message = "DE table has 2 columns 'padj'; expected one column for each name"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
@@ -240,23 +242,39 @@ def test_check_columns_rejects_a_required_column_that_occurs_more_than_once():
         check_columns(table, ["seq_id", "padj"], name="matches", label="matches table")
 
 
-def test_check_columns_gives_the_real_count_of_a_repeated_column():
+def test_check_columns_gives_the_real_count_of_a_repeated_column_D051():
     table = pd.DataFrame([[1, 2, 3, 4]], columns=["padj", "padj", "padj", "seq_id"])
     message = "DE table has 3 columns 'padj'; expected one column for each name"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         check_columns(table, ["seq_id", "padj"])
 
 
-def test_check_columns_rejects_a_repeated_column_before_it_lists_the_missing_columns():
+def test_check_columns_rejects_a_repeated_column_before_it_lists_the_missing_columns_D051():
     table = pd.DataFrame([[1, 2]], columns=["padj", "padj"])
     message = "DE table has 2 columns 'padj'; expected one column for each name"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         check_columns(table, ["pvalue", "padj"])
 
 
-def test_check_columns_accepts_a_repeated_column_that_is_not_required():
+def test_check_columns_accepts_a_repeated_column_that_is_not_required_D051():
     table = pd.DataFrame([[1, 2, 3]], columns=["seq_id", "other", "other"])
     check_columns(table, ["seq_id"])
+
+
+def test_check_unique_columns_names_the_first_repeated_name_and_accepts_an_absent_name_D051():
+    table = pd.DataFrame([[1, 2, 3, 4]], columns=["a", "b", "b", "a"])
+    message = "matches table has 2 columns 'b'; expected one column for each name"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_unique_columns(table, ["c", "b", "a"], label="matches table")
+    check_unique_columns(table, ["c"])
+
+
+def test_concatenate_and_clear_returns_the_joined_array_and_empties_the_list():
+    parts = [np.array([1, 2], dtype=np.int32), np.empty(0, dtype=np.int32), np.array([3], np.int32)]
+    joined = concatenate_and_clear(parts)
+    assert joined.tolist() == [1, 2, 3]
+    assert joined.dtype == np.int32
+    assert parts == []
 
 
 def test_as_data_frame_names_the_argument():

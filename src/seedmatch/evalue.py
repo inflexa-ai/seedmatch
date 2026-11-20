@@ -171,12 +171,14 @@ def e_values(de: pd.DataFrame, null: pd.DataFrame, *, column: str) -> pd.DataFra
     The result is a copy of the rows of `de` whose gene is in the index of `null`, in the order of
     `de`, with a new index and the `float64` column `e_value`. A column `e_value` that is present
     gets the new values. A `de` without such a row raises `InputError`. A count that is NaN,
-    infinite, or negative, in `de` or in `null`, raises `InputError`, and so does a gene with two
-    rows in `null` (`D-047`). A count that is not an integer is valid. If `gene_id` or the name in
-    `column` labels more than one column of `de`, the function raises `InputError`.
+    infinite, or negative, in `de` or in `null`, raises `InputError`. This holds also for a row of
+    `de` whose gene is not in `null`. A gene with two rows in `null` raises `InputError` too
+    (`D-047`). A count that is not an integer is valid. If `gene_id` or the name in `column` labels
+    more than one column of `de`, the function raises `InputError`.
 
-    The time is O(R x C) for R rows of `de` and C columns of `null`. The function compares blocks
-    of 4096 rows, thus the work memory is O(4096 x C), and it makes no copy of `null`.
+    The time is O((R + G) x C) for R rows of `de`, and G rows and C columns of `null`. The function
+    compares blocks of 4096 rows, thus the work memory is O(4096 x C), and it makes no copy of
+    `null`.
     """
     table = as_data_frame(de)
     name = as_text("column", column)

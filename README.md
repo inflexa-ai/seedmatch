@@ -151,7 +151,7 @@ scored = e_values(de, null, column="mer7m8")
 print(scored[["gene_id", "mer7m8", "e_value"]].head())
 ```
 
-`rng` is a `numpy.random.Generator` or an int seed, and the default `n_random` is 1000. The null is a required argument of `e_values`, because the R default does not exist. Genes match by `gene_id` (D-008). The result has the rows of `de` whose gene is in the null. `e_value_null` runs its searches on a thread pool, and `workers` sets the width of the pool. The null holds genes x `n_random` x 4 bytes. A count that is NaN, infinite, or negative raises `InputError`, because R gives it the e-value 0 (D-047).
+`rng` is a `numpy.random.Generator` or an int seed, and the default `n_random` is 1000. The null is a required argument of `e_values`, because the R default does not exist. Genes match by `gene_id` (D-008). The result has the rows of `de` whose gene is in the null. `e_value_null` runs its searches on a thread pool, and `workers` sets the width of the pool. The null holds genes x `n_random` x 4 bytes. A count that is NaN, infinite, or negative raises `InputError`, because R gives it the e-value 0. This holds also for a row whose gene is not in the null, where R drops the row (D-047).
 
 `benchmark_predictions` scores the seed counts against a gold standard of genes that go down. A gene is in the gold standard if one of its rows has `padj` at most `padj_cutoff` and `log2FoldChange` below `l2fc_cutoff`. This example uses the `de` table of the example above.
 
@@ -163,7 +163,7 @@ benchmark = benchmark_predictions(de)
 print(benchmark.pr.auc_integral, benchmark.roc.auc)
 ```
 
-`benchmark.pr` is a `PrCurve`, and `benchmark.roc` is a `RocCurve`. The PR curve and the ROC curve use the same labels, but the ROC curve of R does not (D-006). A row with a NaN `padj` or a NaN `log2FoldChange` is a negative, as in R. The negatives are the other rows of `de`, thus a filter of `de` before the call also changes the negatives. A NaN score raises `InputError`. So do a cutoff that is not a number, and a gold standard without a positive or without a negative row (D-048).
+`benchmark.pr` is a `PrCurve`, and `benchmark.roc` is a `RocCurve`. The PR curve and the ROC curve use the same labels, but the ROC curve of R does not (D-006). A row with a NaN `padj` or a NaN `log2FoldChange` does not pass the cutoffs. It is a negative unless another row of its gene passes, as in R. The negatives are the other rows of `de`, thus a filter of `de` before the call also changes the negatives. A NaN score raises `InputError`. So do a cutoff that is not a number, and a gold standard without a positive or without a negative row (D-048).
 
 `read_mirdb` reads the miRDB table of predicted miRNA targets. This is the file that `seedmatch-fetch mirdb` downloads, and it has no header. This example keeps the rows of the rat, which has the species code `rno`.
 
