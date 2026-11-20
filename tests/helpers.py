@@ -18,6 +18,7 @@ from seedmatch import (
     count_matches,
     filter_de,
     full_search_ranges,
+    kmer_counts,
     seed_match_report,
 )
 from seedmatch.sequence import SequenceSet, read_fasta
@@ -115,6 +116,7 @@ def run_core_pipeline() -> None:
     de = filter_de(sirna_de(), basemean_cutoff=0)
     annotate_seed_counts(de, seqs, Guide(GUIDE).target(Seed.MER7M8))
     full_search_ranges(Guide(GUIDE), seqs)
+    kmer_counts(seqs, k=3)
     seed_match_report(de, seqs, Guide(GUIDE))
     annotation = DATA / "annotation"
     with Reference.from_paths(

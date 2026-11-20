@@ -95,6 +95,25 @@ utr3_counts = count_matches(target, utr3)
 
 [`docs/r-map.md`](docs/r-map.md) gives the Python name of each R function, and the changes of the arguments.
 
+## Other analyses
+
+`kmer_counts` counts the k-mers of each sequence. Its result holds a sparse matrix with one row for each sequence and one column for each k-mer. `kmer_gene_counts` gives the number of genes that have each k-mer. R draws a histogram of this number in `kmer_hist`. This example reads the number for the target of the example above.
+
+```python
+from seedmatch import kmer_counts, kmer_gene_counts
+
+# The 7-mers of the sequences. The default k is 7, the default of R.
+kmers = kmer_counts(sequences)
+
+# The number of genes with each 7-mer, as a Series. The index is the 7-mer.
+genes_with_kmer = kmer_gene_counts(kmers)
+
+# The number of genes that have the 7-mer of the target.
+print(genes_with_kmer[target.sequence])
+```
+
+`kmers.matrix` is a `scipy.sparse.csr_array`. `kmers.to_frame()` gives the layout of `sequence_kmer_counts` in R. This frame is dense and holds n · 4^k · 8 bytes for n sequences. The value of `k` is at most 12 (D-043).
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -137,6 +156,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - `wobble=True` with `fixed_pattern=True` raises `InputError`, because a fixed pattern matches the wobble letter R only to the letter R (D-026).
 - A sequence from an annotation keeps its transcript ID and its gene ID. In R, `load_annotations` gives the name `NA` to each sequence of a gene union (D-002), and `tx.names` is `NULL` (D-009).
 - `ecdf_test` drops the rows without a fold change for each test. R drops them for the KS and Wilcoxon tests only, and it stops for DTS and Wasserstein (D-036). `ecdf_test` raises `InputError` for an `alternative` with DTS or Wasserstein, but R ignores it without a message (D-035).
+- `kmer_gene_counts` counts the genes with a k-mer. The histogram of R counts the sequences, but its label says genes (D-042).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -150,6 +170,7 @@ This version has the core path:
 - the DE table: the reader and the filter
 - the seed counts, `full_search`, `full_search_ranges`, and `seed_match_report`
 - the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and `ecdf_test` for two gene sets
+- the k-mer counts of a sequence set, and the number of genes with each k-mer
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:

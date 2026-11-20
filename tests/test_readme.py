@@ -66,3 +66,12 @@ def test_readme_ecdf_example_gives_the_r_result(readme_namespace):
     assert math.isclose(result.statistic, float(row.statistic), **STATISTIC_TOLERANCE)
     assert result.p_value is not None
     assert math.isclose(result.p_value, float(row.p_value), rel_tol=1e-9)
+
+
+def test_readme_kmer_example_gives_the_r_target_count(readme_namespace):
+    target = readme_namespace["target"]
+    rows = golden("analyses/kmer_gene_counts.tsv")
+    (row,) = rows[
+        (rows["case"] == "test_data_k7_s1") & (rows["kmer"] == target.sequence)
+    ].itertuples()
+    assert readme_namespace["genes_with_kmer"][target.sequence] == int(row.n)

@@ -439,6 +439,9 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `.check_gene_list_overlap` (used by `deseq_fc_ecdf`) | R warns `Gene lists overlap!` for `any(duplicated(unlist(gene_lists)))`, thus also for a gene that occurs two times in one list (`R/deseq_fc_ecdf.R:165-169`). | `assign_groups` warns with `SeedMatchWarning` only if two groups share a gene. The message names the two groups and one gene. |
 | `.assign_groups` (used by `deseq_fc_ecdf`) | The text `"NA"` marks a gene in no group, and the `factor` call makes it a level if a group has the name `NA`. Then this level also holds each gene in no group (`R/deseq_fc_ecdf.R:109`, `:171-182`). | `assign_groups` gives no value to a gene in no group. A group named `NA` holds only its own genes. |
 | `get_stringPPI_to_stringGGI` (the STRING download) | `STRINGdb$new` gets no `version`, thus STRINGdb 2.22.0 asks the STRING server for the current version at each run (`R/get_stringPPI_to_stringGGI.R:15`, `R/rstring.R:145-151` of STRINGdb 2.22.0). The network depends on the date of the run. | The registry pins STRING 12.5, with the size and the SHA-256 digest of each file. |
+| `kmer_hist` (the gene count) | `colSums` of the presence matrix counts the sequences with a k-mer, but the label says genes (`R/kmer_hist.R:24-28`, `:32`). | `kmer_gene_counts` counts the distinct gene IDs. |
+| `sequence_kmer_counts` (the width) | `oligonucleotideFrequency` accepts a width of 13 and more. It makes a dense matrix with 4^13 columns for each sequence (`R/kmer_hist.R:63-66`). | `kmer_counts` raises `InputError` for a `k` above 12, and its matrix is sparse. |
+| `sequence_kmer_counts` (the names) | A repeated sequence name stops the function with `duplicate 'row.names' are not allowed` (`R/kmer_hist.R:71`). | `kmer_counts` gives one row for each sequence, in the order of the set. |
 
 ## Tests
 
@@ -518,6 +521,8 @@ A test runs each code example in `README.md` and in `docs/`.
 - The 2bit reader decodes by range, and the EnsDb reader filters in SQL. Thus the request, not the file, sets the size of a read.
 - A mismatch search is O(N · m) at worst, with an early stop when the mismatch count passes the limit. An indel search is O(N · m) dynamic programming.
 - The kernels use `nogil=True`. `full_search` runs its patterns on a thread pool of fixed width. The width is a parameter, with the CPU count as the default.
+- `kmer_counts` works in blocks of 2^20 window starts, and its matrix has at most one entry for each window.
+- `KmerCounts.to_frame` is dense and holds n · 4^k · 8 bytes.
 - `docs/performance.md` records the wall time and the peak memory of `seed_match_report` on the canonical 3' UTRs of `rnor7`, for Python and for R.
 - Target: after the JIT compilation, Python is not slower than R by more than a factor of 2.
 

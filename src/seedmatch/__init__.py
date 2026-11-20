@@ -3,6 +3,7 @@
 from seedmatch.annotation import Features, FeatureType, PerGene, Reference, TranscriptFilter
 from seedmatch.de import filter_de, read_deseq2_table
 from seedmatch.errors import InputError, SeedMatchError, SeedMatchWarning
+from seedmatch.kmers import KmerCounts, kmer_counts, kmer_gene_counts
 from seedmatch.report import (
     DEFAULT_SEEDS,
     NONSEED_SEEDS,
@@ -45,6 +46,7 @@ __all__ = [
     "FullSearchRangesOptions",
     "Guide",
     "InputError",
+    "KmerCounts",
     "PValueMethod",
     "PerGene",
     "Reference",
@@ -68,6 +70,8 @@ __all__ = [
     "find_matches",
     "full_search",
     "full_search_ranges",
+    "kmer_counts",
+    "kmer_gene_counts",
     "read_deseq2_table",
     "read_fasta",
     "reverse_complement",

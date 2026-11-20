@@ -64,6 +64,15 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: A caller must know the transcript of each sequence, for example to join the sequences with `Reference.transcripts`. A choice without an ID cannot load a reference.
 - Test: `test_sequence_ids_are_the_transcript_ids_D009` in `tests/annotation/test_reference.py`.
 
+## D-010: kmer_gene_counts returns the counts of kmer_hist
+
+- ID: `D-010`
+- R location: `kmer_hist` (`R/kmer_hist.R:32-36`).
+- R behavior: `plot(hist(...))` returns `NULL`, and `NULL + abline(...)` returns `integer(0)`. Thus `kmer_hist` returns `integer(0)` and no data. An R probe with R 4.5.3 gives the evidence: `kmer_hist(<the sequences of kmer_cases.tsv>, "ACG", width = 3)`, with `pdf(NULL)` as the device, returns `integer(0)`. The note of `tests/golden/analyses/kmer_gene_counts.tsv` records this value.
+- New behavior: `kmer_gene_counts` returns the gene count of each k-mer. The plot module of a later plan draws the histogram.
+- Reason: R returns no data, thus a caller cannot read the counts or the target count.
+- Test: `test_kmer_gene_counts_give_the_counts_of_kmer_hist_D010` in `tests/test_kmers.py`.
+
 ## D-012: The best match uses only the columns that the search made
 
 - ID: `D-012`
@@ -401,3 +410,30 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: The registry pins STRING 12.5. `seedmatch-fetch string TAXON DEST` downloads `<TAXON>.protein.links.v12.5.txt.gz` and makes sure that the size and the SHA-256 digest agree with the registry.
 - Reason: A pinned version and its digest give the same file at each run. A new STRING release does not change a result, because the registry must change first.
 - Test: `test_the_string_urls_name_the_pinned_version_D041` in `tests/resources/test_registry.py`.
+
+## D-042: kmer_gene_counts counts genes, not sequences
+
+- ID: `D-042`
+- R location: `kmer_hist` (`R/kmer_hist.R:24-28`).
+- R behavior: `colSums` of the presence matrix counts the sequences with the k-mer. The axis label is `Number of genes with k-mer` (`R/kmer_hist.R:32`), and the title is `K-mer gene frequencies`. A gene with more than one sequence counts more than once. Evidence: the case `cases_k2_s1` of `tests/golden/analyses/kmer_gene_counts.tsv`. The 2-mer `AC` is in the sequences `s1`, `s2`, `s3`, and `s6`, which belong to the genes `g1` and `g2`. R gives 4, and the port gives 2.
+- New behavior: `kmer_gene_counts` counts the distinct gene IDs. A set with one sequence for each gene gives the R values.
+- Reason: The label of R names genes. A result for a gene uses all the sequences of the gene (`D-003`).
+- Test: `test_kmer_gene_counts_count_genes_not_sequences_D042` in `tests/test_kmers.py`. `test_kmer_gene_counts_match_r_for_one_sequence_per_gene` in the same file shows that the R values agree if each gene has one sequence.
+
+## D-043: kmer_counts rejects a k above 12
+
+- ID: `D-043`
+- R location: `sequence_kmer_counts` calls `oligonucleotideFrequency` (`R/kmer_hist.R:63-66`).
+- R behavior: R accepts `width = 13`. It makes a dense integer matrix with 4^13 = 67,108,864 columns for each sequence. Evidence: the note of `tests/golden/analyses/kmer_counts.tsv`. `dim` of `oligonucleotideFrequency(DNAStringSet("ACGTACGTACGTAC"), width = 13)` is 1 x 67108864.
+- New behavior: `kmer_counts` raises `InputError` for a `k` above 12, with the message `k 13 is out of range; expected an integer from 1 to 12`. A `k` below 1 raises the same message. The matrix is sparse.
+- Reason: The labels of `kmers()`, `to_frame()`, and `kmer_gene_counts` grow as 4^k. 4^12 is 16,777,216 labels. `kmers()` holds about 1 GB, and `kmer_gene_counts` takes about 3 s and peaks near 2 GB.
+- Test: `test_kmer_counts_reject_k_above_12_D043` in `tests/test_kmers.py`. `test_kmer_counts_accept_k_12` in the same file covers the limit.
+
+## D-044: kmer_counts gives a row for each sequence, also for a repeated ID
+
+- ID: `D-044`
+- R location: `sequence_kmer_counts` (`R/kmer_hist.R:71`).
+- R behavior: `rownames(olig.freq) = names(seqs)` stops with `duplicate 'row.names' are not allowed`. Evidence: the note of `tests/golden/analyses/kmer_counts.tsv`.
+- New behavior: `kmer_counts` gives one row for each sequence, in the order of the set.
+- Reason: A row of the matrix is a sequence, thus a repeated ID does not make a count ambiguous.
+- Test: `test_kmer_counts_keep_each_sequence_with_a_repeated_id_D044` in `tests/test_kmers.py`.
