@@ -145,6 +145,25 @@ def test_check_type_names_the_argument_and_the_type():
         check_type("guide", "UUAU", Guide)
 
 
+@pytest.mark.parametrize(
+    ("expected", "text"),
+    [
+        ((str, Guide), "a str or a Guide"),
+        ((str, Guide, bytes), "a str, a Guide, or a bytes"),
+        ((Guide,), "a Guide"),
+    ],
+)
+def test_check_type_names_each_type_of_a_tuple(expected, text):
+    message = f"count has type float; expected {text}"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_type("count", 1.5, expected)
+
+
+def test_check_type_accepts_an_instance_of_any_type_of_a_tuple():
+    check_type("pattern", "UUAU", (str, Guide))
+    check_type("pattern", Guide("UUAUAGAG"), (str, Guide))
+
+
 def test_check_type_accepts_an_instance_and_an_instance_of_a_subclass():
     check_type("guide", Guide("UUAUAGAG"), Guide)
     check_type("count", np.int64(3), np.integer)

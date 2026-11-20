@@ -306,6 +306,24 @@ def test_e_value_null_checks_rng_and_workers_with_the_shared_messages():
         e_value_null(Guide(GUIDE), sirna_seqs(), rng=1, workers=0)
 
 
+def test_e_value_null_rejects_a_guide_of_another_type_before_any_draw():
+    generator = np.random.default_rng(1)
+    before = generator.bit_generator.state
+    message = "guide has type str; expected a Guide"
+    with pytest.raises(InputError, match=exactly(message)):
+        e_value_null("UUAUAGAG", sirna_seqs(), rng=generator)
+    assert generator.bit_generator.state == before
+
+
+def test_e_value_null_rejects_sequences_of_another_type_before_any_draw():
+    generator = np.random.default_rng(1)
+    before = generator.bit_generator.state
+    message = "sequences has type list; expected a SequenceSet"
+    with pytest.raises(InputError, match=exactly(message)):
+        e_value_null(Guide(GUIDE), [("a", "ACGT")], rng=generator)
+    assert generator.bit_generator.state == before
+
+
 def test_e_values_reject_a_nan_count_D047():
     """D-047: R gives the e-value 0 to the observed count NA (the notes of evalue.tsv)."""
     de = make_de(["g3", "g4"], [1.0, np.nan])

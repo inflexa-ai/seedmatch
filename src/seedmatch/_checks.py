@@ -80,10 +80,24 @@ def as_member[M: Enum](name: str, value: object, members: type[M]) -> M:
     raise InputError(message)
 
 
-def check_type(name: str, value: object, expected: type) -> None:
-    """Raise `InputError` unless the value is an instance of the expected type."""
+def _article_names(types: tuple[type, ...]) -> str:
+    """Return the names of the types for a message: `a A`, `a A or a B`, or `a A, a B, or a C`."""
+    *head, last = (f"a {kind.__name__}" for kind in types)
+    if not head:
+        return last
+    if len(head) == 1:
+        return f"{head[0]} or {last}"
+    return f"{', '.join(head)}, or {last}"
+
+
+def check_type(name: str, value: object, expected: type | tuple[type, ...]) -> None:
+    """Raise `InputError` unless the value is an instance of the expected type.
+
+    `expected` can be a tuple of types, and then the message names each type.
+    """
     if not isinstance(value, expected):
-        message = f"{name} has type {type(value).__name__}; expected a {expected.__name__}"
+        types = expected if isinstance(expected, tuple) else (expected,)
+        message = f"{name} has type {type(value).__name__}; expected {_article_names(types)}"
         raise InputError(message)
 
 

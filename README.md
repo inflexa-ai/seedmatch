@@ -138,7 +138,7 @@ print(distances.head())
 
 The columns are `seq_id`, `gene_id`, and `distance`. The default `anchor=MatchAnchor.FIVE_PRIME_END` is the R default `fivePrimeEnd`, and it uses the `end` of each match. `MatchAnchor.THREE_PRIME_END` uses the `start`, and `MatchAnchor.CENTER` uses the center. A sequence with n matches gives n(n − 1)/2 rows, thus a sequence with many matches gives a large result.
 
-`e_values` gives the e-value of the seed count of each gene. The e-value is the fraction of random guides whose count is at least the observed count. `e_value_null` makes the random counts. It shuffles the letters of the guide, and it counts the seed matches of each shuffle in each gene. This example uses the `de` table of the example above.
+`e_values` gives the e-value of the seed count of each gene. The e-value is the fraction of random guides whose count is at least the observed count. `e_value_null` makes the random counts of `annotate_seed_counts`. It shuffles the letters of the guide, and it counts the seed matches of each shuffle in each gene. This example uses the `de` table of the example above.
 
 ```python
 from seedmatch import e_value_null, e_values
@@ -152,6 +152,8 @@ print(scored[["gene_id", "mer7m8", "e_value"]].head())
 ```
 
 `rng` is a `numpy.random.Generator` or an int seed, and the default `n_random` is 1000. The null is a required argument of `e_values`, because the R default does not exist. Genes match by `gene_id` (D-008). The result has the rows of `de` whose gene is in the null. `e_value_null` runs its searches on a thread pool, and `workers` sets the width of the pool. The null holds genes x `n_random` x 4 bytes. A count that is NaN, infinite, or negative raises `InputError`, because R gives it the e-value 0. This holds also for a row whose gene is not in the null, where R drops the row (D-047).
+
+`e_values` cannot tell which count a null holds. Each null fits one count. `e_value_null` fits the count of `annotate_seed_counts`, and `wobble_bulge_null` fits the column `overall_matches` of `annotate_wobble_bulge_counts`. A null of the other count gives wrong e-values and no message. For example, the null of `e_value_null` gives e-values that are too small for `overall_matches`.
 
 `benchmark_predictions` scores the seed counts against a gold standard of genes that go down. A gene is in the gold standard if one of its rows has `padj` at most `padj_cutoff` and `log2FoldChange` below `l2fc_cutoff`. This example uses the `de` table of the example above.
 
@@ -186,12 +188,12 @@ from seedmatch import annotate_wobble_bulge_counts, wobble_bulge_matches
 wobble_matches = wobble_bulge_matches(guide, sequences)
 print(wobble_matches.head())
 
-# The column "overall_matches": the number of rows of each gene.
+# The column "overall_matches": for each gene, the largest number of rows of one of its sequences (D-003).
 wobble_de = annotate_wobble_bulge_counts(de, sequences, guide)
 print(wobble_de[["gene_id", "overall_matches"]].head())
 ```
 
-`max_bulge` is the longest run of extra bases, and its default is 4. `bulge_free` is the number of seed positions from g2 that no bulge is next to. Its default is 3, thus a bulge lies only between g5 and g6, g6 and g7, or g7 and g8. A sequence has one row for each distinct start of a match, and the row names the first pattern that matches at this start. `wobble_bulge_matches` searches the set one time for each pattern, and `workers` sets the width of the thread pool. R stops for each call of its wobble and bulge search, and its count rule counts one site more than one time (D-005).
+`max_bulge` is the longest run of extra bases, and its default is 4. `bulge_free` is the number of seed positions from g2 that no bulge is next to. Its default is 3, thus a bulge lies only between g5 and g6, g6 and g7, or g7 and g8. A sequence has one row for each distinct start of a match, and the row names the first pattern that matches at this start. `wobble_bulge_matches` searches the set one time for each pattern, and `workers` sets the width of the thread pool. R stops for each call of its wobble and bulge search, and its count rule counts one site more than one time (D-005). `wobble_bulge_null(guide, sequences, rng=1, n_random=100)` makes the null of `overall_matches` for `e_values`. Its shuffles are those of `e_value_null`, and its thread pool runs over the shuffles.
 
 `compensatory_sites` finds the sites with a seed match and a second region that pairs with the sequence. A region is a window of the guide that starts after the seed window, at g9 for the `MER7M8` seed. The target of a region is the reverse complement of the window. It lies before the seed match in the same sequence. This example uses the `guide`, the `sequences`, and the `de` table of the examples above.
 
@@ -211,7 +213,7 @@ print(site_result.p_value)
 
 `min_length` is the shortest region, and its default is 6. `max_length` is the longest region, and its default is each position up to the guide end. `first_position` is the first guide position of a region. R always uses g8, and `first_position=8` gives the R regions (D-056). `max_distance` is the largest number of bases between a region and its seed match. R `limit` L gives `max_distance` L - 2, thus the default 98 is the R default 100.
 
-A region is dropped if a longer region of the same seed match contains it (D-053). The seed match can have `max_seed_mismatch` mismatches, and the region can have `max_region_mismatch`. R returns no row for each input (D-004). `workers` sets the width of the thread pool.
+A region is dropped if a longer region of the same seed match contains it (D-053). The seed match can have `max_seed_mismatch` mismatches, and the region can have `max_region_mismatch`. R returns no row for each input (D-004). `workers` sets the width of the thread pool. The function takes the fields above as a `CompensatoryOptions` object, in the third position.
 
 ## Resources
 
@@ -259,7 +261,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - `benchmark_predictions` applies the `padj` cutoff. In R, `padj <= padj` compares the column with itself, thus each row with a `padj` passes. R also gives the labels to the ROC curve as the scores of the negative class (D-006).
 - `alignment_text` shows the full guide, from g1 to the last base. In R, the guide line of `plotAlignment` has no g1, and the function stops for the default positions (D-045).
 - The wobble and bulge search runs. In R, each call of `run_wobble_bulges_pipeline` stops with an error. The port counts each distinct start of a site one time, and a bulge is a run of extra target bases (D-005).
-- The 3' compensatory search runs. R returns 0 rows for each input, and its code stops at the first site after the early return. The port gives each pair of a seed match and a region (D-004).
+- The 3' compensatory search runs. R returns 0 rows for each input. Without the early return, its code stops at the first site. The port gives each pair of a seed match and a region (D-004).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -280,8 +282,8 @@ This version has the core path:
 - the e-value of a seed count against a null of shuffled guides
 - the benchmark of the seed counts against a gold standard of genes that go down
 - the reader of the miRDB table of predicted miRNA targets
-- the wobble and bulge search: the sites with G:U pairs or a bulge, and their count for each gene
-- the 3' compensatory search: the sites with a seed match and a region of the guide before it
+- the wobble and bulge search: the sites with G:U pairs or a bulge, their count for each gene, and the null of this count
+- the 3' compensatory search: the sites with a seed match and, before it in the sequence, a match of a 3' region of the guide
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:
@@ -321,8 +323,10 @@ uv run pytest
 Measure the coverage:
 
 ```bash
-NUMBA_DISABLE_JIT=1 uv run pytest --cov
+PYTHONPATH=tools/coverage NUMBA_DISABLE_JIT=1 uv run pytest -p serial_pool --cov
 ```
+
+Without the JIT, the coverage tracer stops the pool threads on its data lock, thus the plugin `tools/coverage/serial_pool.py` runs the pool in the caller thread.
 
 `tools/golden/README.md` tells how to make the R golden files again.
 

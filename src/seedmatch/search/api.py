@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from seedmatch._checks import as_flag, as_limit, check_not_negative
+from seedmatch._checks import as_flag, as_limit, check_not_negative, check_type
 from seedmatch.errors import InputError
 from seedmatch.search import kernels
 from seedmatch.search.compat import compat_table
@@ -21,7 +21,7 @@ from seedmatch.sequence.alphabet import encode_dna
 
 # Biostrings 2.78.0 stops for a longer pattern in each search mode. The limit also bounds the cost
 # of a search with a large max_mismatch.
-_MAX_PATTERN_LENGTH: Final = 20000
+MAX_PATTERN_LENGTH: Final = 20000
 
 
 @dataclass(frozen=True)
@@ -63,10 +63,16 @@ class SearchOptions:
             raise InputError(message)
 
 
+def _check_arguments(pattern: object, sequences: object, options: object) -> None:
+    check_type("pattern", pattern, (str, Target))
+    check_type("sequences", sequences, SequenceSet)
+    check_type("options", options, SearchOptions)
+
+
 def _encode_pattern(pattern: str | Target) -> NDArray[np.uint8]:
     text = pattern.sequence if isinstance(pattern, Target) else pattern
-    if len(text) > _MAX_PATTERN_LENGTH:
-        message = f"pattern has {len(text)} letters; expected at most {_MAX_PATTERN_LENGTH}"
+    if len(text) > MAX_PATTERN_LENGTH:
+        message = f"pattern has {len(text)} letters; expected at most {MAX_PATTERN_LENGTH}"
         raise InputError(message)
     masks = encode_dna(text)
     if masks.size == 0:
@@ -89,6 +95,7 @@ def count_matches(
     options: SearchOptions = SearchOptions(),
 ) -> NDArray[np.int64]:
     """Return the number of matches of the pattern in each sequence, in the order of the set."""
+    _check_arguments(pattern, sequences, options)
     masks = _encode_pattern(pattern)
     compat = _compat(options)
     if _uses_indel_kernel(options):
@@ -118,6 +125,7 @@ def match_ranges(
     the sequence in the set, thus a sequence ID that occurs more than once does not hide which
     sequence has the match. The ranges follow the rules of `find_matches`.
     """
+    _check_arguments(pattern, sequences, options)
     masks = _encode_pattern(pattern)
     compat = _compat(options)
     if _uses_indel_kernel(options):

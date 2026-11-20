@@ -12,7 +12,7 @@ import seedmatch
 from seedmatch import CustomSeed, Guide, Seed, SequenceSet, reverse_complement
 from seedmatch.errors import InputError
 from seedmatch.noncanonical import CompensatoryOptions, compensatory_sites
-from seedmatch.search.api import _MAX_PATTERN_LENGTH
+from seedmatch.search import MAX_PATTERN_LENGTH
 
 GOLDEN_FILE = "noncanonical/compensatory.tsv"
 GOLDEN = golden_rows(GOLDEN_FILE)
@@ -408,21 +408,21 @@ def test_a_window_above_the_pattern_limit_raises_before_a_search_D055(monkeypatc
         raise AssertionError(message)
 
     monkeypatch.setattr("seedmatch.noncanonical.compensatory.match_ranges", search)
-    guide = Guide("A" * (_MAX_PATTERN_LENGTH + 9))
+    guide = Guide("A" * (MAX_PATTERN_LENGTH + 9))
     message = (
-        f"the longest region has {_MAX_PATTERN_LENGTH + 1} letters; "
-        f"expected at most {_MAX_PATTERN_LENGTH}, the pattern limit of the search"
+        f"the longest region has {MAX_PATTERN_LENGTH + 1} letters; "
+        f"expected at most {MAX_PATTERN_LENGTH}, the pattern limit of the search"
     )
     with pytest.raises(InputError, match=exactly(message)):
         compensatory_sites(guide, sirna_seqs())
-    options = CompensatoryOptions(max_length=_MAX_PATTERN_LENGTH + 1)
+    options = CompensatoryOptions(max_length=MAX_PATTERN_LENGTH + 1)
     with pytest.raises(InputError, match=exactly(message)):
         compensatory_sites(guide, sirna_seqs(), options=options)
 
 
 def test_a_window_at_the_pattern_limit_is_searched():
-    guide = Guide("A" * (_MAX_PATTERN_LENGTH + 8))
-    options = CompensatoryOptions(min_length=_MAX_PATTERN_LENGTH, max_length=_MAX_PATTERN_LENGTH)
+    guide = Guide("A" * (MAX_PATTERN_LENGTH + 8))
+    options = CompensatoryOptions(min_length=MAX_PATTERN_LENGTH, max_length=MAX_PATTERN_LENGTH)
     assert compensatory_sites(guide, sirna_seqs(), options=options).empty
 
 
@@ -750,6 +750,17 @@ def test_a_region_past_the_start_counts_the_outside_position():
     options = CompensatoryOptions(min_length=7, max_length=7, max_region_mismatch=1)
     got = compensatory_sites(Guide(GUIDE), sequences, options=options)
     assert rows_of(got) == [(18, 24, 0, 0, 6, 9, 15, "GTTCTTG", 11)]
+
+
+def test_compensatory_sites_take_the_options_in_position_like_wobble_bulge_matches():
+    options = CompensatoryOptions(min_length=8)
+    by_position = compensatory_sites(Guide(GUIDE), sirna_seqs(), options)
+    pd.testing.assert_frame_equal(
+        by_position, compensatory_sites(Guide(GUIDE), sirna_seqs(), options=options)
+    )
+    assert len(by_position) < len(compensatory_sites(Guide(GUIDE), sirna_seqs()))
+    with pytest.raises(TypeError, match="positional"):
+        compensatory_sites(Guide(GUIDE), sirna_seqs(), options, Seed.MER6)
 
 
 def test_compensatory_sites_do_not_depend_on_workers():

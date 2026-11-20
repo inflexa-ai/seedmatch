@@ -18,8 +18,7 @@ from seedmatch._checks import (
 )
 from seedmatch._pool import map_in_pool, pool_width
 from seedmatch.errors import InputError
-from seedmatch.search import SearchOptions, match_ranges
-from seedmatch.search.api import _MAX_PATTERN_LENGTH
+from seedmatch.search import MAX_PATTERN_LENGTH, SearchOptions, match_ranges
 from seedmatch.seed import Guide, Seed, SeedSpec, Target, seed_window
 from seedmatch.sequence import SequenceSet, reverse_complement
 
@@ -133,10 +132,10 @@ def _first_position(guide: Guide, seed: SeedSpec, options: CompensatoryOptions) 
         )
         raise InputError(message)
     longest = positions if options.max_length is None else options.max_length
-    if longest > _MAX_PATTERN_LENGTH:
+    if longest > MAX_PATTERN_LENGTH:
         message = (
             f"the longest region has {longest} letters; "
-            f"expected at most {_MAX_PATTERN_LENGTH}, the pattern limit of the search"
+            f"expected at most {MAX_PATTERN_LENGTH}, the pattern limit of the search"
         )
         raise InputError(message)
     return first
@@ -311,9 +310,9 @@ def _frame(
 def compensatory_sites(
     guide: Guide,
     sequences: SequenceSet,
+    options: CompensatoryOptions = CompensatoryOptions(),
     *,
     seed: SeedSpec = Seed.MER7M8,
-    options: CompensatoryOptions = CompensatoryOptions(),
     workers: int | None = None,
 ) -> pd.DataFrame:
     """Return the sites of the 3' compensatory search (`get_compensatory_sequences` of R).

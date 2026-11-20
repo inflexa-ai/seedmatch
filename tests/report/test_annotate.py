@@ -188,6 +188,18 @@ def test_a_table_that_is_not_a_data_frame_is_an_error(de, type_name):
         annotate_seed_counts(de, sirna_seqs(), MER7M8)
 
 
+def test_a_target_of_another_type_is_an_error():
+    message = "target has type str; expected a Target"
+    with pytest.raises(InputError, match=exactly(message)):
+        annotate_seed_counts(sirna_de(), sirna_seqs(), "CTCTATA")
+
+
+def test_sequences_of_another_type_are_an_error():
+    message = "sequences has type list; expected a SequenceSet"
+    with pytest.raises(InputError, match=exactly(message)):
+        annotate_seed_counts(sirna_de(), [("a", "CTCTATA")], MER7M8)
+
+
 def test_empty_sequence_set_gives_zero_counts_or_no_rows():
     de = pd.DataFrame({"gene_id": ["g"]})
     empty = SequenceSet.from_records([])

@@ -10,9 +10,10 @@ from numpy.typing import NDArray
 from seedmatch._checks import (
     as_data_frame,
     as_flag,
+    as_text,
     check_gene_ids_are_text,
+    check_type,
     check_unique_columns,
-    shown,
 )
 from seedmatch.errors import InputError
 from seedmatch.search import SearchOptions, count_matches
@@ -91,10 +92,9 @@ def annotate_seed_counts(  # noqa: PLR0913
     `gene_id` column, or a repeated column with the name of the count column, raises `InputError`
     (`D-051`).
     """
+    check_type("target", target, Target)
     shared_genes = as_flag("shared_genes", shared_genes)
-    if column is not None and not isinstance(column, str):
-        message = f"column {shown(column)} has type {type(column).__name__}; expected a str"
-        raise InputError(message)
+    name = target.name if column is None else as_text("column", column)
     ambiguous = _AMBIGUITY_LETTER.search(target.sequence) if options.fixed_pattern else None
     if ambiguous is not None:
         letter = ambiguous.group()
@@ -104,7 +104,6 @@ def annotate_seed_counts(  # noqa: PLR0913
             f"{letter!r} only to the letter {letter!r}"
         )
         raise InputError(message)
-    name = target.name if column is None else column
     table = check_count_column(de, name)
     counts = count_matches(target, sequences, options)
     return add_gene_counts(table, sequences, counts, name=name, shared_genes=shared_genes)

@@ -14,6 +14,7 @@ from seedmatch.noncanonical import (
     annotate_wobble_bulge_counts,
     compensatory_sites,
     wobble_bulge_matches,
+    wobble_bulge_null,
     wobble_bulge_patterns,
 )
 from seedmatch.report import (
@@ -112,6 +113,7 @@ __all__ = [
     "seed_match_report",
     "wasserstein_areas",
     "wobble_bulge_matches",
+    "wobble_bulge_null",
     "wobble_bulge_patterns",
     "write_fasta",
 ]

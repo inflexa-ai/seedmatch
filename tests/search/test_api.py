@@ -1,3 +1,4 @@
+import re
 from dataclasses import FrozenInstanceError
 
 import numpy as np
@@ -7,9 +8,16 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from strategies import subjects_for
 
+import seedmatch
 from seedmatch import Guide, Seed, Target
 from seedmatch.errors import InputError
-from seedmatch.search import SearchOptions, count_matches, find_matches, match_ranges
+from seedmatch.search import (
+    MAX_PATTERN_LENGTH,
+    SearchOptions,
+    count_matches,
+    find_matches,
+    match_ranges,
+)
 from seedmatch.search.compat import compat_table
 from seedmatch.sequence import SequenceSet
 from seedmatch.sequence.alphabet import MASKS
@@ -324,6 +332,34 @@ def test_the_pattern_length_limit_of_biostrings():
     assert count_matches("A" * 20000, subject).tolist() == [10001]
     with pytest.raises(InputError, match="pattern has 20001 letters; expected at most 20000"):
         count_matches("A" * 20001, subject)
+
+
+@pytest.mark.parametrize("search", [count_matches, find_matches, match_ranges])
+@pytest.mark.parametrize(
+    ("argument", "bad", "message"),
+    [
+        ("pattern", 5, "pattern has type int; expected a str or a Target"),
+        ("sequences", [("a", "ACGT")], "sequences has type list; expected a SequenceSet"),
+        ("options", {"max_mismatch": 1}, "options has type dict; expected a SearchOptions"),
+    ],
+)
+def test_a_search_rejects_an_argument_of_another_type(search, argument, bad, message):
+    arguments = {"pattern": "ACGT", "sequences": s(a="ACGT"), "options": SearchOptions()}
+    arguments[argument] = bad
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        search(**arguments)
+
+
+def test_a_search_checks_the_pattern_before_the_sequences_and_the_options():
+    message = "pattern has type NoneType; expected a str or a Target"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        count_matches(None, [], {})
+
+
+def test_the_pattern_limit_is_public_in_the_search_package_only():
+    assert MAX_PATTERN_LENGTH == 20000
+    assert "MAX_PATTERN_LENGTH" in seedmatch.search.__all__
+    assert "MAX_PATTERN_LENGTH" not in seedmatch.__all__
 
 
 @pytest.mark.parametrize(

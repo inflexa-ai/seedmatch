@@ -1,6 +1,6 @@
 """The e-value of a seed count against a null of shuffled guides (`generate_e_value` of R)."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Final
 
 import numpy as np
@@ -45,6 +45,65 @@ def _is_count(values: NDArray[np.float64]) -> NDArray[np.bool_]:
     return np.isfinite(values) & (values >= 0)
 
 
+# The draw, the pool, and the result are the same for each null. Each keyword-only parameter is an
+# independent option, so no parameter object fits.
+def shuffle_null(  # noqa: PLR0913
+    guide: Guide,
+    sequences: SequenceSet,
+    target_of: Callable[[Guide], Target],
+    count_sequences: Callable[[Target], NDArray[np.int64]],
+    *,
+    rng: np.random.Generator | int,
+    n_random: int,
+    workers: int | None,
+) -> pd.DataFrame:
+    """Return the counts of `n_random` shuffles of the guide for each gene, as `e_value_null` does.
+
+    `target_of(guide)` returns the target that a search uses for the guide, and it raises
+    `InputError` for a guide that does not fit. `count_sequences(target)` returns one count for each
+    sequence of `sequences`, in the order of the set. The function makes sure that `guide` is a
+    `Guide` and `sequences` is a `SequenceSet`. It calls `target_of` for `guide` before any draw,
+    so that a guide that does not fit leaves `rng` where it is. Then it draws the shuffles
+    (`D-008`), and it calls `target_of` for each shuffle in the thread of the caller. It calls
+    `count_sequences` for each target on a pool of `workers` threads, takes the maximum over the
+    sequences of a gene (`D-003`), and returns the table of `e_value_null`.
+
+    The memory is the table, genes x `n_random` x 4 bytes, and O(`workers` x (genes + sequences))
+    more, with the memory of the calls of `count_sequences` that run. The function allocates the
+    table before the first draw, thus a table that the system cannot allocate raises `MemoryError`
+    and `rng` does not move.
+    """
+    check_type("guide", guide, Guide)
+    check_type("sequences", sequences, SequenceSet)
+    target_of(guide)
+    generator = as_generator(rng)
+    width = pool_width(workers)
+    shuffles = as_limit("n_random", n_random)
+    check_at_least("n_random", shuffles, 1)
+
+    codes, genes = pd.factorize(np.array(sequences.gene_ids, dtype=object))
+    order = np.argsort(codes, kind="stable")
+    sizes = np.bincount(codes, minlength=len(genes))
+    starts = np.cumsum(sizes) - sizes
+
+    def count_genes(target: Target) -> NDArray[np.int32]:
+        counts = count_sequences(target)
+        # Each gene has a sequence, thus no group of reduceat is empty.
+        return np.maximum.reduceat(counts[order], starts).astype(np.int32)
+
+    # Each shuffle fills one row, so the table is the transpose of the frame. copy=False keeps the
+    # frame on the memory of the table also under copy-on-write, the default of pandas 3.
+    # The table exists before the first draw, thus a table that the system cannot allocate fails
+    # before the generator of the caller moves.
+    table = _result_table(shuffles, len(genes))
+    targets = (target_of(shuffle) for shuffle in _shuffled_guides(guide, shuffles, generator))
+    for j, found in enumerate(map_in_pool(count_genes, targets, width)):
+        table[j] = found
+    return pd.DataFrame(
+        table.T, index=pd.Index(genes, name="gene_id"), columns=pd.RangeIndex(shuffles), copy=False
+    )
+
+
 # Each keyword-only parameter is an independent option of the null, so no parameter object fits.
 def e_value_null(  # noqa: PLR0913
     guide: Guide,
@@ -56,7 +115,12 @@ def e_value_null(  # noqa: PLR0913
     options: SearchOptions = SearchOptions(indels=True),
     workers: int | None = None,
 ) -> pd.DataFrame:
-    """Return the seed counts of shuffled guides for each gene: the null of `e_values` (`D-008`).
+    """Return the seed counts of shuffled guides for each gene: the null of `annotate_seed_counts`.
+
+    `e_values` takes this null for the seed counts of `annotate_seed_counts` (`D-008`). For the
+    column `overall_matches` of `annotate_wobble_bulge_counts`, use `wobble_bulge_null`. A count of
+    `count_matches` is not a count of wobble and bulge sites, so this null gives e-values that are
+    too small for `overall_matches`, and no message.
 
     Shuffle j, for j = 0 to `n_random` - 1, has the letters of the guide in the order
     `rng.permutation(len(guide.sequence))`. Thus a shuffle keeps the length and the letters of the
@@ -85,33 +149,19 @@ def e_value_null(  # noqa: PLR0913
     0.09 s, thus the same null on one thread takes about 90 s. The result holds 71 MB, and the peak
     memory above the start is 75 MB.
     """
-    generator = as_generator(rng)
-    width = pool_width(workers)
-    shuffles = as_limit("n_random", n_random)
-    check_at_least("n_random", shuffles, 1)
     check_type("options", options, SearchOptions)
-    guide.target(seed)
 
-    codes, genes = pd.factorize(np.array(sequences.gene_ids, dtype=object))
-    order = np.argsort(codes, kind="stable")
-    sizes = np.bincount(codes, minlength=len(genes))
-    starts = np.cumsum(sizes) - sizes
+    def count_target(target: Target) -> NDArray[np.int64]:
+        return count_matches(target, sequences, options)
 
-    def count_genes(target: Target) -> NDArray[np.int32]:
-        counts = count_matches(target, sequences, options)
-        # Each gene has a sequence, thus no group of reduceat is empty.
-        return np.maximum.reduceat(counts[order], starts).astype(np.int32)
-
-    # Each shuffle fills one row, so the table is the transpose of the frame. copy=False keeps the
-    # frame on the memory of the table also under copy-on-write, the default of pandas 3.
-    # The table exists before the first draw, thus a table that the system cannot allocate fails
-    # before the generator of the caller moves.
-    table = _result_table(shuffles, len(genes))
-    targets = (shuffle.target(seed) for shuffle in _shuffled_guides(guide, shuffles, generator))
-    for j, found in enumerate(map_in_pool(count_genes, targets, width)):
-        table[j] = found
-    return pd.DataFrame(
-        table.T, index=pd.Index(genes, name="gene_id"), columns=pd.RangeIndex(shuffles), copy=False
+    return shuffle_null(
+        guide,
+        sequences,
+        lambda shuffle: shuffle.target(seed),
+        count_target,
+        rng=rng,
+        n_random=n_random,
+        workers=workers,
     )
 
 

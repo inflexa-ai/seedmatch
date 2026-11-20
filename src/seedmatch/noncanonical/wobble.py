@@ -1,5 +1,6 @@
 """The wobble and bulge search: `run_wobble_bulges_pipeline` of R, with the rules of `D-005`."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Final
 
@@ -18,10 +19,10 @@ from seedmatch._checks import (
 )
 from seedmatch._pool import map_in_pool, pool_width
 from seedmatch.errors import InputError
+from seedmatch.evalue import shuffle_null
 from seedmatch.report.annotate import add_gene_counts, check_count_column
-from seedmatch.search import SearchOptions, match_ranges
-from seedmatch.search.api import _MAX_PATTERN_LENGTH
-from seedmatch.seed import Guide, Seed
+from seedmatch.search import MAX_PATTERN_LENGTH, SearchOptions, match_ranges
+from seedmatch.seed import Guide, Seed, Target
 from seedmatch.sequence import SequenceSet
 
 # The target of mer7m8 has 7 letters. Target position k pairs with the guide position g(9 - k), so
@@ -31,6 +32,8 @@ _TARGET_LENGTH: Final = _SEED_END - 1
 _MAX_BULGE_FREE: Final = _SEED_END - 1
 # R searches with fixed = FALSE (R/run_wobble_bulges_pipeline.R:39, :42), so N and R are wildcards.
 _SEARCH_OPTIONS: Final = SearchOptions(fixed_pattern=False, fixed_subject=False)
+
+_Ints = NDArray[np.int64]
 
 
 @dataclass(frozen=True)
@@ -55,10 +58,10 @@ class WobbleBulgeOptions:
         bulge_free = as_limit("bulge_free", self.bulge_free)
         check_not_negative("max_bulge", max_bulge)
         longest = _TARGET_LENGTH + max_bulge
-        if longest > _MAX_PATTERN_LENGTH:
+        if longest > MAX_PATTERN_LENGTH:
             message = (
                 f"max_bulge {shown(max_bulge)} makes a pattern of {shown(longest)} letters; "
-                f"expected at most {_MAX_PATTERN_LENGTH - _TARGET_LENGTH}"
+                f"expected at most {MAX_PATTERN_LENGTH - _TARGET_LENGTH}"
             )
             raise InputError(message)
         if not 0 <= bulge_free <= _MAX_BULGE_FREE:
@@ -85,6 +88,16 @@ def _shapes(options: WobbleBulgeOptions) -> tuple[NDArray[np.int64], NDArray[np.
     return after, size
 
 
+def _shape_pairs(options: WobbleBulgeOptions) -> list[tuple[int, int]]:
+    """Return (`bulge_after`, `bulge_size`) of each pattern, in the order of `_shapes`."""
+    after, size = _shapes(options)
+    return list(zip(after.tolist(), size.tolist(), strict=True))
+
+
+def _wobble_target(guide: Guide) -> Target:
+    return guide.target(Seed.MER7M8, wobble=True)
+
+
 def _pattern(target: str, after: int, size: int) -> str:
     """Return the target with `size` extra bases after g_`after`. Size 0 gives the target."""
     cut = _SEED_END - after
@@ -108,12 +121,12 @@ def wobble_bulge_patterns(
     `max_bulge` letters.
 
     The function builds all patterns at once. The time and the memory are the sum of the pattern
-    lengths, O(`max_bulge`^2 x (6 - `bulge_free`)). For `max_bulge` 19993 and `bulge_free` 0, the
-    patterns hold about 1.2 billion letters. The defaults give 13 short patterns.
+    lengths, O(`max_bulge`^2 x max(0, 6 - `bulge_free`)). For `max_bulge` 19993 and `bulge_free` 0,
+    the patterns hold about 1.2 billion letters. The defaults give 13 short patterns.
     """
     check_type("guide", guide, Guide)
     check_type("options", options, WobbleBulgeOptions)
-    target = guide.target(Seed.MER7M8, wobble=True).sequence
+    target = _wobble_target(guide).sequence
     after, size = _shapes(options)
     return pd.DataFrame(
         {
@@ -126,33 +139,30 @@ def wobble_bulge_patterns(
     )
 
 
-def _distinct_starts(
-    guide: Guide, sequences: SequenceSet, options: WobbleBulgeOptions, workers: int | None
-) -> tuple[NDArray[np.int64], NDArray[np.int64], NDArray[np.int64]]:
+def _search_pattern(
+    target: str, sequences: SequenceSet, shape: tuple[int, int]
+) -> tuple[_Ints, _Ints]:
+    """Return the sequence index and the start of each match of the pattern of `shape`."""
+    index, starts, _ends = match_ranges(_pattern(target, *shape), sequences, _SEARCH_OPTIONS)
+    return index, starts
+
+
+def _first_pattern_of_each_start(
+    found: Iterable[tuple[_Ints, _Ints]],
+) -> tuple[_Ints, _Ints, _Ints]:
     """Return the sequence index, the start, and the pattern number of each distinct start.
 
-    The rows have the order of the set and then of the start. A start that more than one pattern
+    `found` has the result of `_search_pattern` for each pattern, in the order of the patterns. The
+    rows have the order of the set and then of the start. A start that more than one pattern
     matches takes the first pattern of the order of `wobble_bulge_patterns`.
     """
-    check_type("guide", guide, Guide)
-    check_type("sequences", sequences, SequenceSet)
-    check_type("options", options, WobbleBulgeOptions)
-    width = pool_width(workers)
-    target = guide.target(Seed.MER7M8, wobble=True).sequence
-    after, size = _shapes(options)
-
-    def search(shape: tuple[int, int]) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
-        index, starts, _ends = match_ranges(_pattern(target, *shape), sequences, _SEARCH_OPTIONS)
-        return index, starts
-
-    indexes: list[NDArray[np.int64]] = []
-    starts: list[NDArray[np.int64]] = []
-    numbers: list[NDArray[np.int64]] = []
-    shapes = zip(after.tolist(), size.tolist(), strict=True)
-    for position, (found, begin) in enumerate(map_in_pool(search, shapes, width)):
-        indexes.append(found)
-        starts.append(begin)
-        numbers.append(np.full(found.size, position, dtype=np.int64))
+    indexes: list[_Ints] = []
+    starts: list[_Ints] = []
+    numbers: list[_Ints] = []
+    for position, (found_index, found_start) in enumerate(found):
+        indexes.append(found_index)
+        starts.append(found_start)
+        numbers.append(np.full(found_index.size, position, dtype=np.int64))
     index = concatenate_and_clear(indexes)
     start = concatenate_and_clear(starts)
     number = concatenate_and_clear(numbers)
@@ -163,6 +173,31 @@ def _distinct_starts(
     first = np.ones(index.size, dtype=np.bool_)
     first[1:] = (index[1:] != index[:-1]) | (start[1:] != start[:-1])
     return index[first], start[first], number[first]
+
+
+def _distinct_starts(
+    guide: Guide, sequences: SequenceSet, options: WobbleBulgeOptions, workers: int | None
+) -> tuple[_Ints, _Ints, _Ints]:
+    """Return the sequence index, the start, and the pattern number of each distinct start.
+
+    The patterns run on a pool of `workers` threads. The rows are those of
+    `_first_pattern_of_each_start`.
+    """
+    check_type("guide", guide, Guide)
+    check_type("sequences", sequences, SequenceSet)
+    check_type("options", options, WobbleBulgeOptions)
+    width = pool_width(workers)
+    target = _wobble_target(guide).sequence
+    return _first_pattern_of_each_start(
+        map_in_pool(
+            lambda shape: _search_pattern(target, sequences, shape), _shape_pairs(options), width
+        )
+    )
+
+
+def _sequence_counts(index: _Ints, sequences: SequenceSet) -> _Ints:
+    """Return the number of rows of each sequence, in the order of the set."""
+    return np.bincount(index, minlength=len(sequences)).astype(np.int64, copy=False)
 
 
 def wobble_bulge_matches(
@@ -244,5 +279,61 @@ def annotate_wobble_bulge_counts(  # noqa: PLR0913
     name = as_text("column", column)
     table = check_count_column(de, name)
     index, _start, _number = _distinct_starts(guide, sequences, options, workers)
-    counts = np.bincount(index, minlength=len(sequences)).astype(np.int64, copy=False)
+    counts = _sequence_counts(index, sequences)
     return add_gene_counts(table, sequences, counts, name=name, shared_genes=shared_genes)
+
+
+# Each keyword-only parameter is an independent option of the null, so no parameter object fits.
+def wobble_bulge_null(  # noqa: PLR0913
+    guide: Guide,
+    sequences: SequenceSet,
+    options: WobbleBulgeOptions = WobbleBulgeOptions(),
+    *,
+    rng: np.random.Generator | int,
+    n_random: int = 1000,
+    workers: int | None = None,
+) -> pd.DataFrame:
+    """Return the wobble and bulge counts of shuffled guides for each gene.
+
+    This is the null of the column `overall_matches` of `annotate_wobble_bulge_counts` for
+    `e_values` (`D-008`). Shuffle j has the letters of the guide in the order
+    `rng.permutation(len(guide.sequence))`, as in `e_value_null`. Thus shuffle j is the same guide
+    as shuffle j of `e_value_null` for the same `rng`. The count of a sequence is its number of
+    rows in `wobble_bulge_matches` of the shuffle. The count of a gene is the maximum over its
+    sequences (`D-003`). A guide that is too short for the seed raises `InputError` before any
+    draw.
+
+    The result has the format of `e_value_null`: the gene IDs of `sequences` as its index, named
+    `gene_id`, in the order of the first sequence of each gene. It has one `int32` column for each
+    shuffle, with the labels 0 to `n_random` - 1. The result does not depend on `workers`, which is
+    the width of the thread pool. `None` is the number of CPUs.
+
+    The pool runs over the shuffles. The patterns of one shuffle run one after the other in the
+    thread of that shuffle, with no second pool. Thus the time is the sum, over the shuffles, of the
+    time of `wobble_bulge_matches` for the shuffle on one thread, divided by `workers`. A shuffle
+    can have more sites than the guide, and then it takes more time. The memory is the result,
+    genes x `n_random` x 4 bytes, and O(`workers` x (genes + sequences)) more for the pool. Each
+    thread that runs also holds the hits of one shuffle, about 70 bytes for each hit. A sequence of
+    `N` is the worst case, as in `wobble_bulge_matches`, and then the bound is `workers` times the
+    bound of that function.
+
+    Measured on the 18,614 canonical 3' UTRs of `rnor7` (17.9 million bases), on an Apple M2 Max
+    with 12 CPUs that other jobs shared: the guide takes 2.3 s on one thread and has 66,374 rows.
+    A shuffle takes 2.1 to 3.6 s and has 11,799 to 176,430 rows. 20 shuffles with the defaults take
+    7.5 to 8.4 s with `workers=None` and 57 to 63 s with `workers=1`. The peak memory above the
+    start is 40 to 60 MB with `workers=None` and 23 to 29 MB with `workers=1`. The frame holds
+    2.6 MB: the table of counts, 18,614 x 20 x 4 bytes (1.4 MB), and the gene IDs of the index. The
+    time grows with `n_random`, thus the default 1000 shuffles take about 6 minutes here.
+    """
+    check_type("options", options, WobbleBulgeOptions)
+    shapes = _shape_pairs(options)
+
+    def count_target(target: Target) -> NDArray[np.int64]:
+        index, _start, _number = _first_pattern_of_each_start(
+            _search_pattern(target.sequence, sequences, shape) for shape in shapes
+        )
+        return _sequence_counts(index, sequences)
+
+    return shuffle_null(
+        guide, sequences, _wobble_target, count_target, rng=rng, n_random=n_random, workers=workers
+    )

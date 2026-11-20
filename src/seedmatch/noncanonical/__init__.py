@@ -5,6 +5,7 @@ from seedmatch.noncanonical.wobble import (
     WobbleBulgeOptions,
     annotate_wobble_bulge_counts,
     wobble_bulge_matches,
+    wobble_bulge_null,
     wobble_bulge_patterns,
 )
 
@@ -14,5 +15,6 @@ __all__ = [
     "annotate_wobble_bulge_counts",
     "compensatory_sites",
     "wobble_bulge_matches",
+    "wobble_bulge_null",
     "wobble_bulge_patterns",
 ]

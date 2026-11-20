@@ -49,9 +49,9 @@ The IDs of the known divergences have the same order as the rows of the table in
   - The test data has one sequence for each gene. Thus the R golden (`tests/golden/seedmatchr/deseq2_mode.tsv`) and the maximum agree there.
   - `SeedMatchReport` counts each sequence, with `n()` after `group_by(best.match)` (`R/SeedMatchReport.R:85-99`).
   - `seqs` has two sequences with the name `g`, both `CTCTATAA`. `res` has one row for `g`, with `log2FoldChange` -2 and `padj` 0.01. `SeedMatchReport(res, seqs, guide)` gives 2 for `8mer` in the rows `In silico predictions`, `Expressed predictions`, and `Off-target predictions`. The percentage is 100.
-- New behavior: `annotate_seed_counts` gives each gene the maximum count over the sequences of the gene. A gene without a sequence gets 0. `seed_match_report` counts each gene once, in the class of its best match over the sequences of the gene. This best match is the best match of the maximum of each count column. The `matches` table keeps one row for each sequence.
+- New behavior: `annotate_seed_counts` and `annotate_wobble_bulge_counts` give each gene the maximum count over the sequences of the gene. A gene without a sequence gets 0. `seed_match_report` counts each gene once, in the class of its best match over the sequences of the gene. This best match is the best match of the maximum of each count column. The `matches` table keeps one row for each sequence.
 - Reason: The count of a gene must not depend on the order of its sequences. In R, the first sequence in the input decides the count. The DE table has one row for each gene. Thus a gene with more than one sequence must count once in the report.
-- Test: `test_gene_count_is_the_maximum_over_its_sequences_D003` and `test_the_maximum_does_not_depend_on_the_order_of_the_sequences_D003` in `tests/report/test_annotate.py`. `test_report_counts_genes_not_sequences_D003` and `test_the_best_match_of_a_gene_is_the_best_over_its_sequences_D003` in `tests/report/test_report.py`.
+- Test: `test_gene_count_is_the_maximum_over_its_sequences_D003` and `test_the_maximum_does_not_depend_on_the_order_of_the_sequences_D003` in `tests/report/test_annotate.py`. `test_report_counts_genes_not_sequences_D003` and `test_the_best_match_of_a_gene_is_the_best_over_its_sequences_D003` in `tests/report/test_report.py`. `test_annotate_wobble_bulge_counts_give_the_gene_maximum_D003` and `test_wobble_bulge_null_takes_the_gene_maximum_of_the_sequences_D003` in `tests/noncanonical/test_wobble.py`.
 
 ## D-004: The 3' compensatory search runs and returns the sites
 
@@ -59,7 +59,7 @@ The IDs of the known divergences have the same order as the rows of the table in
 - R location: `get_compensatory_sequences` (`R/get_compensatory_sequences.R:57-77`, `:34`, `:99`).
 - R behavior: The frame of `:57-66` has no row, thus the test of `:67` is true. The function returns 0 rows with the message `No compensatory regions found.` for each input (note `original_vignette` of `tests/golden/noncanonical/compensatory.tsv`).
   - Without the early return, `:99` stops at the first site. `gsub` at `:34` makes the seed a `character` value, and `reverseComplement` has no method for it (note `line_99`).
-- New behavior: `compensatory_sites` runs the search. Each row is a pair of a seed match and a region. The golden of the patched function (`tools/golden/patches/get_compensatory_sequences.R`) gives the R rows of each case. With `first_position=8`, the port gives the R rows of the 6 cases on `Test_seqs.fa`.
+- New behavior: `compensatory_sites` runs the search. Each row is a pair of a seed match and a region. The golden of the patched function (`tools/golden/patches/get_compensatory_sequences.R`) gives the R rows of each case. With `first_position=8`, the port gives the R rows of the cases on `Test_seqs.fa`.
 - Reason: R gives no result for each input.
 - Test: `test_compensatory_sites_match_r_D004` in `tests/noncanonical/test_compensatory.py`.
 
@@ -101,11 +101,14 @@ The IDs of the known divergences have the same order as the rows of the table in
 - R location: `generate_e_value` (`R/generate_e_value.R:12-24`).
 - R behavior: The default `random_siRNA_results_overall` does not exist. Thus a call without a null stops with `object 'random_siRNA_results_overall' not found`. SeedMatchR has no function that makes the null.
   - Genes match by `symbol` (`:14`, `:18-20`).
+  - The function reads the column `overall_matches` (`:19`). This is the column of `run_wobble_bulges_pipeline` (`R/run_wobble_bulges_pipeline.R:51-55`).
   - The e-value is the fraction of the null columns with `log(null) >= log(observed)`, and `log(0)` is `-Inf`.
   - Evidence: the notes of `tests/golden/analyses/evalue.tsv`.
 - New behavior: The null is a required argument. `e_value_null` makes it from `n_random` shuffles of the guide (default 1000), with the random generator of the caller. Genes match by `gene_id`.
+  - `e_value_null` counts the matches of `count_matches`, thus it is the null of `annotate_seed_counts`.
+  - `wobble_bulge_null` makes the null of the column `overall_matches` of `annotate_wobble_bulge_counts`. For the same `rng`, shuffle j is the same guide as in `e_value_null`.
 - Reason: Without a null, R stops for each call. A symbol can name two genes, and a DE table can have no symbol.
-- Test: `test_e_values_match_genes_by_gene_id_D008`, `test_e_value_null_counts_each_shuffle_like_annotate_seed_counts_D008`, `test_e_value_null_uses_the_default_options_of_annotate_seed_counts_D008`, `test_each_shuffle_keeps_the_letters_of_the_guide_D008`, and `test_the_shuffles_are_the_permutations_of_the_generator_in_order_D008` in `tests/test_evalue.py`. `test_e_values_match_r` in the same file compares the e-values with the R values of the golden file.
+- Test: `test_e_values_match_genes_by_gene_id_D008`, `test_e_value_null_counts_each_shuffle_like_annotate_seed_counts_D008`, `test_e_value_null_uses_the_default_options_of_annotate_seed_counts_D008`, `test_each_shuffle_keeps_the_letters_of_the_guide_D008`, and `test_the_shuffles_are_the_permutations_of_the_generator_in_order_D008` in `tests/test_evalue.py`. `test_e_values_match_r` in the same file compares the e-values with the R values of the golden file. `test_wobble_bulge_null_counts_each_shuffle_like_annotate_wobble_bulge_counts_D008` and `test_wobble_bulge_null_draws_the_shuffles_of_e_value_null_D008` in `tests/noncanonical/test_wobble.py`.
 
 ## D-009: A sequence has its transcript ID, and hg38-old is not a reference
 
@@ -161,9 +164,9 @@ The IDs of the known divergences have the same order as the rows of the table in
 - ID: `D-015`
 - R location: `.get_counts_column` (`R/SeedMatchR.R:214-217`). `SeedMatchR` calls it in `DESEQ2` mode.
 - R behavior: `cbind(res, seed.name = match.counts)` appends the counts as the last column, and the next statement gives this column the seed name. If `res` has a column with this name, the result has two columns with the same name. `res$mer7m8` then reads the old column. The test data (`tests/data/DESEQ2_results.tsv`) has a `mer7m8` column. R probe with Biostrings 2.78.0: `names(SeedMatchR(seqs = seqs, sequence = guide, res = res, seed.name = "mer7m8"))` ends with `mer7m8, mer7m8` (`tests/golden/seedmatchr/deseq2_mode.tsv` records this in its header). After `res$mer7m8 <- 99L`, `$mer7m8` of the result is 99 for each gene, and the last column holds the counts.
-- New behavior: If the table has a column with this name, `annotate_seed_counts` replaces the values of this column. The column keeps its position. A new column goes at the end of the table.
+- New behavior: If the table has a column with this name, `annotate_seed_counts` and `annotate_wobble_bulge_counts` replace the values of this column. The column keeps its position. A new column goes at the end of the table.
 - Reason: A table with two columns of the same name is ambiguous. In pandas, `de["mer7m8"]` then returns a table, not a column. A caller who reads the count column must get the new count. A `de` that has this column twice raises `InputError` (`D-051`).
-- Test: `test_existing_column_is_replaced_not_duplicated_D015` and `test_replaced_column_keeps_its_position_and_gets_the_new_values_D015` in `tests/report/test_annotate.py`.
+- Test: `test_existing_column_is_replaced_not_duplicated_D015` and `test_replaced_column_keeps_its_position_and_gets_the_new_values_D015` in `tests/report/test_annotate.py`. `test_annotate_wobble_bulge_counts_replace_a_column_with_the_name_in_place_D015` in `tests/noncanonical/test_wobble.py`.
 
 ## D-016: A FASTA record ID ends at the first white space
 
@@ -612,11 +615,11 @@ The IDs of the known divergences have the same order as the rows of the table in
   - `filter_res`, `SeedMatchReport`, `generate_e_value`, and `benchmark_preds` stop with the same message for a repeated column that they do not read. Each probe table has a column `extra` that occurs twice. `SeedMatchR` with `shared_genes = TRUE` stops for such a table too. With `shared_genes = FALSE`, it accepts the table.
 - New behavior: A function raises `InputError` for a repeated column that it reads or writes. For a column `log2FoldChange` that occurs twice, the message is `DE table has 2 columns 'log2FoldChange'; expected one column for each name`.
   - `ecdf_test` and `assign_groups` raise it for a repeated `gene_id` or `log2FoldChange` column. R uses the first column.
-  - `annotate_seed_counts` raises it for a repeated `gene_id` column and for a repeated column with the name of the count column. R stops for `shared_genes = TRUE`. For `FALSE`, R uses the first `gene_id`, and it appends the counts after the old columns.
+  - `annotate_seed_counts` and `annotate_wobble_bulge_counts` raise it for a repeated `gene_id` column and for a repeated column with the name of the count column. R stops for `shared_genes = TRUE`. For `FALSE`, R uses the first `gene_id`, and it appends the counts after the old columns.
   - `filter_de`, `e_values`, `benchmark_predictions`, and `seed_match_report` raise it for a repeated column that they read. R stops in `filter_res`, `generate_e_value`, `benchmark_preds`, and `SeedMatchReport`.
   - A repeated column that the function does not read is valid. A function that returns the rows of `de` keeps the column. R stops for such a table in `filter_res`, `generate_e_value`, `benchmark_preds`, `SeedMatchReport`, and `SeedMatchR` with `shared_genes = TRUE`.
 - Reason: A repeated column is ambiguous. The result of R depends on the column order, or R stops. A repeated count column gives a wrong count in pandas, and no message. The message names the column, thus the caller can correct the table.
-- Test: `test_ecdf_test_rejects_a_repeated_fold_change_column_D051` and `test_assign_groups_rejects_a_repeated_gene_id_column_D051` in `tests/stats/test_ecdf.py`. `test_a_repeated_gene_id_column_is_an_error_D051`, `test_a_repeated_count_column_is_an_error_D051`, and `test_a_repeated_column_that_is_not_read_is_kept_D051` in `tests/report/test_annotate.py`. `test_filter_de_rejects_a_repeated_padj_column_D051` in `tests/test_de.py`. The tests of `check_columns` and `check_unique_columns` with `_D051` in their names are in `tests/test_checks.py`. One of them shows that a repeated column that is not required is valid.
+- Test: `test_ecdf_test_rejects_a_repeated_fold_change_column_D051` and `test_assign_groups_rejects_a_repeated_gene_id_column_D051` in `tests/stats/test_ecdf.py`. `test_a_repeated_gene_id_column_is_an_error_D051`, `test_a_repeated_count_column_is_an_error_D051`, and `test_a_repeated_column_that_is_not_read_is_kept_D051` in `tests/report/test_annotate.py`. `test_annotate_wobble_bulge_counts_reject_a_repeated_gene_id_or_count_column_D051` in `tests/noncanonical/test_wobble.py`. `test_filter_de_rejects_a_repeated_padj_column_D051` in `tests/test_de.py`. The tests of `check_columns` and `check_unique_columns` with `_D051` in their names are in `tests/test_checks.py`. One of them shows that a repeated column that is not required is valid.
 
 ## D-052: Each sequence is searched, also for a repeated ID
 
