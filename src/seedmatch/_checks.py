@@ -143,22 +143,29 @@ def as_cutoff(name: str, value: object) -> float:
     return cutoff
 
 
-def as_data_frame(de: object) -> pd.DataFrame:
-    """Return `de` if it is a DataFrame, and raise `InputError` otherwise."""
-    if not isinstance(de, pd.DataFrame):
-        message = f"de has type {type(de).__name__}; expected a pandas.DataFrame"
-        raise InputError(message)
-    return de
+def as_data_frame(value: object, *, name: str = "de") -> pd.DataFrame:
+    """Return `value` if it is a DataFrame, and raise `InputError` otherwise.
 
-
-def check_columns(de: object, required: Sequence[str]) -> None:
-    """Raise `InputError` if `de` is not a DataFrame, or if it lacks a required column.
-
-    The message for a missing column lists the missing columns in sorted order.
+    `name` is the argument that the message names.
     """
-    missing = sorted(set(required) - set(as_data_frame(de).columns))
+    if not isinstance(value, pd.DataFrame):
+        message = f"{name} has type {type(value).__name__}; expected a pandas.DataFrame"
+        raise InputError(message)
+    return value
+
+
+def check_columns(
+    table: object, required: Sequence[str], *, name: str = "de", label: str = "DE table"
+) -> None:
+    """Raise `InputError` if `table` is not a DataFrame, or if it lacks a required column.
+
+    The message for a missing column lists the missing columns in sorted order. `name` is the
+    argument that the message for a wrong type names, and `label` names the table in the other
+    message.
+    """
+    missing = sorted(set(required) - set(as_data_frame(table, name=name).columns))
     if missing:
-        message = f"DE table has missing columns: {missing}; expected {list(required)}"
+        message = f"{label} has missing columns: {missing}; expected {list(required)}"
         raise InputError(message)
 
 
@@ -176,6 +183,22 @@ def check_numeric_columns(de: pd.DataFrame, names: Sequence[str]) -> None:
         )
         if not is_number:
             message = f"column {name!r} has dtype {de[name].dtype}; expected a numeric dtype"
+            raise InputError(message)
+
+
+def check_integer_columns(table: pd.DataFrame, names: Sequence[str]) -> None:
+    """Raise `InputError` that names the first column that is not an integer column.
+
+    A bool column is not an integer column. A column of a nullable integer dtype must have a value
+    in each row.
+    """
+    for name in names:
+        column = table[name]
+        if not pd.api.types.is_integer_dtype(column.dtype):
+            message = f"column {name!r} has dtype {column.dtype}; expected an integer dtype"
+            raise InputError(message)
+        if column.hasnans:
+            message = f"column {name!r} has missing values; expected an integer in each row"
             raise InputError(message)
 
 

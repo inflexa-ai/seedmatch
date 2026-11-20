@@ -21,6 +21,7 @@ from seedmatch import (
     find_matches,
     full_search_ranges,
     kmer_counts,
+    match_distances,
     seed_match_report,
 )
 from seedmatch.sequence import SequenceSet, read_fasta
@@ -120,6 +121,7 @@ def run_core_pipeline() -> None:
     full_search_ranges(Guide(GUIDE), seqs)
     kmer_counts(seqs, k=3)
     alignment_text(find_matches(Guide(GUIDE).target(Seed.MER7M8), seqs).iloc[0], Guide(GUIDE), seqs)
+    match_distances(find_matches(Guide(GUIDE).target(Seed.MER6), seqs))
     seed_match_report(de, seqs, Guide(GUIDE))
     annotation = DATA / "annotation"
     with Reference.from_paths(

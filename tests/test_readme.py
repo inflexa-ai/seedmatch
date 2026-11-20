@@ -77,6 +77,12 @@ def test_readme_kmer_example_gives_the_r_target_count(readme_namespace):
     assert readme_namespace["genes_with_kmer"][target.sequence] == int(row.n)
 
 
+def test_readme_distance_example_runs(readme_namespace):
+    distances = readme_namespace["distances"]
+    assert list(distances.columns) == ["seq_id", "gene_id", "distance"]
+    assert len(distances) >= 1
+
+
 def test_readme_alignment_example_gives_the_r_text(readme_namespace):
     rows = golden("analyses/alignment.tsv").query("case == 'mer7m8_1'")
     assert readme_namespace["alignment"] == "\n".join(rows.sort_values("line")["text"])

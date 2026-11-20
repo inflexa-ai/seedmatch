@@ -408,7 +408,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `generate_e_value` | The default argument `random_siRNA_results_overall` does not exist (`R/generate_e_value.R:12`). | The null matrix is a required argument. A helper makes it from `n_random` shuffles of the guide (default 1000), which keep the length and the base composition. The caller gives the random generator. The e-value of a gene is the fraction of shuffles with a site count that is not less than the observed count. Genes match by `gene_id`, not by `symbol`. |
 | `load_annotations` | `hg38-old` has no ID (`R/load_annotations.R:42`, `:152`). `tx.names` is always `NULL` (`:116`). | There is no `hg38-old`. The result gives the transcript IDs. |
 | `kmer_hist` | Returns `NULL + NULL` (`R/kmer_hist.R:32-36`). | Returns the counts. The plot module makes the histogram. |
-| `match_distances` | A gene with one match gives `c(NA, 0)` (`R/match_distances.R:33-34`). | A gene with one match gives no distances. A gene with n matches gives each of the n(n − 1)/2 pair distances. |
+| `match_distances` | A sequence with one match gives `c(NA, 0)` (`R/match_distances.R:33-34`). | A sequence with one match gives no distances. A sequence with n matches gives each of the n(n − 1)/2 pair distances. |
 | `.get_best_match` | Stops if the search did not make each expected column, for example with other edit distances (`R/full_search.R:96-125`). | The best match uses only the columns that the search made. The default output does not change. |
 | `get_stringPPI_to_stringGGI` | Maps the STRING protein IDs through BioMart on the network. The human query uses the GRCh37 archive (`R/get_stringPPI_to_stringGGI.R:21-28`). | Maps the protein IDs with the `protein` table of the EnsDb of the same build. |
 | Documentation | The vignettes call functions that do not exist: `filter_deseq`, `de_fc_ecdf`, `get_feature_seqs`. The network vignette omits `organism`. | The Python documentation uses only functions that exist. A test runs each documentation example. |
@@ -526,6 +526,7 @@ A test runs each code example in `README.md` and in `docs/`.
 - `kmer_counts` works in blocks of 2^20 window starts, and its matrix has at most one entry for each window.
 - `KmerCounts.to_frame` is dense and holds n · 4^k · 8 bytes.
 - `alignment_text` takes O(W) time and memory for a window of W bases. Each pad is at most the length L of the sequence, thus W is at most N + 2L for a guide of N bases. It takes O(n) to find the sequence ID among n sequences, thus a loop over m matches costs O(m · n).
+- `match_distances` gives n(n − 1)/2 rows for a sequence with n matches, thus the result sets the memory. 10,000 matches in one sequence give 49,995,000 rows of 24 bytes. The function allocates the result one time. The work memory, without the result, is O(m) for m matches. The time is O(m log m + P) for P pairs.
 - `docs/performance.md` records the wall time and the peak memory of `seed_match_report` on the canonical 3' UTRs of `rnor7`, for Python and for R.
 - Target: after the JIT compilation, Python is not slower than R by more than a factor of 2.
 

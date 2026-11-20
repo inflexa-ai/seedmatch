@@ -126,6 +126,18 @@ print(alignment)
 
 Use `seed=` for the seed of another search. `left_pad` and `right_pad` show more bases of the sequence on each side, and each pad is at most the length of the sequence. A `|` shows a Watson-Crick pair. A position outside the sequence is a space (D-046).
 
+`match_distances` gives the distance between each pair of matches in one sequence. This example uses the matches of the `MER6` seed.
+
+```python
+from seedmatch import match_distances
+
+# One row for each pair of matches in a sequence. A sequence with one match has no row (D-011).
+distances = match_distances(find_matches(guide.target(Seed.MER6), sequences))
+print(distances.head())
+```
+
+The columns are `seq_id`, `gene_id`, and `distance`. The default `anchor=MatchAnchor.FIVE_PRIME_END` is the R default `fivePrimeEnd`, and it uses the `end` of each match. `MatchAnchor.THREE_PRIME_END` uses the `start`, and `MatchAnchor.CENTER` uses the center. A sequence with n matches gives n(n − 1)/2 rows, thus a sequence with many matches gives a large result.
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -185,6 +197,7 @@ This version has the core path:
 - the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and `ecdf_test` for two gene sets
 - the k-mer counts of a sequence set, and the number of genes with each k-mer
 - the alignment text of a seed match
+- the distances between the matches of a sequence
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:

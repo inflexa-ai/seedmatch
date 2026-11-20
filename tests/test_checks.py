@@ -11,6 +11,7 @@ from helpers import NOT_A_DATA_FRAME
 
 from seedmatch._checks import (
     as_cutoff,
+    as_data_frame,
     as_flag,
     as_items,
     as_limit,
@@ -19,6 +20,7 @@ from seedmatch._checks import (
     as_text,
     check_at_least,
     check_columns,
+    check_integer_columns,
     check_not_negative,
     check_numeric_columns,
 )
@@ -183,8 +185,53 @@ def test_check_numeric_columns_accepts_an_integer_and_a_float_column(dtype):
     check_numeric_columns(pd.DataFrame({"value": pd.array([1, 2], dtype=dtype)}), ["value"])
 
 
+@pytest.mark.parametrize("dtype", ["int8", "uint64", "int64", "Int64"])
+def test_check_integer_columns_accepts_an_integer_column(dtype):
+    check_integer_columns(pd.DataFrame({"value": pd.array([1, 2], dtype=dtype)}), ["value"])
+
+
+@pytest.mark.parametrize("dtype", ["bool", "boolean", "float64", "object", "category"])
+def test_check_integer_columns_rejects_a_column_that_is_not_an_integer(dtype):
+    table = pd.DataFrame({"value": pd.Series([1, 0], dtype=dtype)})
+    message = f"column 'value' has dtype {dtype}; expected an integer dtype"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_integer_columns(table, ["value"])
+
+
+def test_check_integer_columns_rejects_a_missing_value_in_a_nullable_column():
+    table = pd.DataFrame({"value": pd.array([1, None], dtype="Int64")})
+    message = "column 'value' has missing values; expected an integer in each row"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_integer_columns(table, ["value"])
+
+
 @pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)
 def test_check_columns_rejects_a_table_that_is_not_a_data_frame(de, type_name):
     message = f"de has type {type_name}; expected a pandas.DataFrame"
     with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         check_columns(de, ["gene_id"])
+
+
+def test_check_columns_names_the_table():
+    table = pd.DataFrame({"seq_id": ["s1"]})
+    message = "matches table has missing columns: ['width']; expected ['seq_id', 'width']"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_columns(table, ["seq_id", "width"], name="matches", label="matches table")
+    message = "matches has type dict; expected a pandas.DataFrame"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_columns({"seq_id": []}, ["seq_id"], name="matches", label="matches table")
+
+
+def test_check_columns_keeps_the_message_of_the_de_table_by_default():
+    message = "DE table has missing columns: ['width']; expected ['seq_id', 'width']"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_columns(pd.DataFrame({"seq_id": ["s1"]}), ["seq_id", "width"])
+
+
+def test_as_data_frame_names_the_argument():
+    message = "matches has type list; expected a pandas.DataFrame"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        as_data_frame([1, 2], name="matches")
+    message = "de has type list; expected a pandas.DataFrame"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        as_data_frame([1, 2])

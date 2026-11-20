@@ -73,6 +73,20 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: R returns no data, thus a caller cannot read the counts or the target count.
 - Test: `test_kmer_gene_counts_give_the_counts_of_kmer_hist_D010` in `tests/test_kmers.py`.
 
+## D-011: A sequence with one match gives no distance
+
+- ID: `D-011`
+- R location: `match_distances` (`R/match_distances.R:33-44`).
+- R behavior: For one match, `1:(length(feature_coordinates) - 1)` is `c(1, 0)`.
+  - For j = 1, `(j + 1):length(feature_coordinates)` is `c(2, 1)`. Thus the loop calculates the pairs (1, 2) and (1, 1), which give `NA` and 0.
+  - For j = 0, the pair has no value, and it adds nothing.
+  - The distances are `c(NA, 0)`. An element without a range gives `c(NA, NA)`.
+  - For a name that occurs again, the list keeps the distances of the last element (`R/match_distances.R:44`).
+  - Evidence: `tests/golden/analyses/distances.tsv` with its notes, and a probe of the planner.
+- New behavior: A sequence with n matches gives each of the n(n − 1)/2 pair distances. A sequence with one match gives no row. The rows of one `seq_id` are one sequence.
+- Reason: A sequence with one match has no pair. The value `NA` and the self-distance 0 change each summary of the distances.
+- Test: `test_a_sequence_with_one_match_gives_no_distance_D011` and `test_a_table_of_one_match_gives_no_row_D011` in `tests/test_distances.py`.
+
 ## D-012: The best match uses only the columns that the search made
 
 - ID: `D-012`
