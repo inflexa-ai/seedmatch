@@ -6,7 +6,7 @@ from typing import Final
 import numpy as np
 import pandas as pd
 
-from seedmatch._checks import as_flag, check_gene_ids_are_text, shown
+from seedmatch._checks import as_data_frame, as_flag, check_gene_ids_are_text, shown
 from seedmatch.errors import InputError
 from seedmatch.search import SearchOptions, count_matches
 from seedmatch.seed import Target
@@ -52,7 +52,7 @@ def annotate_seed_counts(  # noqa: PLR0913
             f"{letter!r} only to the letter {letter!r}"
         )
         raise InputError(message)
-    if "gene_id" not in de.columns:
+    if "gene_id" not in as_data_frame(de).columns:
         message = f"DE table has no 'gene_id' column; found {list(de.columns)}"
         raise InputError(message)
     name = target.name if column is None else column

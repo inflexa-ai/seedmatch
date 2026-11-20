@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
+from typing import assert_never
 
 import numpy as np
 import numpy.typing as npt
@@ -22,7 +23,7 @@ from seedmatch._checks import (
 from seedmatch.errors import InputError, SeedMatchWarning
 from seedmatch.stats.dts import check_dts_range, dts_test
 from seedmatch.stats.ks import ks_test
-from seedmatch.stats.types import Alternative, PValueMethod, TwoSampleResult
+from seedmatch.stats.types import Alternative, PValueMethod, TwoSampleResult, as_alternative
 from seedmatch.stats.wasserstein import (
     WassersteinAreas,
     check_wasserstein_range,
@@ -84,8 +85,14 @@ def ecdf_test(  # noqa: PLR0913
     `InputError`.
 
     `KS` and `WILCOXON` compare the target with the background. `alternative=None` gives `GREATER`,
-    the default of R. `DTS` and `WASSERSTEIN` have no direction, and an `alternative` raises
-    `InputError` (`D-035`). `DTS` needs `rng`, and `n_boot` is its number of permutations.
+    the default of R. But `GREATER` has another meaning for each test. For `KS`, it means that the
+    target ECDF is above the background ECDF, thus the target values are lower. For `WILCOXON`, it
+    means that the target values are higher. To find a down-shift of the target with `WILCOXON`,
+    use `Alternative.LESS`. On the test data of the package, `KS` with `GREATER` gives p = 1.04e-4,
+    but `WILCOXON` with `GREATER` gives p = 0.9996.
+
+    `DTS` and `WASSERSTEIN` have no direction, and an `alternative` raises `InputError` (`D-035`).
+    `DTS` needs `rng`, and `n_boot` is its number of permutations.
     `n_interp` is the number of grid points of `WASSERSTEIN`. For `n_boot` and `n_interp`, `None`
     gives the default of the test: 2000 for `DTS` and 10000 for `WASSERSTEIN`. A value that is not
     `None` for an option of another test raises `InputError`.
@@ -148,7 +155,10 @@ def assign_groups(de: pd.DataFrame, groups: Mapping[str, Iterable[str]]) -> pd.S
         raise InputError(message)
     check_columns(de, ("gene_id",))
     check_gene_ids_are_text(de)
-    members = {name: _as_genes(f"groups[{name!r}]", genes) for name, genes in groups.items()}
+    members = {
+        as_text("group name", name): _as_genes(f"groups[{name!r}]", genes)
+        for name, genes in groups.items()
+    }
     _warn_for_shared_gene(members)
     gene_ids = de["gene_id"]
     codes = np.full(len(de), -1, dtype=np.int64)
@@ -202,9 +212,10 @@ def _scorer(
 ]:
     """Return the function that scores the two samples. `DTS` without `rng` raises `InputError`.
 
-    The function is made before the rows are selected, so that a missing `rng` is the first error.
+    The function is made before the rows are selected, so that a missing `rng` and an `alternative`
+    that is not valid are the first errors.
     """
-    directed = Alternative.GREATER if alternative is None else alternative
+    directed = Alternative.GREATER if alternative is None else as_alternative(alternative)
     match test:
         case EcdfTest.KS:
             return partial(ks_test, alternative=directed)
@@ -220,6 +231,8 @@ def _scorer(
             return partial(_dts, rng=rng, n_boot=n_boot)
         case EcdfTest.WASSERSTEIN:
             return partial(_wasserstein, n_interp=n_interp)
+        case _:
+            assert_never(test)
 
 
 def _dts(

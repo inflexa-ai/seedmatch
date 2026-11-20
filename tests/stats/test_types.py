@@ -5,9 +5,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import seedmatch
+import seedmatch.stats
 from seedmatch.errors import InputError
-from seedmatch.stats import Alternative, PValueMethod, TwoSampleResult, as_sample
-from seedmatch.stats.types import as_alternative
+from seedmatch.stats import Alternative, PValueMethod, TwoSampleResult
+from seedmatch.stats.types import as_alternative, as_sample
 
 
 def test_alternatives_have_the_names_of_r():
@@ -158,11 +160,35 @@ def test_as_sample_rejects_an_infinite_value_if_it_must_be_finite():
         as_sample("x", [-np.inf, 1.0], finite=True)
 
 
-@pytest.mark.parametrize(
-    ("values", "dimensions"),
-    [(np.zeros((2, 2)), 2), (5.0, 0), ([[1.0, 2.0], [3.0, 4.0]], 2)],
-)
-def test_as_sample_rejects_an_array_that_is_not_1d(values, dimensions):
-    message = f"^x has {dimensions} dimensions; expected a 1-D array$"
-    with pytest.raises(InputError, match=message):
+@pytest.mark.parametrize("values", [np.zeros((2, 2)), [[1.0, 2.0], [3.0, 4.0]]])
+def test_as_sample_rejects_an_array_that_is_not_1d(values):
+    with pytest.raises(InputError, match=r"^x has 2 dimensions; expected a 1-D array$"):
         as_sample("x", values, finite=False)
+
+
+@pytest.mark.parametrize(
+    ("values", "type_name"),
+    [
+        ({1.0, 2.0}, "set"),
+        ((value for value in [1.0, 2.0]), "generator"),
+        ({1.0: 2.0}, "dict"),
+        ("12", "str"),
+        (5.0, "float"),
+        (None, "NoneType"),
+    ],
+)
+def test_as_sample_names_the_type_of_a_value_that_is_not_an_array(values, type_name):
+    message = f"x has type {type_name}; expected a 1-D array of numbers"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        as_sample("x", values, finite=False)
+
+
+def test_p_value_method_is_in_the_top_level_package():
+    assert "PValueMethod" in seedmatch.__all__
+    assert seedmatch.PValueMethod is PValueMethod
+
+
+def test_as_sample_is_a_check_helper_and_not_public_api():
+    assert "as_sample" not in seedmatch.stats.__all__
+    assert not hasattr(seedmatch.stats, "as_sample")
+    assert "as_sample" not in seedmatch.__all__

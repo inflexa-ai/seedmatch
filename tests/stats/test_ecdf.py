@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from helpers import (
     GUIDE,
+    NOT_A_DATA_FRAME,
     STATISTIC_TOLERANCE,
     dts_p_value_error,
     ecdf_golden_row,
@@ -92,6 +93,23 @@ def test_ecdf_test_uses_greater_when_the_alternative_is_none(test):
     default = run("test_data", test=test)
     assert default.alternative is Alternative.GREATER
     assert default == run("test_data", test=test, alternative=Alternative.GREATER)
+
+
+def test_greater_means_lower_target_values_for_ks_and_higher_target_values_for_wilcoxon():
+    # The target genes of the test data go down. The documents state this direction.
+    de, target, background = inputs("test_data")
+    assert np.median(fold_changes(de, set(target))) < np.median(fold_changes(de, set(background)))
+    p_values = {
+        (test, alternative): run("test_data", test=test, alternative=alternative).p_value
+        for test, alternative in [
+            (EcdfTest.KS, Alternative.GREATER),
+            (EcdfTest.WILCOXON, Alternative.GREATER),
+            (EcdfTest.WILCOXON, Alternative.LESS),
+        ]
+    }
+    assert p_values[EcdfTest.KS, Alternative.GREATER] < 1e-3
+    assert p_values[EcdfTest.WILCOXON, Alternative.GREATER] > 0.99
+    assert p_values[EcdfTest.WILCOXON, Alternative.LESS] < 1e-3
 
 
 def test_ecdf_test_uses_the_ks_test_by_default():
@@ -275,6 +293,14 @@ def test_ecdf_test_reports_a_missing_rng_before_it_selects_the_rows():
         ecdf_test(de, target=["not_a_gene"], background=background, test=EcdfTest.DTS)
 
 
+@pytest.mark.parametrize("test", [EcdfTest.KS, EcdfTest.WILCOXON])
+def test_ecdf_test_checks_the_alternative_before_it_selects_the_rows(test):
+    de, _, background = inputs("test_data")
+    message = "alternative 'less' is not valid; expected one of Alternative.TWO_SIDED"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}"):
+        ecdf_test(de, target=[], background=background, test=test, alternative="less")
+
+
 def sets_of(name, select):
     """Return the table and the sets of ecdf_test. `select` changes the set `name`."""
     de, target, background = inputs("test_data")
@@ -421,6 +447,13 @@ def test_ecdf_test_rejects_gene_ids_that_are_not_text():
         ecdf_test(de, target=target, background=background)
 
 
+@pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)
+def test_ecdf_test_rejects_a_table_that_is_not_a_data_frame(de, type_name):
+    message = f"de has type {type_name}; expected a pandas.DataFrame"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        ecdf_test(de, target=["g1"], background=["g2"])
+
+
 def test_ecdf_test_does_not_change_the_table():
     de, target, background = inputs("test_data")
     before = de.copy()
@@ -515,6 +548,22 @@ def test_assign_groups_rejects_a_missing_column_and_gene_ids_that_are_not_text()
     numbers = GROUP_TABLE.assign(gene_id=range(len(GROUP_TABLE)))
     with pytest.raises(InputError, match=r"^'gene_id' has dtype int64; expected text values"):
         assign_groups(numbers, {"a": ["g1"]})
+
+
+@pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)
+def test_assign_groups_rejects_a_table_that_is_not_a_data_frame(de, type_name):
+    message = f"de has type {type_name}; expected a pandas.DataFrame"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        assign_groups(de, {"a": ["g1"]})
+
+
+@pytest.mark.parametrize(
+    ("key", "type_name"), [(None, "NoneType"), (1, "int"), (b"a", "bytes"), (("a",), "tuple")]
+)
+def test_assign_groups_rejects_a_group_name_that_is_not_text(key, type_name):
+    message = f"group name {key!r} has type {type_name}; expected a str"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        assign_groups(GROUP_TABLE, {key: ["g1"]})
 
 
 def test_assign_groups_does_not_change_the_table():

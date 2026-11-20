@@ -13,6 +13,8 @@ from seedmatch.errors import InputError
 from seedmatch.stats.types import PValueMethod, TwoSampleResult, as_sample, check_range
 
 _BLOCK_SIZE: Final = 64
+# A block takes about 26 bytes for each element, so this limit holds a block near 27 MB.
+_BLOCK_ELEMENTS: Final = 2**20
 
 
 def dts_test(
@@ -41,9 +43,10 @@ def dts_test(
     ends, expected, scale = _gaps(pooled[order], m, n)
     observed = _statistics((order < m)[np.newaxis, :], ends, expected, scale)[0]
     labels = np.arange(m + n) < m
+    rows = max(1, min(_BLOCK_SIZE, _BLOCK_ELEMENTS // (m + n)))
     at_least = 0
-    for start in range(0, boots, _BLOCK_SIZE):
-        block = np.tile(labels, (min(_BLOCK_SIZE, boots - start), 1))
+    for start in range(0, boots, rows):
+        block = np.tile(labels, (min(rows, boots - start), 1))
         generator.permuted(block, axis=1, out=block)
         at_least += int((_statistics(block, ends, expected, scale) >= observed).sum())
     return TwoSampleResult(

@@ -1,7 +1,7 @@
 """The two-sample Kolmogorov-Smirnov test."""
 
 import math
-from typing import Final
+from typing import Final, assert_never
 
 import numpy as np
 import numpy.typing as npt
@@ -78,6 +78,8 @@ def _bound(gap: npt.NDArray[np.int64], alternative: Alternative) -> npt.NDArray[
             return -gap
         case Alternative.TWO_SIDED:
             return np.abs(gap)
+        case _:
+            assert_never(alternative)
 
 
 def _exact_p_value(

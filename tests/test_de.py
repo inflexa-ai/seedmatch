@@ -5,7 +5,7 @@ import re
 
 import pandas as pd
 import pytest
-from helpers import DATA, damaged_compressed_files, golden_rows, sirna_de
+from helpers import DATA, NOT_A_DATA_FRAME, damaged_compressed_files, golden_rows, sirna_de
 
 import seedmatch
 from seedmatch.de import DE_REQUIRED_COLUMNS, filter_de, read_deseq2_table
@@ -207,6 +207,23 @@ def test_filter_de_names_a_filter_column_that_is_not_numeric(column):
     cases[column] = cases[column].astype(str)
     with pytest.raises(InputError, match=rf"column '{column}' has dtype (object|str)"):
         filter_de(cases)
+
+
+@pytest.mark.parametrize("column", ["baseMean", "log2FoldChange", "pvalue", "padj"])
+@pytest.mark.parametrize("dtype", ["bool", "complex128"])
+def test_filter_de_rejects_a_bool_and_a_complex_column_D024(column, dtype):
+    cases = read_cases()
+    cases[column] = cases[column].astype(dtype)
+    message = f"column '{column}' has dtype {dtype}; expected a numeric dtype"
+    with pytest.raises(InputError, match=f"^{message}$"):
+        filter_de(cases)
+
+
+@pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)
+def test_filter_de_rejects_a_table_that_is_not_a_data_frame(de, type_name):
+    message = f"de has type {type_name}; expected a pandas.DataFrame"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        filter_de(de)
 
 
 def test_read_deseq2_table_refuses_a_url_and_opens_no_connection(monkeypatch):

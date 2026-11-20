@@ -14,6 +14,7 @@ from hypothesis import strategies as st
 
 from seedmatch.errors import InputError
 from seedmatch.stats import PValueMethod, dts_test
+from seedmatch.stats import dts as dts_module
 from seedmatch.stats.dts import _gaps, _statistics
 
 R_ROWS = [pytest.param(row, id=row.case) for row in golden_rows("stats/dts.tsv")]
@@ -285,6 +286,46 @@ def test_dts_memory_does_not_grow_with_the_number_of_permutations():
     few, many = peak_bytes(x, y, 128), peak_bytes(x, y, 1280)
     assert many <= 1.2 * few
     assert many < 40e6
+
+
+def test_dts_memory_does_not_grow_with_the_size_of_the_table():
+    generator = np.random.default_rng(5)
+    x, y = generator.normal(0.05, 1, size=10_000), generator.normal(size=90_000)
+    # A block of 64 permutations of 100000 values holds a few arrays of 51 MB, and a block that has
+    # a bounded number of elements holds a few arrays of about 8 MB.
+    assert peak_bytes(x, y, 64) < 60e6
+
+
+@pytest.mark.parametrize(
+    ("block_elements", "rows"), [(10**9, 64), (30 * 5, 5), (30 * 5 + 29, 5), (10, 1)]
+)
+def test_dts_sizes_a_block_by_its_elements(monkeypatch, block_elements, rows):
+    seen = []
+
+    def spy(labels, *args):
+        seen.append(labels.shape)
+        return _statistics(labels, *args)
+
+    monkeypatch.setattr(dts_module, "_BLOCK_ELEMENTS", block_elements)
+    monkeypatch.setattr(dts_module, "_statistics", spy)
+    generator = np.random.default_rng(6)
+    dts_test(generator.normal(size=10), generator.normal(size=20), rng=1, n_boot=200)
+    # The first call is the observed arrangement. The others are the blocks of the permutations.
+    assert seen[0] == (1, 30)
+    blocks = [shape[0] for shape in seen[1:]]
+    assert blocks[0] == rows
+    assert max(blocks) == rows
+    assert sum(blocks) == 200
+    assert {shape[1] for shape in seen} == {30}
+
+
+@pytest.mark.parametrize("block_elements", [30 * 5, 10])
+def test_dts_result_does_not_depend_on_the_block_size(monkeypatch, block_elements):
+    generator = np.random.default_rng(6)
+    x, y = generator.normal(0.4, 1, size=10), generator.normal(size=20)
+    expected = dts_test(x, y, rng=1, n_boot=200)
+    monkeypatch.setattr(dts_module, "_BLOCK_ELEMENTS", block_elements)
+    assert dts_test(x, y, rng=1, n_boot=200) == expected
 
 
 def test_dts_runs_on_a_large_table():

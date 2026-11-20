@@ -198,3 +198,12 @@ def assert_frame_matches_golden(got: pd.DataFrame, path: str) -> None:
         shown = repr(text) if kind == "str" else text
         message = f"{path}: row {row} (0-based) column {name!r}: got {value!r}, expected {shown}"
         raise AssertionError(message)
+
+
+# Values that are not a DataFrame, and the type name that a message gives for each one.
+NOT_A_DATA_FRAME = [
+    ({"gene_id": ["g1"]}, "dict"),
+    ([1, 2], "list"),
+    (None, "NoneType"),
+    (pd.Series(["g1"]), "Series"),
+]

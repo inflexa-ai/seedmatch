@@ -59,7 +59,7 @@ matches = report.matches
 
 If a gene has more than one sequence, make the set with `SequenceSet.from_records(records, gene_ids=...)`.
 
-`ecdf_test` compares the `log2FoldChange` values of two gene sets. This example compares the genes with a seed match to the genes without a match. A small p-value shows that the genes with a seed match go down.
+`ecdf_test` compares the `log2FoldChange` values of two gene sets. This example compares the genes with a seed match to the genes without a match. With the default KS test, a small p-value shows that the genes with a seed match go down.
 
 ```python
 from seedmatch import ecdf_test
@@ -73,7 +73,9 @@ ecdf_result = ecdf_test(de, target=seed_genes, background=background)
 print(ecdf_result.statistic, ecdf_result.p_value)
 ```
 
-Import the members with `from seedmatch import EcdfTest`. Then use `test=EcdfTest.WILCOXON`, `EcdfTest.WASSERSTEIN`, or `EcdfTest.DTS` for another test. The DTS test needs `rng`, a `numpy.random.Generator` or an int seed, because its p-value comes from permutations. `assign_groups(de, groups)` gives the group of each row of `de`.
+Import the members with `from seedmatch import EcdfTest`. Then use `test=EcdfTest.WILCOXON`, `EcdfTest.WASSERSTEIN`, or `EcdfTest.DTS` for another test. The DTS test must have `rng`, a `numpy.random.Generator` or an int seed, because its p-value comes from permutations. `assign_groups(de, groups)` gives the group of each row of `de`.
+
+The default alternative `GREATER` has another meaning for `EcdfTest.KS` and for `EcdfTest.WILCOXON`. With KS, a small p-value shows that the target values are lower. With WILCOXON, a small p-value shows that the target values are higher. In the test table of this repository (`tests/data/DESEQ2_results.tsv`), the genes with a seed match have lower values. For this table, KS with `GREATER` gives p = 1.04e-4, but WILCOXON with `GREATER` gives p = 0.9996. WILCOXON with `Alternative.LESS` gives the small p-value 3.9e-4. To find lower target values with WILCOXON, set `alternative=Alternative.LESS`. Import `Alternative` from `seedmatch`.
 
 To get the sequences from an annotation, open a `Reference`. A `Reference` joins an EnsDb file and a genome file of the same build. The genome file is a 2bit file, or a FASTA file with its index files.
 

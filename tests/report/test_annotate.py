@@ -1,7 +1,9 @@
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import GUIDE, golden_rows, sirna_de, sirna_seqs
+from helpers import GUIDE, NOT_A_DATA_FRAME, golden_rows, sirna_de, sirna_seqs
 
 import seedmatch
 from seedmatch import Guide, SearchOptions, Seed, SequenceSet
@@ -147,8 +149,16 @@ def test_options_control_the_search():
 
 
 def test_a_de_table_without_gene_id_names_the_column():
-    with pytest.raises(InputError, match=r"gene_id"):
+    message = "DE table has no 'gene_id' column; found ['symbol']"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         annotate_seed_counts(pd.DataFrame({"symbol": ["Ttr"]}), sirna_seqs(), MER7M8)
+
+
+@pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)
+def test_a_table_that_is_not_a_data_frame_is_an_error(de, type_name):
+    message = f"de has type {type_name}; expected a pandas.DataFrame"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        annotate_seed_counts(de, sirna_seqs(), MER7M8)
 
 
 def test_empty_sequence_set_gives_zero_counts_or_no_rows():

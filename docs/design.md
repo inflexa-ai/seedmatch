@@ -43,8 +43,8 @@ The source of truth for behavior is the SeedMatchR repository at commit `2fc0c4f
 - The runtime dependencies come only from the inflexa package-store lock (`../inflexa/images/package-store/lock.amd64.json`):
   - required: `numpy`, `pandas`, `scipy`, `numba`
   - extra `plot`: `matplotlib`
-- The genome readers use only the standard library (`mmap`, `zlib`, `sqlite3`) and numpy. Thus a BGZF FASTA genome needs no extra.
-- A new runtime dependency needs an entry in the inflexa manifest. Thus, prevent it.
+- The genome readers use only the standard library (`mmap`, `zlib`, `sqlite3`) and numpy. Thus the port reads a BGZF FASTA genome without an extra.
+- A new runtime dependency must have an entry in the inflexa manifest. Thus, do not add one.
 - The wheel is pure Python. The inflexa build images have no Rust toolchain. Numba compiles the search kernels at run time.
 - The kernels use `@njit(cache=True)`. In the sandbox, the package directory is read-only. Thus numba writes its cache to `NUMBA_CACHE_DIR` or to its user cache. An inflexa warm script can fill this cache later.
 
@@ -109,7 +109,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 - The same rule bans `seedmatch.fetch` in each module outside `seedmatch.fetch`.
 - `import seedmatch` does not import matplotlib or `seedmatch.fetch`.
 - A computation function returns data. A plot function takes a result and returns a `matplotlib.figure.Figure`. No function writes a file unless it has an explicit output path parameter.
-- A reader reads only the part of a file that the call needs:
+- A reader reads only the part of a file that the call uses:
   - The 2bit reader uses `mmap` and decodes only the requested ranges.
   - The EnsDb reader puts the filter in the SQL `WHERE` clause.
 - Options are frozen dataclasses. Modes are enums. No function takes a string mode flag.
@@ -194,7 +194,7 @@ The default `SeedMatchReport` uses indels with the edit distances 0 to 4 for `Fu
 - The two-sided asymptotic p-value is the limit Kolmogorov distribution, `scipy.special.kolmogorov(sqrt(en) · D)`.
 - The asymptotic formulas fix numeric defects of R, which give a wrong p-value or a p-value of 0 (`D-032`).
 - R warns if ties make the asymptotic p-value approximate. The port gives no warning, because `method` shows it (`D-037`).
-- On the test data, the scipy exact p-value agrees with R: D = 0.51035, p = 0.0001037731.
+- On the test data (`ecdf.tsv`), the port gives D = 0.51035 and p = 0.0001037731, as R does.
 
 ### Wilcoxon rank-sum test
 
@@ -212,7 +212,7 @@ The default `SeedMatchReport` uses indels with the edit distances 0 to 4 for `Fu
 - Thus a small p-value keeps its subnormal float down to 5e-324, as `pnorm` of R does.
 - If each value is equal, SIGMA is 0. R gives NaN for `TWO_SIDED`. The port gives the p-value 1 for each alternative (`D-033`).
 - R warns if ties make the p-value approximate. The port gives no warning, because `method` shows it (`D-037`).
-- On the test data, `scipy.stats.mannwhitneyu(method="asymptotic", use_continuity=True)` agrees with R: W = 2150, p = 0.9996.
+- On the test data (`ecdf.tsv`), the port gives W = 748 and p = 0.9996 for `GREATER`, as R does.
 
 ### DTS test
 
@@ -220,13 +220,13 @@ The default `SeedMatchReport` uses indels with the edit distances 0 to 4 for `Fu
 - Each term is |E − F| / sqrt(2 · G · (1 − G) / n), multiplied by the width of the gap.
 - E and F are the ECDFs of the two samples. G is the pooled ECDF. n is the pooled size. Each ECDF is at the left value of the gap.
 - A gap of width 0 adds nothing to the sum. Thus only the end of a run of equal values counts.
-- A Python test of this formula gives 74.91157, the same as the R snapshot.
+- On the test data (`ecdf.tsv`), the statistic is 74.91157, as in R.
 - The port computes E − F from integer counts: (c · n − k · n_x) / (n_x · n_y). Here k values lie at or below the gap, and c of them come from the first sample.
 - A permutation chooses n_x of the pooled sorted positions for the first sample. This is the method of twosamples.
 - The p-value is the fraction of `n_boot` permutation statistics that are not less than the observed statistic (default 2000, as in twosamples). If the fraction is 0, the p-value is 1 / (2 · `n_boot`).
 - The observed statistic and each permutation statistic come from the same code, and each row adds its terms in the same order. Thus a permutation with the same counts as the observed arrangement gives the same value, and it counts.
 - The caller gives a `numpy.random.Generator` or a non-negative int seed.
-- The port draws the permutations in blocks of 64, and numpy does the work of each block. Thus the memory is O(64 · n) and does not grow with `n_boot`. The time is O(`n_boot` · n).
+- The port draws the permutations in blocks, and numpy does the work of each block. A block has `max(1, min(64, 2^20 // n))` rows, thus at most `max(2^20, n)` elements. Thus the memory does not grow with `n_boot`. The peak is 27 MB for 20000 values, 35 MB for 200000 values, and 80 MB for 10^6 values. The time is O(`n_boot` · n).
 - An infinite value and an empty sample raise `InputError`. R gives the statistic `Inf`, or a statistic that does not compare two samples, and the p-value 1 (`D-034`).
 - A pooled range above the largest float divided by 2 n raises `InputError` (`D-034`). Each term is at most the width of its gap times n, thus the statistic is at most the range times n. The port multiplies the width by a factor of at most n / (n − 1). It does not multiply by n^1.5 first. Thus no product overflows below the limit. R overflows to the statistic `Inf` and the p-value 1.
 
@@ -265,12 +265,20 @@ Let n be the size of a sample. The time is O(n log n + `n_interp` log n), becaus
 
 The unrounded areas of R depend on the platform. R 4.5.3 on arm64 macOS uses a fused multiply-add in `approx` and in the product `%*%` of `trapz`. R on x86-64 uses no fused multiply-add. Thus the last bits of an unrounded area differ between the two platforms. The port uses the plain IEEE expression of `approx`. It adds the products of `trapz` in order, with `numpy.cumsum`, because `numpy.sum` adds in another order. A chunk adds the sum of the earlier chunks to its first product. Thus the order is the same as for one sum over the grid. On the goldens, the unrounded areas differ from the arm64 values by a relative 5e-16 at most. A rounded area can differ from R only if its unrounded area lies within about 1e-15 of a rounding boundary. The nearest golden area is 1.3e-5 from a boundary. Thus each rounded golden area is equal.
 
+### ECDF test
+
+- `ecdf_test` uses `GREATER` for KS and for WILCOXON if `alternative` is `None`, as R does. The direction of `GREATER` is not the same for KS and for WILCOXON.
+- For KS, `GREATER` means that the target ECDF is above the background ECDF. Thus the target values are lower.
+- For WILCOXON, `GREATER` means that the target values are higher.
+- On the test data (`ecdf.tsv`), the target genes have lower values. KS `greater` gives p = 1.04e-4, and WILCOXON `greater` gives p = 0.9996. WILCOXON `less` gives p = 3.9e-4.
+- The port keeps the default of R. The docstring of `ecdf_test` and the README give the direction.
+
 ## Annotation
 
 ### EnsDb and 2bit (the parity path)
 
 - The EnsDb is an SQLite file with the ensembldb schema. The reader uses the standard `sqlite3` module. It opens the file read-only and immutable (`file:...?mode=ro&immutable=1`, URI open). Thus the reader can open a file in a read-only store.
-- The reader needs the tables `gene`, `tx`, `tx2exon`, and `exon`. A filter that needs an optional column (`tx_is_canonical`, `tx_support_level`) or the `entrezgene` table raises `InputError` if the file does not have it. The message gives the file and the column.
+- The file must have the tables `gene`, `tx`, `tx2exon`, and `exon`. A filter that uses an optional column (`tx_is_canonical`, `tx_support_level`) or the `entrezgene` table raises `InputError` if the file does not have it. The message gives the file and the column.
 - The EnsDb `chromosome` table gives the length of each contig. If the genome gives a different length for a contig, `Reference` raises `InputError`. Thus a genome of a different build causes an error.
 - `TranscriptFilter` has these fields. Their semantics come from `build_annotation_filter` (`R/load_annotations.R:242-339`) and from the SQL that ensembldb 2.34.0 runs:
   - `standard_chromosomes`: `seq_name` is one of `1` to `22`, `X`, and `Y`, for each species, or one of these names with the prefix `chr`
@@ -410,7 +418,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `load_annotations` with `longest.utr` or `reduce.features` | R applies the two options only to the 3' UTR. For the other feature types, it ignores them without a message (`R/load_annotations.R:82-91`). | `PerGene` applies to each feature type. |
 | `ensembldb::transcripts` (used by `load_annotations` for `$gtf`, and by `.get_longest_utr` through `transcriptLengths`) | The SQL sorts on `seq_name` and `tx_seq_start` only. A tie of two genes then gets the scan order of the SQLite query plan, and the plan depends on the filter. The fixture golden gives two orders for one tie. | The order of a tie is the row order of the `gene` table, then of the `tx` table, for each filter. |
 | `build_annotation_filter` (used by `load_annotations`) | A `transcript.support` of 0 or less, or an `entrez_id` of 0 or less, selects no transcript and gives no message (`R/load_annotations.R:298-330`). | `TranscriptFilter` raises `InputError` for a support level below 1 and for an Entrez ID below 1. |
-| `stats::ks.test` (used by `ecdf_stat_test`) | The asymptotic p-value has numeric defects. The two-sided series keeps one term for `sqrt(en) * D` below 1 (`ks.c:100-111`). The one-sided value `1 - (-expm1(...))` gives 0 for a p-value below about 1e-16. D from a cumulative sum can be above 1, and then the p-value is 0. | The statistic comes from integer counts. The p-value is `scipy.special.kolmogorov(sqrt(en) * D)` for two-sided and `exp(-2 * en * D^2)` for one-sided. |
+| `stats::ks.test` (used by `ecdf_stat_test`) | The asymptotic p-value has numeric defects. The two-sided series keeps one term for `sqrt(en) * D` below 1 (`ks.c:100-111`). The one-sided value `1 - (-expm1(...))` has an absolute error of about 1e-16. Its relative error is above 1e-9 for a p-value below about 1e-7, and the value is 0 below about 1e-16. D from a cumulative sum can be above 1, and then the p-value is 0. | The statistic comes from integer counts. The p-value is `scipy.special.kolmogorov(sqrt(en) * D)` for two-sided and `exp(-2 * en * D^2)` for one-sided. |
 | `stats::wilcox.test` (used by `ecdf_stat_test`) | If each value is equal, the variance is 0 (`R/deseq_fc_ecdf.R:274-276`). The two-sided z is 0/0, and the p-value is NaN. The one-sided p-values are 1. | The p-value is 1 for each alternative. |
 | `twosamples::dts_test` (used by `ecdf_stat_test`) | The function does not check its samples. An infinite value gives the statistic `Inf` and the p-value 1. An empty sample gives a statistic and the p-value 1. Finite values near ±1e308 overflow to the statistic `Inf` and the p-value 1 (`R/deseq_fc_ecdf.R:259-264`). | `dts_test` raises `InputError` for an infinite value, for an empty sample, and for a pooled range above the largest float divided by 2 n. |
 | `ecdf_stat_test` with `twosamples::dts_test` or `wass_dist` | R passes `alternative` only to `ks.test` and `wilcox.test`. For `DTS` and `Wass`, R ignores it and gives no message (`R/deseq_fc_ecdf.R:255-277`). | `ecdf_test` raises `InputError` for an `alternative` with `DTS` or `WASSERSTEIN`. |
@@ -488,7 +496,7 @@ A test runs each code example in `README.md` and in `docs/`.
 
 ### Coverage
 
-`pytest-cov` measures branch coverage. The floor is 95% for `src/seedmatch`, except `seedmatch.plot`. Each line without coverage needs a reason in the review.
+`pytest-cov` measures branch coverage. The floor is 95% for `src/seedmatch`, except `seedmatch.plot`. The review must give a reason for each line without coverage.
 
 ## Performance and bounds
 

@@ -5,7 +5,13 @@ import re
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import GUIDE, assert_frame_matches_golden, sirna_de, sirna_seqs
+from helpers import (
+    GUIDE,
+    NOT_A_DATA_FRAME,
+    assert_frame_matches_golden,
+    sirna_de,
+    sirna_seqs,
+)
 
 import seedmatch
 from seedmatch import Guide, SequenceSet
@@ -426,6 +432,22 @@ def test_a_column_that_is_not_numeric_is_an_error_that_names_the_column_and_the_
     de = de_of(("a", FOLD_CHANGE, PADJ, 5.0)).astype({column: "object"})
     de[column] = "x"
     with pytest.raises(InputError, match=f"column '{column}' has dtype object; expected a numeric"):
+        seed_match_report(de, seqs_of(("a", SITE_8MER)), Guide(GUIDE))
+
+
+@pytest.mark.parametrize("column", ["log2FoldChange", "padj", "baseMean"])
+@pytest.mark.parametrize("dtype", ["bool", "complex128"])
+def test_a_bool_and_a_complex_column_are_not_numeric_D024(column, dtype):
+    de = de_of(("a", FOLD_CHANGE, PADJ, 5.0)).astype({column: dtype})
+    message = f"column '{column}' has dtype {dtype}; expected a numeric dtype"
+    with pytest.raises(InputError, match=f"^{message}$"):
+        seed_match_report(de, seqs_of(("a", SITE_8MER)), Guide(GUIDE))
+
+
+@pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)
+def test_a_table_that_is_not_a_data_frame_is_an_error(de, type_name):
+    message = f"de has type {type_name}; expected a pandas.DataFrame"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
         seed_match_report(de, seqs_of(("a", SITE_8MER)), Guide(GUIDE))
 
 

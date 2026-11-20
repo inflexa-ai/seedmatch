@@ -1,7 +1,7 @@
 """The two-sample Wilcoxon rank-sum test."""
 
 import math
-from typing import Final
+from typing import Final, assert_never
 
 import numpy as np
 import numpy.typing as npt
@@ -97,6 +97,8 @@ def _exact_p_value(m: int, n: int, w: int, alternative: Alternative) -> float:
             return at_least
         case Alternative.TWO_SIDED:
             return min(1.0, 2 * (at_least if 2 * w > m * n else at_most))
+        case _:
+            assert_never(alternative)
 
 
 def _asymptotic_p_value(
@@ -116,6 +118,8 @@ def _asymptotic_p_value(
             correction = 0.5
         case Alternative.TWO_SIDED:
             correction = 0.5 * ((z > 0) - (z < 0))
+        case _:
+            assert_never(alternative)
     z = (z - correction) / math.sqrt(variance)
     match alternative:
         case Alternative.LESS:
@@ -124,6 +128,8 @@ def _asymptotic_p_value(
             return _normal_lower_tail(-z)
         case Alternative.TWO_SIDED:
             return 2 * min(_normal_lower_tail(z), _normal_lower_tail(-z))
+        case _:
+            assert_never(alternative)
 
 
 def _normal_lower_tail(z: float) -> float:

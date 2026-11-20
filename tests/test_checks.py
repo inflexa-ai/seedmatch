@@ -7,6 +7,7 @@ from enum import StrEnum
 import numpy as np
 import pandas as pd
 import pytest
+from helpers import NOT_A_DATA_FRAME
 
 from seedmatch._checks import (
     as_cutoff,
@@ -17,6 +18,7 @@ from seedmatch._checks import (
     as_number,
     as_text,
     check_at_least,
+    check_columns,
     check_not_negative,
     check_numeric_columns,
 )
@@ -179,3 +181,10 @@ def test_check_numeric_columns_rejects_a_bool_column_a_complex_column_and_text(c
 @pytest.mark.parametrize("dtype", ["int64", "float64", "uint8", "Int64", "Float64"])
 def test_check_numeric_columns_accepts_an_integer_and_a_float_column(dtype):
     check_numeric_columns(pd.DataFrame({"value": pd.array([1, 2], dtype=dtype)}), ["value"])
+
+
+@pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)
+def test_check_columns_rejects_a_table_that_is_not_a_data_frame(de, type_name):
+    message = f"de has type {type_name}; expected a pandas.DataFrame"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_columns(de, ["gene_id"])

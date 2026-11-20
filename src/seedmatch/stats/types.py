@@ -93,6 +93,10 @@ def _as_vector(name: str, values: ArrayLike) -> npt.NDArray[np.float64]:
     except ValueError:
         # A nested sequence with rows of different lengths has no array form without a dtype.
         array = None
+    if array is not None and array.ndim == 0:
+        # A set, a generator, a dict, a str, and a scalar each make a 0-D array.
+        message = f"{name} has type {type(values).__name__}; expected a 1-D array of numbers"
+        raise InputError(message)
     if array is not None and array.dtype.kind in "iuf" and not _holds_a_bool(values):
         check_one_dimensional(name, array)
         return array.astype(np.float64)

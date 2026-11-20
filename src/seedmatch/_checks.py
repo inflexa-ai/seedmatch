@@ -143,9 +143,20 @@ def as_cutoff(name: str, value: object) -> float:
     return cutoff
 
 
-def check_columns(de: pd.DataFrame, required: Sequence[str]) -> None:
-    """Raise `InputError` that lists the missing columns in sorted order."""
-    missing = sorted(set(required) - set(de.columns))
+def as_data_frame(de: object) -> pd.DataFrame:
+    """Return `de` if it is a DataFrame, and raise `InputError` otherwise."""
+    if not isinstance(de, pd.DataFrame):
+        message = f"de has type {type(de).__name__}; expected a pandas.DataFrame"
+        raise InputError(message)
+    return de
+
+
+def check_columns(de: object, required: Sequence[str]) -> None:
+    """Raise `InputError` if `de` is not a DataFrame, or if it lacks a required column.
+
+    The message for a missing column lists the missing columns in sorted order.
+    """
+    missing = sorted(set(required) - set(as_data_frame(de).columns))
     if missing:
         message = f"DE table has missing columns: {missing}; expected {list(required)}"
         raise InputError(message)
