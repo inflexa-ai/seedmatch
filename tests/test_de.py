@@ -1,13 +1,16 @@
 import bz2
 import gzip
+import io
 import lzma
 import re
+import warnings
 
 import pandas as pd
 import pytest
 from helpers import DATA, NOT_A_DATA_FRAME, damaged_compressed_files, golden_rows, sirna_de
 
 import seedmatch
+from seedmatch import de
 from seedmatch.de import DE_REQUIRED_COLUMNS, filter_de, read_deseq2_table
 from seedmatch.errors import InputError
 
@@ -199,8 +202,33 @@ def test_read_deseq2_table_rejects_a_row_with_more_fields_than_the_header_D021(
     row = ["g1", "1", "1", "1", "1", "1", "1", "x"]
     rows = [[*row, "y"], *[row] * (extra_rows - 1)]
     text = "\n".join("\t".join(r) for r in [DESEQ2_COLUMNS, *rows]) + "\n"
-    with pytest.raises(InputError, match=r"table\.tsv.*more fields than the header"):
+    with pytest.raises(InputError, match=r"table\.tsv.*Expected 8 fields in line 2, saw 9"):
         read_deseq2_table(write_text(tmp_path, text))
+
+
+class FiltersResetOnRead(io.StringIO):
+    """A handle whose read resets the warning filters, as another thread can do at that time.
+
+    `warnings.catch_warnings` of Python 3.12 restores the filters of the process at its exit.
+    """
+
+    def read(self, size=-1):
+        warnings.resetwarnings()
+        return super().read(size)
+
+
+def test_read_deseq2_table_rejects_a_row_with_more_fields_when_another_thread_resets_the_filters(
+    tmp_path, monkeypatch
+):
+    row = ["g1", "1", "1", "1", "1", "1", "1", "x"]
+    text = "\n".join("\t".join(r) for r in [DESEQ2_COLUMNS, [*row, "y"], row]) + "\n"
+    path = write_text(tmp_path, text)
+    monkeypatch.setattr(de, "open_text", lambda _file: FiltersResetOnRead(text))
+    with (
+        warnings.catch_warnings(),
+        pytest.raises(InputError, match=r"table\.tsv.*Expected 8 fields in line 2, saw 9"),
+    ):
+        read_deseq2_table(path)
 
 
 def test_read_deseq2_table_rejects_a_later_row_with_more_fields_than_the_header(tmp_path):

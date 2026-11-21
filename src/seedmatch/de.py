@@ -1,7 +1,6 @@
 """The table of DESeq2 results: the reader for the GEO files and the filter."""
 
 import os
-import warnings
 from typing import Final
 
 import pandas as pd
@@ -40,13 +39,14 @@ def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
     file = local_path(shown)
     try:
         # pandas gets an open handle and no path, so it cannot open a URL or guess a compression.
-        with open_text(file) as handle, warnings.catch_warnings():
-            # With index_col=False, pandas drops the extra fields of a row and only warns.
-            warnings.simplefilter("error", pd.errors.ParserWarning)
+        with open_text(file) as handle:
+            # The header is a data row, thus it sets the field count, and pandas raises for each
+            # row with more fields. With a header row, pandas reads the extra fields of the first
+            # row as an index, and with index_col=False it drops them and only warns.
             table = pd.read_csv(
                 handle,
                 sep="\t",
-                index_col=False,
+                header=None,
                 dtype=str,
                 na_values=["NA"],
                 keep_default_na=False,
@@ -61,9 +61,6 @@ def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
     except pd.errors.EmptyDataError as exc:
         message = f"{shown!r}: the file has no header line; expected a header line and rows"
         raise InputError(message) from exc
-    except pd.errors.ParserWarning as exc:
-        message = f"{shown!r}: a row has more fields than the header; expected at most as many"
-        raise InputError(message) from exc
     except pd.errors.ParserError as exc:
         message = f"{shown!r}: {str(exc).strip()}"
         raise InputError(message) from exc
@@ -73,6 +70,7 @@ def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
             f"expected {len(_DESEQ2_COLUMNS)}: {', '.join(_DESEQ2_COLUMNS)}"
         )
         raise InputError(message)
+    table = table.iloc[1:].reset_index(drop=True)
     table.columns = pd.Index(_DESEQ2_COLUMNS)
     for name in _NUMERIC_COLUMNS:
         field = table[name]
