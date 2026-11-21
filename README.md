@@ -439,6 +439,8 @@ Without the JIT, the coverage tracer stops the pool threads on its data lock, th
 
 `tools/golden/README.md` tells how to make the R golden files again.
 
+[`docs/performance.md`](docs/performance.md) gives the time and the memory of `seed_match_report` on `rnor7`, and the commands that measure them.
+
 [`CONTRIBUTING.md`](CONTRIBUTING.md) gives the rules for a contribution. To report a security problem, obey [`SECURITY.md`](SECURITY.md).
 
 ## License
