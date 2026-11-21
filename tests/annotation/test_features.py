@@ -616,3 +616,56 @@ def test_exon_rows_give_0_as_the_cds_of_a_transcript_without_a_cds():
     assert rows.tx_id.tolist() == [T05, T05]
     assert rows.cds_start.tolist() == [0, 0]
     assert rows.cds_end.tolist() == [0, 0]
+
+
+# R sorts the genes of reduce.features with IRanges:::.as_factor, which calls order(method =
+# "radix"), and the genes of longest.utr with dplyr::group_by in the C locale. Thus R sorts the
+# gene IDs by code point in each locale, also where the collation of the locale gives another order.
+CODE_POINT_GENE_IDS = {
+    "ENSSYNG00000000001": "ensSYNG00000000001",
+    "ENSSYNG00000000005": "gene_b",
+    "ENSSYNG00000000006": "gene-a",
+    "ENSSYNG00000000007": "Gene10",
+    "ENSSYNG00000000008": "gene9",
+}
+CODE_POINT_ORDER = [
+    "ENSSYNG00000000002",
+    "Gene10",
+    "ensSYNG00000000001",
+    "gene-a",
+    "gene9",
+    "gene_b",
+]
+
+
+@pytest.mark.parametrize(
+    ("per_gene", "ids"),
+    [
+        (PerGene.UNION, CODE_POINT_ORDER),
+        (
+            PerGene.LONGEST,
+            [
+                "ENSSYNT00000000003",
+                "ENSSYNT00000000010",
+                "ENSSYNT00000000002",
+                "ENSSYNT00000000009",
+                "ENSSYNT00000000012",
+                "ENSSYNT00000000008",
+            ],
+        ),
+    ],
+)
+def test_per_gene_orders_the_gene_ids_by_code_point(tmp_path, per_gene, ids):
+    path = copy_ensdb(
+        tmp_path,
+        *(
+            f"UPDATE {table} SET gene_id = '{new}' WHERE gene_id = '{old}'"  # noqa: S608
+            for old, new in CODE_POINT_GENE_IDS.items()
+            for table in ("gene", "tx", "entrezgene")
+        ),
+    )
+    db = AnnotationDb.open(path)
+    got = derive_features(db.exon_rows(ALL, coding_only=True), FeatureType.UTR3, per_gene)
+    db.close()
+    assert list(got.gene_ids) == CODE_POINT_ORDER
+    assert list(got.ids) == ids

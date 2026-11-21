@@ -564,8 +564,8 @@ A change of behavior that has no entry is a defect of the port. The builder adds
   - 3' UTRs of one gene that overlap or touch
   - soft-masked bases and N blocks
   - a range across a BGZF block boundary
-- Real references: tests with the marker `refs` read the directory in `SEEDMATCH_TEST_REFS`. They compare the feature sequences of `rnor7` with R digests: the names, the length, and the first 16 hexadecimal digits of the SHA-256 digest of each sequence. The digest files are gzip TSV files. A later plan adds `hg38`. If the variable is not set, the tests skip and give the reason.
-- Consistency: on the fixture, each GTF gives the same sequences as the EnsDb. On `rnor7`, the Ensembl release 109 GTF gives the same sequences as the EnsDb of release 109.
+- Real references: tests with the marker `refs` read the directory in `SEEDMATCH_TEST_REFS`. They compare the feature sequences of `rnor7` and `hg38` with R digests: the names, the length, and the first 16 hexadecimal digits of the SHA-256 digest of each sequence. The digest files are gzip TSV files. If the variable is not set, the tests skip and give the reason.
+- Consistency: on the fixture, each GTF gives the same sequences as the EnsDb. On `rnor7` and on `hg38`, the Ensembl release 109 GTF gives the same sequences and the same transcripts as the EnsDb of release 109, on the standard chromosomes.
 
 ### Core without network
 
@@ -599,6 +599,9 @@ A test runs each code example in `README.md` and in `docs/`.
 
 - `SequenceSet` keeps all bases in one buffer. Memory is linear in the total length.
 - The 2bit reader decodes by range, and the EnsDb reader filters in SQL. Thus the request, not the file, sets the size of a read.
+- `load_gtf` keeps the tables in an in-memory SQLite database, and it writes no temporary file. The memory above the start is about 530 to 550 bytes for each exon line. These measurements come from an Apple M2 Max with 12 CPUs, and a coverage run used the CPUs at the same time:
+  - `Homo_sapiens.GRCh38.109.gtf.gz` has 1,648,278 exon lines. The read takes 31 seconds, the peak resident memory above the start is 834 MiB, and the database pages are 270 MiB.
+  - `Rattus_norvegicus.mRatBN7.2.109.gtf.gz` has 526,640 exon lines. The read takes 13 seconds, the peak resident memory above the start is 278 MiB, and the database pages are 95 MiB.
 - A mismatch search is O(N · m) at worst, with an early stop when the mismatch count passes the limit. An indel search is O(N · m) dynamic programming.
 - The kernels use `nogil=True`. `full_search` runs its patterns on a thread pool of fixed width. The width is a parameter, with the CPU count as the default.
 - `kmer_counts` works in blocks of 2^20 window starts, and its matrix has at most one entry for each window.

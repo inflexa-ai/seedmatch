@@ -1,8 +1,10 @@
 import hashlib
 import os
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
+import pandas as pd
 import pytest
 from annotation_cases import ALL, CASES
 from helpers import golden
@@ -13,25 +15,59 @@ from seedmatch.resources import Group, lookup
 
 pytestmark = pytest.mark.refs
 
-TWOBIT_RESOURCE, ENSDB_RESOURCE = lookup(Group.REFERENCE, "rnor7").resources
-ENSDB = ENSDB_RESOURCE.name
-TWOBIT = TWOBIT_RESOURCE.name
-GTF = "Rattus_norvegicus.mRatBN7.2.109.gtf.gz"
-# The registry has no GTF file, so the GTF row is the only one that this test file pins.
-RNOR7_FILES = {
-    ENSDB: (ENSDB_RESOURCE.size, ENSDB_RESOURCE.sha256),
-    TWOBIT: (TWOBIT_RESOURCE.size, TWOBIT_RESOURCE.sha256),
-    GTF: (18029537, "ff7d5ecd69ed7df5e641ec90383e5de9e10e9d82316a0570c71fa80a98e8edca"),
-}
+
+class Build(NamedTuple):
+    gtf: str
+    gtf_size: int
+    gtf_sha256: str
+    configs: tuple[str, ...]
+
+
 RNOR7_CONFIGS = ("utr3", "utr5", "exons", "cds", "utr3_longest", "utr3_union")
+# The registry has no GTF file, so this file pins the GTF of each build.
+BUILDS = {
+    "rnor7": Build(
+        "Rattus_norvegicus.mRatBN7.2.109.gtf.gz",
+        18029537,
+        "ff7d5ecd69ed7df5e641ec90383e5de9e10e9d82316a0570c71fa80a98e8edca",
+        RNOR7_CONFIGS,
+    ),
+    "hg38": Build(
+        "Homo_sapiens.GRCh38.109.gtf.gz",
+        54258835,
+        "1ce4b88d9283f70220c318ebb3e654a9b5815316b9ba4c9b93564f29f10fab29",
+        (*RNOR7_CONFIGS, "entrez", "tsl1"),
+    ),
+}
+
+
+def pinned_files(build_id):
+    twobit, ensdb = lookup(Group.REFERENCE, build_id).resources
+    build = BUILDS[build_id]
+    return {
+        ensdb.name: (ensdb.size, ensdb.sha256),
+        twobit.name: (twobit.size, twobit.sha256),
+        build.gtf: (build.gtf_size, build.gtf_sha256),
+    }
+
+
+FILES = [(build_id, name) for build_id in BUILDS for name in pinned_files(build_id)]
+CONFIGS = [(build_id, config) for build_id, build in BUILDS.items() for config in build.configs]
 
 
 @pytest.fixture(scope="module")
-def rnor7_dir():
+def refs_dir():
     refs = os.environ.get("SEEDMATCH_TEST_REFS")
     if not refs:
         pytest.skip("SEEDMATCH_TEST_REFS is not set")
-    return Path(refs) / "rnor7"
+    return Path(refs)
+
+
+# The GTF reference of hg38 needs about 1 GB to read. A module fixture with params groups its
+# tests by build, so pytest closes the references of one build before it opens the next build.
+@pytest.fixture(scope="module", params=list(BUILDS))
+def build(request):
+    return request.param
 
 
 def present(directory, name):
@@ -41,17 +77,26 @@ def present(directory, name):
     return path
 
 
+def open_ensdb(refs_dir, build_id):
+    directory = refs_dir / build_id
+    twobit, ensdb = lookup(Group.REFERENCE, build_id).resources
+    present(directory, ensdb.name)
+    present(directory, twobit.name)
+    return Reference.from_directory(directory)
+
+
 @pytest.fixture(scope="module")
-def rnor7(rnor7_dir):
-    present(rnor7_dir, ENSDB)
-    present(rnor7_dir, TWOBIT)
-    with Reference.from_directory(rnor7_dir) as ref:
+def ensdb_ref(refs_dir, build):
+    with open_ensdb(refs_dir, build) as ref:
         yield ref
 
 
 @pytest.fixture(scope="module")
-def rnor7_gtf(rnor7_dir):
-    with Reference.from_gtf(present(rnor7_dir, GTF), present(rnor7_dir, TWOBIT)) as ref:
+def gtf_ref(refs_dir, build):
+    directory = refs_dir / build
+    twobit, _ = lookup(Group.REFERENCE, build).resources
+    gtf = present(directory, BUILDS[build].gtf)
+    with Reference.from_gtf(gtf, present(directory, twobit.name)) as ref:
         yield ref
 
 
@@ -70,22 +115,25 @@ def assert_same_sequences(got, expected):
     np.testing.assert_array_equal(got.codes, expected.codes)
 
 
-@pytest.mark.parametrize("name", RNOR7_FILES)
-def test_rnor7_files_are_the_pinned_files(rnor7_dir, name):
-    path = present(rnor7_dir, name)
-    size, sha256 = RNOR7_FILES[name]
+@pytest.mark.parametrize(("build_id", "name"), FILES)
+def test_files_are_the_pinned_files(refs_dir, build_id, name):
+    path = present(refs_dir / build_id, name)
+    size, sha256 = pinned_files(build_id)[name]
     assert path.stat().st_size == size
     with path.open("rb") as file:
         assert hashlib.file_digest(file, "sha256").hexdigest() == sha256
 
 
-@pytest.mark.parametrize("config", RNOR7_CONFIGS)
-def test_rnor7_sequences_match_r(rnor7, config):
+# The builds have different configs. pytest sets up an indirect fixture again for each pair of a
+# build and a config, so this test opens the EnsDb itself.
+@pytest.mark.parametrize(("build_id", "config"), CONFIGS)
+def test_sequences_match_r(refs_dir, build_id, config):
     case = CASES[config]
-    got = rnor7.sequences(
-        case.feature, case.transcript_filter, per_gene=case.per_gene, min_width=case.min_width
-    )
-    expected = golden(f"annotation/rnor7/{config}.tsv.gz")
+    with open_ensdb(refs_dir, build_id) as ref:
+        got = ref.sequences(
+            case.feature, case.transcript_filter, per_gene=case.per_gene, min_width=case.min_width
+        )
+    expected = golden(f"annotation/{build_id}/{config}.tsv.gz")
     # For a union, R puts the gene ID in name_tx and NA in name_gene (D-002), so the gene IDs come
     # from name_tx.
     gene_ids = "name_tx" if case.per_gene is PerGene.UNION else "name_gene"
@@ -96,22 +144,31 @@ def test_rnor7_sequences_match_r(rnor7, config):
 
 
 @pytest.mark.parametrize("feature", list(FeatureType))
-def test_rnor7_gtf_gives_the_sequences_of_the_ensdb(rnor7, rnor7_gtf, feature):
-    assert_same_sequences(rnor7_gtf.sequences(feature, ALL), rnor7.sequences(feature, ALL))
+def test_gtf_gives_the_sequences_of_the_ensdb(ensdb_ref, gtf_ref, feature):
+    assert_same_sequences(gtf_ref.sequences(feature, ALL), ensdb_ref.sequences(feature, ALL))
 
 
-def test_rnor7_gtf_union_gives_the_sequences_of_the_ensdb(rnor7, rnor7_gtf):
+def test_gtf_union_gives_the_sequences_of_the_ensdb(ensdb_ref, gtf_ref):
     assert_same_sequences(
-        rnor7_gtf.sequences(FeatureType.UTR3, ALL, per_gene=PerGene.UNION),
-        rnor7.sequences(FeatureType.UTR3, ALL, per_gene=PerGene.UNION),
+        gtf_ref.sequences(FeatureType.UTR3, ALL, per_gene=PerGene.UNION),
+        ensdb_ref.sequences(FeatureType.UTR3, ALL, per_gene=PerGene.UNION),
     )
 
 
 # The row order breaks a tie of the width and the start, and the GTF has another row order than the
 # EnsDb. Thus a tie can select another transcript of the gene, and the test compares the widths.
-def test_rnor7_gtf_longest_gives_the_widths_of_the_ensdb(rnor7, rnor7_gtf):
-    expected = rnor7.sequences(FeatureType.UTR3, ALL, per_gene=PerGene.LONGEST)
-    got = rnor7_gtf.sequences(FeatureType.UTR3, ALL, per_gene=PerGene.LONGEST)
+def test_gtf_longest_gives_the_widths_of_the_ensdb(ensdb_ref, gtf_ref):
+    expected = ensdb_ref.sequences(FeatureType.UTR3, ALL, per_gene=PerGene.LONGEST)
+    got = gtf_ref.sequences(FeatureType.UTR3, ALL, per_gene=PerGene.LONGEST)
     assert len(expected) > 0
     assert got.gene_ids == expected.gene_ids
     np.testing.assert_array_equal(got.lengths(), expected.lengths())
+
+
+# The row order breaks a tie of the contig and the start (D-030), and the GTF has another row order
+# than the EnsDb. Thus the test compares the transcripts in the order of tx_id.
+def test_gtf_gives_the_transcripts_of_the_ensdb(ensdb_ref, gtf_ref):
+    expected = ensdb_ref.transcripts(ALL).sort_values("tx_id", ignore_index=True)
+    got = gtf_ref.transcripts(ALL).sort_values("tx_id", ignore_index=True)
+    assert len(expected) > 0
+    pd.testing.assert_frame_equal(got, expected)

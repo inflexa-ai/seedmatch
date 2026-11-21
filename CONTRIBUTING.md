@@ -32,13 +32,13 @@ The tests disable the sockets. A test that opens a network connection fails.
 
 ### Do the tests on a real reference
 
-The tests with the marker `refs` compare seedmatch with R on the rat reference `rnor7`. They also compare the GTF path with the EnsDb path. These tests read the files of the reference from the directory of the variable `SEEDMATCH_TEST_REFS`. [`tools/golden/README.md`](tools/golden/README.md) gives the layout of the directory and the source of each file. To do only these tests, run this command:
+The tests with the marker `refs` compare seedmatch with R on the rat reference `rnor7` and on the human reference `hg38`. They also compare the GTF path with the EnsDb path. These tests read the files of the reference from the directory of the variable `SEEDMATCH_TEST_REFS`. [`tools/golden/README.md`](tools/golden/README.md) gives the layout of the directory and the source of each file. To do only these tests, run this command:
 
 ```bash
 SEEDMATCH_TEST_REFS=~/Development/refs/seedmatch uv run pytest -m refs -v
 ```
 
-These tests take approximately one minute. If the variable is set, `uv run pytest` also runs them.
+These tests take approximately 4 minutes. They use up to 4 GiB of memory. The tests of `hg38` keep its GTF reference and its EnsDb reference open at the same time. If the variable is set, `uv run pytest` also runs them.
 
 If the variable is not set, each of these tests skips with the reason `SEEDMATCH_TEST_REFS is not set`. If a file is absent, each test that reads the file skips, and the reason gives the path of the file. The CI workflows do not set the variable, thus CI skips these tests.
 
