@@ -33,6 +33,10 @@ _TICK_LABEL_SIZE: Final = 9.6
 _GRAY_PANEL: Final = "#EBEBEB"
 _PANEL_EXPANSION: Final = 0.05
 _PAIR_LENGTH: Final = 2
+# The `MaxNLocator` of matplotlib 3.11.1 overflows when the width of a view divided by its bin
+# count reaches 1e307, and the bin count can be 1. Near the largest float, the ticks after the end
+# of a view also overflow. The expansion of 5% on each side of a range of 9e306 gives 9.9e306.
+AXIS_BOUND: Final = 9e306
 
 
 def linewidth_points(linewidth: float) -> float:
@@ -92,13 +96,32 @@ def as_size(size: object) -> tuple[float, float]:
     return pair
 
 
+def _inside_axis_bound(low: float, high: float) -> bool:
+    """Return whether `low` and `high` are inside +-`AXIS_BOUND`, at most `AXIS_BOUND` apart."""
+    return low >= -AXIS_BOUND and high <= AXIS_BOUND and high - low <= AXIS_BOUND
+
+
+def check_axis_range(name: str, low: float, high: float) -> None:
+    """Raise `InputError` if the values from `low` to `high` cannot be on one x axis."""
+    if not _inside_axis_bound(low, high):
+        message = (
+            f"the values of {name} go from {low} to {high}; "
+            "expected values from -9e306 to 9e306 with a range of at most 9e306"
+        )
+        raise InputError(message)
+
+
 def as_limits(name: str, value: object) -> tuple[float, float]:
-    """Return `value` as two floats, low and high, with low < high. A bool is not a number."""
+    """Return `value` as two floats, low and high, with low < high.
+
+    Each limit is inside -`AXIS_BOUND` to `AXIS_BOUND`, and high - low is at most `AXIS_BOUND`.
+    A bool is not a number.
+    """
     pair = _finite_pair(value)
-    if pair is None or pair[0] >= pair[1]:
+    if pair is None or pair[0] >= pair[1] or not _inside_axis_bound(*pair):
         message = (
             f"{name} {shown(value)} is not valid; expected (low, high), "
-            "two finite numbers with low < high"
+            "two finite numbers from -9e306 to 9e306 with low < high and high - low at most 9e306"
         )
         raise InputError(message)
     return pair

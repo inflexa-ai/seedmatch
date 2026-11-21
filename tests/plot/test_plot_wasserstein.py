@@ -253,8 +253,8 @@ BAD_ARGUMENTS = [
     pytest.param({"n_interp": 1}, "n_interp 1 is less than 2; expected 2 or more", id="one-point"),
     pytest.param(
         {"seed": [-1e308, *TEN], "non_seed": [1e308, *TEN]},
-        "seed and non_seed span from -1e+308 to 1e+308; "
-        "expected a range of at most 8.988465674311579e+307",
+        "the values of seed and non_seed go from -1e+308 to 1e+308; "
+        "expected values from -9e306 to 9e306 with a range of at most 9e306",
         id="range",
     ),
     pytest.param(
@@ -270,6 +270,53 @@ def test_plot_wasserstein_rejects_bad_input(kwargs, message):
     arguments = {"seed": TEN, "non_seed": TEN} | kwargs
     with pytest.raises(InputError, match=exactly(message)):
         plot_wasserstein(**arguments)
+
+
+def test_plot_wasserstein_rejects_a_range_wider_than_the_bound():
+    seed, non_seed = np.linspace(-4.6e306, 0, 10), np.linspace(0, 4.6e306, 12)
+    message = (
+        "the values of seed and non_seed go from -4.6e+306 to 4.6e+306; "
+        "expected values from -9e306 to 9e306 with a range of at most 9e306"
+    )
+    with pytest.raises(InputError, match=exactly(message)):
+        plot_wasserstein(seed, non_seed, n_interp=100)
+
+
+def test_plot_wasserstein_rejects_values_outside_the_bound():
+    seed, non_seed = np.linspace(1e308, 1.0001e308, 10), np.linspace(1e308, 1.0001e308, 12)
+    message = (
+        "the values of seed and non_seed go from 1e+308 to 1.0001e+308; "
+        "expected values from -9e306 to 9e306 with a range of at most 9e306"
+    )
+    with pytest.raises(InputError, match=exactly(message)):
+        plot_wasserstein(seed, non_seed, n_interp=100)
+
+
+@pytest.mark.parametrize("smallest", [1e-308, 1e-310])
+def test_plot_wasserstein_rejects_a_bandwidth_below_the_bound(smallest):
+    seed = [0.0] * 7 + [smallest, 1.0, 1.0]
+    message = (
+        r"the bandwidth of the seed sample is \S+; expected at least 4\.4326920044603633e-308, "
+    )
+    with pytest.raises(InputError, match=message):
+        plot_wasserstein(seed, np.linspace(0, 1, 12), n_interp=100)
+
+
+def test_plot_wasserstein_draws_a_bandwidth_at_the_bound():
+    seed = [0.0] * 7 + [2e-307, 1.0, 1.0]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        figure = plot_wasserstein(seed, np.linspace(0, 1, 12), n_interp=100)
+        figure.savefig(io.BytesIO(), format="png")
+
+
+@pytest.mark.parametrize("size", [(15.0, 5.0), (6.0, 2.0)], ids=["default-size", "small-size"])
+def test_plot_wasserstein_draws_a_range_at_the_bound(size):
+    seed, non_seed = np.linspace(-4.5e306, 0, 10), np.linspace(0, 4.5e306, 12)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        figure = plot_wasserstein(seed, non_seed, n_interp=100, size=size)
+        figure.savefig(io.BytesIO(), format="png")
 
 
 # The ECDF of a sample with a denormal spread divides by a denormal width, and numpy warns about the

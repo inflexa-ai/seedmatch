@@ -41,12 +41,13 @@ def plot_kmer_histogram(
     `max_bins` are those of `kmer_histogram`. The function returns a `Figure` and does not use
     `matplotlib.pyplot`. It writes no file, and it does not change `gene_counts` or `rcParams`.
 
-    The time is the time of `kmer_histogram`, plus the lookup of the target. The first lookup in an
-    index builds its hash table, which takes O(n) time and about 32 bytes for each of n labels. For
-    the 4^10 labels of k = 10, the first call takes 0.06 seconds and 33 MiB above the input, and a
-    later call takes 0.009 seconds. The figure holds one bar for each bin. For the 16,384 counts of
-    k = 7 on the test data, the call takes 0.009 seconds, and the call with `Figure.savefig` to PNG
-    at 100 dpi takes 0.04 seconds. Machine: Apple M2 Max, Python 3.12.
+    Each bar is an artist of its own. It takes about 0.7 ms and 9.5 KiB, and 1.2 ms with
+    `Figure.savefig` to PNG at 100 dpi. The figure has at most `max_bins` bars, thus the caller
+    controls the cost. The first lookup in an index builds its hash table, which takes O(n) time and
+    about 32 bytes for each of n labels. For the 4^10 labels of k = 10, the first call takes 0.06
+    seconds and 33 MiB above the input, and a later call takes 0.009 seconds. For the 16,384 counts
+    of k = 7 on the test data, the call takes 0.009 seconds, and the call with `Figure.savefig` to
+    PNG at 100 dpi takes 0.04 seconds. Machine: Apple M2 Max, Python 3.12.
     """
     heading = as_text("title", title)
     kmer = as_text("target", target)

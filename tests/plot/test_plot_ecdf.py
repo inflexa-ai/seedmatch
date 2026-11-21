@@ -367,13 +367,13 @@ BAD_ARGUMENTS = [
     pytest.param(
         {"x_limits": (1.0, -1.0)},
         "x_limits (1.0, -1.0) is not valid; expected (low, high), "
-        "two finite numbers with low < high",
+        "two finite numbers from -9e306 to 9e306 with low < high and high - low at most 9e306",
         id="reversed-limits",
     ),
     pytest.param(
         {"x_limits": (0.0, math.inf)},
         "x_limits (0.0, inf) is not valid; expected (low, high), "
-        "two finite numbers with low < high",
+        "two finite numbers from -9e306 to 9e306 with low < high and high - low at most 9e306",
         id="infinite-limit",
     ),
     pytest.param(
@@ -396,6 +396,50 @@ BAD_ARGUMENTS = [
 def test_plot_ecdf_rejects_a_bad_argument(kwargs, message):
     with pytest.raises(InputError, match=exactly(message)):
         draw(**kwargs)
+
+
+WIDE_GROUPS = {"x": ["a", "b", "c"], "y": ["d", "e", "f"]}
+RANGE = "expected values from -9e306 to 9e306 with a range of at most 9e306"
+
+
+def wide_de(low: float, high: float) -> pd.DataFrame:
+    """Return a table whose groups have the lowest value `low` and the highest value `high`."""
+    values = [low, 0.0, 1.0, 2.0, 3.0, high]
+    return pd.DataFrame({"gene_id": list("abcdef"), "log2FoldChange": values})
+
+
+@pytest.mark.parametrize(
+    "limits", [(-1e308, 1e308), (-4.6e306, 4.6e306), (1e308, 1.0001e308), (8.9e306, 9.1e306)]
+)
+def test_plot_ecdf_rejects_x_limits_wider_than_the_bound(limits):
+    message = (
+        f"x_limits {limits!r} is not valid; expected (low, high), "
+        "two finite numbers from -9e306 to 9e306 with low < high and high - low at most 9e306"
+    )
+    with pytest.raises(InputError, match=exactly(message)):
+        draw(x_limits=limits)
+
+
+def test_plot_ecdf_rejects_values_wider_than_the_bound():
+    message = f"the values of log2FoldChange go from -1e+308 to 1e+308; {RANGE}"
+    with pytest.raises(InputError, match=exactly(message)):
+        draw(wide_de(-1e308, 1e308), WIDE_GROUPS, ks_result(sirna_de()))
+
+
+def test_plot_ecdf_rejects_values_outside_the_bound():
+    de = pd.DataFrame({"gene_id": list("abcdef"), "log2FoldChange": [1.75e308] * 6})
+    message = f"the values of log2FoldChange go from 1.75e+308 to 1.75e+308; {RANGE}"
+    with pytest.raises(InputError, match=exactly(message)):
+        draw(de, WIDE_GROUPS, ks_result(sirna_de()))
+
+
+@pytest.mark.parametrize("size", [(5.0, 5.0), (2.0, 2.0)], ids=["default-size", "small-size"])
+def test_plot_ecdf_draws_at_the_bound(size):
+    de = wide_de(-9e306, 0.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        figure = draw(de, WIDE_GROUPS, ks_result(sirna_de()), x_limits=(0.0, 9e306), size=size)
+        figure.savefig(io.BytesIO(), format="png")
 
 
 @pytest.mark.parametrize("missing", ["absent", "nan"])

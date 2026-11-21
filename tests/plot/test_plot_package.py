@@ -218,13 +218,16 @@ def test_as_limits_accepts_numpy_numbers():
         (0,),
         (1, 2, 3),
         (-(10**400), 1),
+        (-1e308, 1e308),
+        (1e308, 1.0001e308),
+        (8.9e306, 9.1e306),
         "01",
     ],
 )
 def test_as_limits_rejects_a_bad_pair(limits):
     message = (
         f"x_limits {limits!r} is not valid; expected (low, high), "
-        "two finite numbers with low < high"
+        "two finite numbers from -9e306 to 9e306 with low < high and high - low at most 9e306"
     )
     with pytest.raises(InputError, match=exactly(message)):
         as_limits("x_limits", limits)

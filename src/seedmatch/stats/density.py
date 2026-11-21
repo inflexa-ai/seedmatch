@@ -62,14 +62,16 @@ def gaussian_density(
     """
     total = np.zeros(grid.size)
     buffer = np.empty((grid.size, min(_BLOCK, values.size)))
-    for start in range(0, values.size, _BLOCK):
-        block = values[start : start + _BLOCK]
-        work = buffer[:, : block.size]
-        np.subtract(grid[:, np.newaxis], block, out=work)
-        work /= bandwidth
-        np.square(work, out=work)
-        work *= -0.5
-        np.exp(work, out=work)
-        total += work.sum(axis=1)
+    # A distance that overflows to infinity gives the weight exp(-inf) = 0, the correct weight.
+    with np.errstate(over="ignore"):
+        for start in range(0, values.size, _BLOCK):
+            block = values[start : start + _BLOCK]
+            work = buffer[:, : block.size]
+            np.subtract(grid[:, np.newaxis], block, out=work)
+            work /= bandwidth
+            np.square(work, out=work)
+            work *= -0.5
+            np.exp(work, out=work)
+            total += work.sum(axis=1)
     total /= values.size * bandwidth * math.sqrt(2 * math.pi)
     return total

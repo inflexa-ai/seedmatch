@@ -20,6 +20,7 @@ from seedmatch.plot._style import (
     as_limits,
     as_size,
     as_written,
+    check_axis_range,
     expanded,
     linewidth_points,
     new_figure,
@@ -27,6 +28,7 @@ from seedmatch.plot._style import (
     style_theme_axes,
 )
 from seedmatch.stats.ecdf import EcdfTestResult, assign_groups
+from seedmatch.stats.wasserstein import ecdf
 
 if TYPE_CHECKING:
     from matplotlib.lines import Line2D
@@ -59,7 +61,8 @@ def plot_ecdf(  # noqa: PLR0913
     `ecdf_test`, and the left title of the Axes gives its statistic and its p-value (`D-063`).
     `title` is the title of the figure. `palette` needs a color for each group. `x_limits` are the
     limits of the x axis before the expansion of 5% on each side. `size` is the width and the
-    height in inches. A value that is not valid raises `InputError`.
+    height in inches. A value that is not valid raises `InputError`. A value of `x_limits` or of
+    the fold changes outside -9e306 to 9e306, or a range wider than 9e306, raises `InputError`.
 
     Each line is a step function, `drawstyle="steps-post"`, and it extends from the lowest to the
     highest of the view and of all values. The function returns a `Figure` and does not use
@@ -90,8 +93,9 @@ def plot_ecdf(  # noqa: PLR0913
     figure_size = as_size(size)
     samples, row_counts = _group_values(de, group_of_row, len(names))
     _check_samples(names, samples, row_counts)
-    left = min(x_view[0], *(float(sample.min()) for sample in samples))
-    right = max(x_view[1], *(float(sample.max()) for sample in samples))
+    lowest, highest = _check_value_range(samples)
+    left = min(x_view[0], lowest)
+    right = max(x_view[1], highest)
 
     figure = new_figure(figure_size)
     axes = figure.add_subplot()
@@ -99,11 +103,11 @@ def plot_ecdf(  # noqa: PLR0913
     labels: list[str] = []
     # The palette can have more colors than the figure has groups.
     for name, color, sample in zip(names, colors, samples, strict=False):
-        knots, counts = np.unique(sample, return_counts=True)
+        curve = ecdf(sample)
         labels.append(f"{name}: {sample.size:,}")
         (line,) = axes.plot(
-            np.concatenate(([left], knots, [right])),
-            np.concatenate(([0.0], np.cumsum(counts) / sample.size, [1.0])),
+            np.concatenate(([left], curve.knots, [right])),
+            np.concatenate(([0.0], curve.heights, [1.0])),
             drawstyle="steps-post",
             color=color,
             linewidth=linewidth_points(1.5),
@@ -169,6 +173,14 @@ def _group_values(
     bounds = np.searchsorted(kept_codes[order], np.arange(count + 1))
     samples = [ordered[bounds[i] : bounds[i + 1]] for i in range(count)]
     return samples, np.bincount(codes[in_group], minlength=count)
+
+
+def _check_value_range(samples: list[npt.NDArray[np.float64]]) -> tuple[float, float]:
+    """Return the lowest and the highest drawn value. Raise `InputError` if no x axis holds them."""
+    lowest = min(float(sample.min()) for sample in samples)
+    highest = max(float(sample.max()) for sample in samples)
+    check_axis_range("log2FoldChange", lowest, highest)
+    return lowest, highest
 
 
 def _check_samples(

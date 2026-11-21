@@ -860,7 +860,7 @@ The IDs of the known divergences have the same order as the rows of the table in
 - R behavior: an infinite score gives the color NA to its threshold, and R stops with `'to' must be a finite number`.
   - Evidence: the note `an Inf score` of `tests/golden/plots/benchmark_plot.tsv`.
 - New behavior: the color range comes from the finite thresholds, and an infinite threshold gets the color of the nearest end of the scale.
-- New behavior: without two distinct finite thresholds, each segment gets the middle color `#00ff60`, and the color bar goes from c - 0.5 to c + 0.5. For s = 2, R gives `#00FF85` (the case `one_score_2`).
+- New behavior: without two distinct finite thresholds, each segment gets the middle color `#00ff60`, and the color bar goes from c - 0.5 to c + 0.5. If c - 0.5 and c + 0.5 round to c, matplotlib widens the color bar by 10% of |c| on each side (0.9 c to 1.1 c for c above 0, and 1.1 c to 0.9 c for c below 0). For s = 2, R gives `#00FF85` (the case `one_score_2`).
 - New behavior: a finite threshold outside -9e305 to 9e305 raises `InputError`. Inside this bound, each position on the scale and each boundary of the color bar is finite.
 - Reason: each result of `benchmark_predictions` must give a figure. A seed count of 0 for each gene is a valid input.
 - Test: `test_plot_benchmark_colors_one_distinct_score_D069`, `test_plot_benchmark_colors_an_infinite_score_D069`, `test_plot_benchmark_colors_a_negative_infinite_score_D069`, `test_plot_benchmark_rejects_a_threshold_that_is_too_large_D069`, and `test_plot_benchmark_takes_a_threshold_just_inside_the_bound_D069` in `tests/plot/test_plot_benchmark.py`.

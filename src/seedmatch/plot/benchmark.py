@@ -39,7 +39,10 @@ def _color_indexes(
     """Return the index in `_SCALE` of each threshold, and the range of the color bar.
 
     R uses the extremes of the thresholds and stops for an infinite one. Here the range comes from
-    the finite thresholds (`D-069`). A finite threshold outside -9e305 to 9e305 raises `InputError`.
+    the finite thresholds (`D-069`). Without two distinct finite thresholds, the range is c - 0.5 to
+    c + 0.5. If c - 0.5 and c + 0.5 round to c, matplotlib widens the color bar by 10% of |c| on
+    each side (0.9 c to 1.1 c for c above 0, and 1.1 c to 0.9 c for c below 0). A finite threshold
+    outside -9e305 to 9e305 raises `InputError`.
     """
     finite = thresholds[np.isfinite(thresholds)]
     too_large = np.flatnonzero(np.abs(finite) > _MAX_THRESHOLD)
@@ -87,9 +90,11 @@ def plot_benchmark(benchmark: Benchmark, *, size: tuple[float, float] = (12.0, 5
     Where R stops, the port draws a figure (`D-069`). An infinite threshold gets the color of the
     nearest end of the scale. A curve without two distinct finite thresholds gets the middle color,
     and its color bar goes from c - 0.5 to c + 0.5 for the finite threshold c, or for 0 if there
-    is none. A finite threshold outside -9e305 to 9e305 raises `InputError` before the function
-    draws. The message names the first such threshold in the order of the rows. Inside the bound,
-    each position on the scale and each boundary of the color bar is finite.
+    is none. If c - 0.5 and c + 0.5 round to c, matplotlib widens the color bar by 10% of |c| on
+    each side (0.9 c to 1.1 c for c above 0, and 1.1 c to 0.9 c for c below 0). A finite threshold
+    outside -9e305 to 9e305 raises `InputError` before the function draws. The message names the
+    first such threshold in the order of the rows. Inside the bound, each position on the scale and
+    each boundary of the color bar is finite.
 
     The titles give the area, with 7 significant digits as in R. The PR area is `auc_integral`,
     the default of `plot.PRROC`. For many negatives, it differs from PRROC (`D-050`). The Axes

@@ -1,5 +1,6 @@
 """The Wasserstein figure: the density, the ECDF, and the ECDF difference of two samples."""
 
+import math
 from typing import Final
 
 import numpy as np
@@ -9,8 +10,12 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from numpy.typing import ArrayLike
 
+from seedmatch._checks import shown
+from seedmatch.errors import InputError
 from seedmatch.plot._style import (
+    AXIS_BOUND,
     as_size,
+    check_axis_range,
     expanded,
     linewidth_points,
     new_figure,
@@ -27,6 +32,9 @@ from seedmatch.stats.wasserstein import (
 
 _X_LABEL: Final = "log2(FC)"
 _LEGEND_TITLE: Final = "group"
+# A Gaussian kernel has the peak 1 / (h * sqrt(2 * pi)), thus a bandwidth h of at least this value
+# keeps the density axis inside `AXIS_BOUND`.
+_MIN_BANDWIDTH: Final = 1 / (math.sqrt(2 * math.pi) * AXIS_BOUND)
 
 
 def plot_wasserstein(
@@ -53,10 +61,12 @@ def plot_wasserstein(
 
     `seed` and `non_seed` are one-dimensional numbers, and `n_interp` is the number of grid points
     of the difference. The arguments and the errors are the arguments and the errors of
-    `wasserstein_areas`. A sample whose density bandwidth is 0 or not finite also raises
-    `InputError`. `size` is the width and the height in inches, and a value that is not valid
-    raises `InputError`. The function returns a `Figure` and does not use `matplotlib.pyplot`. It
-    writes no file, and it does not change its arguments or `rcParams`.
+    `wasserstein_areas`. A sample whose density bandwidth is not finite, or is below
+    1 / (sqrt(2 pi) * 9e306), about 4.43e-308, also raises `InputError`. `size` is the width and
+    the height in inches, and a value that is not valid raises `InputError`. A pooled value outside
+    -9e306 to 9e306, or a pooled range wider than 9e306, also raises `InputError`. The function
+    returns a `Figure` and does not use `matplotlib.pyplot`. It writes no file, and it does not
+    change its arguments or `rcParams`.
 
     The time is O(512 * n) for the density of n values, and O(`n_interp` + n log n) for the other
     Axes. The work memory of the density is 4 MiB. The figure holds 512 points for each density
@@ -68,6 +78,11 @@ def plot_wasserstein(
     seed_values = as_wasserstein_sample("seed", seed)
     non_seed_values = as_wasserstein_sample("non_seed", non_seed)
     figure_size = as_size(size)
+    check_axis_range(
+        "seed and non_seed",
+        float(min(seed_values.min(), non_seed_values.min())),
+        float(max(seed_values.max(), non_seed_values.max())),
+    )
     difference = wasserstein_difference(seed_values, non_seed_values, n_interp=n_interp)
     areas = wasserstein_areas(seed_values, non_seed_values, n_interp=n_interp)
     grid = difference["x"].to_numpy()
@@ -103,7 +118,15 @@ def _draw_density(
         (non_seed, "non_seed", "#F8766D", "non-seed"),
         (seed, "seed", "#00BFC4", "seed"),
     ):
-        curve = gaussian_density(sample, grid, nrd0_bandwidth(name, sample))
+        bandwidth = nrd0_bandwidth(name, sample)
+        if bandwidth < _MIN_BANDWIDTH:
+            message = (
+                f"the bandwidth of the {name} sample is {shown(bandwidth)}; "
+                f"expected at least {shown(_MIN_BANDWIDTH)}, because the density axis must "
+                "stay at most 9e306"
+            )
+            raise InputError(message)
+        curve = gaussian_density(sample, grid, bandwidth)
         axes.fill_between(grid, curve, facecolor=fill, alpha=0.25, edgecolor="none", label=label)
         axes.plot(grid, curve, color="black", linewidth=linewidth_points(0.5))
     axes.set_ylabel("Density")

@@ -110,6 +110,15 @@ def test_gaussian_density_is_the_exact_sum_for_more_values_than_a_block():
     assert got.shape == grid.shape
 
 
+def test_gaussian_density_gives_a_far_value_the_weight_zero():
+    values, grid = np.array([0.0, 1.0, 1e300]), np.array([0.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        got = gaussian_density(values, grid, 1.0)
+    expected = (1.0 + math.exp(-0.5)) / (3 * math.sqrt(2 * math.pi))
+    np.testing.assert_allclose(got, [expected], rtol=1e-15, atol=0)
+
+
 def test_gaussian_density_integrates_to_one():
     values = np.random.default_rng(4).normal(size=500)
     grid = np.linspace(-8.0, 8.0, 4001)

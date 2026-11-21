@@ -200,7 +200,8 @@ def test_plot_ranges_draws_the_title_as_written(title):
             {"x_limits": (1.0, -1.0)},
             (
                 "x_limits (1.0, -1.0) is not valid; expected (low, high), "
-                "two finite numbers with low < high"
+                "two finite numbers from -9e306 to 9e306 with low < high "
+                "and high - low at most 9e306"
             ),
         ),
         (
@@ -259,6 +260,26 @@ def test_plot_ranges_rejects_bad_input(kwargs, message):
     arguments = {"ranges": eight()} | kwargs
     with pytest.raises(InputError, match=exactly(message)):
         plot_ranges(**arguments)
+
+
+@pytest.mark.parametrize(
+    "limits", [(-1e308, 1e308), (-4.6e306, 4.6e306), (1e308, 1.0001e308), (8.9e306, 9.1e306)]
+)
+def test_plot_ranges_rejects_x_limits_wider_than_the_bound(limits):
+    message = (
+        f"x_limits {limits!r} is not valid; expected (low, high), "
+        "two finite numbers from -9e306 to 9e306 with low < high and high - low at most 9e306"
+    )
+    with pytest.raises(InputError, match=exactly(message)):
+        plot_ranges(eight(), x_limits=limits)
+
+
+@pytest.mark.parametrize("size", [(7.0, 5.0), (1.0, 1.0)], ids=["default-size", "small-size"])
+def test_plot_ranges_draws_x_limits_at_the_bound(size):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        figure = plot_ranges(eight(), x_limits=(-4.5e306, 4.5e306), size=size)
+        figure.savefig(io.BytesIO(), format="png")
 
 
 @pytest.mark.parametrize("position", [LIMIT, -LIMIT])

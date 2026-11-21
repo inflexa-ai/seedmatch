@@ -54,7 +54,9 @@ def plot_ranges(  # noqa: PLR0913
     side. `title` is the title of the Axes, `color` is the color of the bars, and `size` is the
     width and the height in inches. `bar_height` is the height of a bar, above 0 and at most 1.
     The value 1 is the distance between two rows, and a higher bar covers the bar of the next row.
-    A value that is not valid raises `InputError`. The y axis goes from 0 to n + 1 for n rows.
+    A value that is not valid raises `InputError`. A limit outside -9e306 to 9e306, or an
+    `x_limits` range wider than 9e306, raises `InputError`. The y axis goes from 0 to n + 1 for n
+    rows.
 
     The function returns a `Figure` with one Axes and one `PolyCollection`. It does not use
     `matplotlib.pyplot`. It writes no file, and it does not change `ranges` or `rcParams`.
