@@ -11,8 +11,9 @@ except ImportError as error:
     raise ImportError(message) from error
 
 from seedmatch.plot._style import PALETTE
+from seedmatch.plot.alignment import plot_alignment
 from seedmatch.plot.ecdf import plot_ecdf
 from seedmatch.plot.kmers import plot_kmer_histogram
 from seedmatch.plot.wasserstein import plot_wasserstein
 
-__all__ = ["PALETTE", "plot_ecdf", "plot_kmer_histogram", "plot_wasserstein"]
+__all__ = ["PALETTE", "plot_alignment", "plot_ecdf", "plot_kmer_histogram", "plot_wasserstein"]

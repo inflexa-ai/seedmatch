@@ -826,3 +826,13 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `plot_kmer_histogram` draws one Axes with the bars, the title, and the target line. A target that is not a k-mer raises `InputError`.
 - Reason: Each bar must hold the same number of integer counts, and the target line must be on the histogram.
 - Test: `test_kmer_histogram_bins_the_integer_counts_D066` in `tests/test_kmers.py`. `test_plot_kmer_histogram_draws_the_bins_and_the_target_D066`, `test_plot_kmer_histogram_titles_the_first_page_of_r_D066`, and `test_plot_kmer_histogram_rejects_a_target_that_is_not_a_kmer_D066` in `tests/plot/test_plot_kmers.py`.
+
+## D-067: plot_alignment names the guide line siRNA
+
+- ID: `D-067`
+- R location: `plotAlignment` (`R/plotAlignment.R:63`), and `.create_alignment_df` (`:135-137`).
+- R behavior: the figure names the guide line `miRNA`, but the data.frame names it `siRNA `.
+  - Evidence: `tests/golden/plots/alignment_plot.tsv` and its note `data.frame row names`.
+- New behavior: the names are `siRNA `, six spaces, and `target`, as in the data.frame.
+- Reason: the guide of SeedMatchR is the guide strand of an siRNA. One thing must have one name.
+- Test: `test_plot_alignment_shows_the_r_lines_D067` in `tests/plot/test_plot_alignment.py`.
