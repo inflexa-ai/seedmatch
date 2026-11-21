@@ -836,3 +836,17 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: the names are `siRNA `, six spaces, and `target`, as in the data.frame.
 - Reason: the guide of SeedMatchR is the guide strand of an siRNA. One thing must have one name.
 - Test: `test_plot_alignment_shows_the_r_lines_D067` in `tests/plot/test_plot_alignment.py`.
+
+## D-068: plot_ranges draws each range at the position of its row, with the options
+
+- ID: `D-068`
+- R location: `plotIRanges` (`R/plotIRanges.R:3-14`) and `plotRangesDF` (`:16-21`).
+- R behavior: `plotRangesDF` draws only the first 6 rows, because of `head()` (`:20`). It ignores `xlim`, `main`, and `col`.
+  - Evidence: the case `eight_rows` and the note `options` of `tests/golden/plots/ranges_plot.tsv`.
+- R behavior: the y value of a row is `as.integer(rownames(ir))` (`:17-18`). Thus a subset keeps the old positions of its rows, and text row names give NA.
+  - Evidence: the cases `subset` and `text_row_names` of `tests/golden/plots/ranges_plot.tsv`.
+- R behavior: the bar of a range of one base has the width 0, because `geom_rect` goes from `start` to `end`. `plotIRanges` skips such a range with a warning.
+  - Evidence: the case `one_base` and the note `plotIRanges one_base warning` of `tests/golden/plots/ranges_plot.tsv`.
+- New behavior: `plot_ranges` draws one bar for each row, at the position of the row in the table. A bar goes from `start - 0.5` to `end + 0.5`, and each option has an effect.
+- Reason: the figure must show each range, and a range of one base covers one position.
+- Test: `test_plot_ranges_draws_each_row_D068`, `test_plot_ranges_uses_the_options_D068`, `test_plot_ranges_puts_each_row_at_its_position_D068`, and `test_plot_ranges_shows_a_range_of_one_base_D068` in `tests/plot/test_plot_ranges.py`.
