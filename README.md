@@ -263,7 +263,7 @@ The neighbors of a gene are the `gene2` values of its rows. The score of a gene 
 
 The gene IDs of `de` must be the Ensembl gene IDs of the EnsDb. A gene with more than one row in `de` gets the highest count. R keeps the first count (D-062). A count that is NaN, infinite, or negative raises `InputError`, also in a row of a gene outside the network. If no gene of `de` is a gene of the network, `string_scores` warns with `SeedMatchWarning` (D-062).
 
-`score_threshold=0` and `percentile=0` make a large network. On the STRING rat file, the reader keeps 13,894,314 links. The read takes 10.1 seconds, and the peak memory above the start is about 660 MB. `string_gene_network` takes 3.6 seconds and about 1.5 GB more, and it gives 11,097,016 rows. `string_scores` takes 1.8 seconds and about 540 MB more. In a sandbox with a small memory limit, keep the defaults.
+`score_threshold=0` and `percentile=0` make a large network. On the STRING rat file, the reader keeps 13,894,314 links. The read takes 10.1 seconds, and the peak memory above the start is about 660 MB. `string_gene_network` takes 3.6 seconds and about 1.8 GB more, and it gives 11,097,016 rows. `string_scores` takes 1.8 seconds and about 630 MB more. In a sandbox with a small memory limit, keep the defaults.
 
 ## Resources
 

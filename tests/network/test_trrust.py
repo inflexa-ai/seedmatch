@@ -11,7 +11,7 @@ from helpers import DATA, assert_frame_matches_golden, exactly, golden, golden_n
 import seedmatch
 from seedmatch.errors import InputError, SeedMatchWarning
 from seedmatch.network import Aggregator, read_trrust, trrust_scores
-from seedmatch.network.messages import mean_messages, sender_weights
+from seedmatch.network.messages import mean_messages, pair_keys, sender_weights
 
 SAMPLE = DATA / "trrust_sample.tsv"
 ROWS = "network/trrust_rows.tsv"
@@ -461,6 +461,14 @@ def test_sender_weights_give_the_inverse_of_the_out_degree_and_zero_without_a_ta
         weights = sender_weights(Aggregator.DEGREE_IMPORTANCE, np.array([0, 2, 4], dtype=np.int64))
     assert weights.dtype == np.float64
     assert weights.tolist() == [0.0, 0.5, 0.25]
+
+
+def test_pair_keys_give_an_int64_key_to_each_pair_also_for_a_narrow_code():
+    first = np.array([0, 1, 60000], dtype=np.int32)
+    second = np.array([2, 0, 1], dtype=np.int32)
+    keys = pair_keys(first, second, 70000)
+    assert keys.dtype == np.int64
+    assert keys.tolist() == [2, 70000, 60000 * 70000 + 1]
 
 
 def test_mean_messages_count_the_senders_and_give_nan_without_a_sender():

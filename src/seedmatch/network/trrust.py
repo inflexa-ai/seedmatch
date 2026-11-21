@@ -29,7 +29,7 @@ from seedmatch._lines import (
     vocabulary_codes,
 )
 from seedmatch.errors import InputError, SeedMatchWarning
-from seedmatch.network.messages import Aggregator, mean_messages, sender_weights
+from seedmatch.network.messages import Aggregator, mean_messages, pair_keys, sender_weights
 
 TRRUST_MODES: Final = ("Activation", "Repression", "Unknown")
 _COLUMNS: Final = ("source", "target", "edge_type", "evidence")
@@ -58,7 +58,7 @@ def read_trrust(path: str | os.PathLike[str]) -> pd.DataFrame:
     These inputs raise `InputError`:
 
     - a line with another number of fields
-    - a mode that is not in `TRRUST_MODES`
+    - a mode other than `Activation`, `Repression`, or `Unknown`
     - an empty regulator or an empty target
     - a line of more than 1024 characters with its line end
     - a line with a NUL character
@@ -182,7 +182,7 @@ def trrust_scores(
 
     - a `network` that is not a `DataFrame`, or that lacks one of the three columns
     - a value of these columns that is not a `str`
-    - a mode that is not in `TRRUST_MODES`
+    - a mode other than `Activation`, `Repression`, or `Unknown`
     - a `network` without a row
     - `seed_genes` that is a `str`, or that holds a value that is not a `str`
     - an `aggregator` that is not an `Aggregator`
@@ -213,9 +213,10 @@ def trrust_scores(
         )
         warnings.warn(message, SeedMatchWarning, stacklevel=2)
 
-    # A key is below 3 * G^2 for G genes, and G is at most 2 * rows. Thus a key fits an int64
-    # for a table of fewer than 8e8 rows.
-    keys = np.unique((codes[:rows] * gene_count + codes[rows:]) * len(TRRUST_MODES) + modes)
+    # A pair key is below G^2 for G genes, thus this key is below 3 * G^2. G is at most 2 * rows.
+    # Thus a key fits an int64 for a table of fewer than 8e8 rows.
+    edge_pairs = pair_keys(codes[:rows], codes[rows:], gene_count)
+    keys = np.unique(edge_pairs * len(TRRUST_MODES) + modes)
     pairs, edge_modes = np.divmod(keys, len(TRRUST_MODES))
     senders, receivers = np.divmod(pairs, gene_count)
     is_new_pair = np.ones(len(pairs), dtype=np.bool_)

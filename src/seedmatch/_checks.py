@@ -304,19 +304,22 @@ def check_numeric_columns(de: pd.DataFrame, names: Sequence[str]) -> None:
             raise InputError(message)
 
 
-def check_integer_columns(table: pd.DataFrame, names: Sequence[str]) -> None:
+def check_integer_columns(
+    table: pd.DataFrame, names: Sequence[str], *, label: str | None = None
+) -> None:
     """Raise `InputError` that names the first column that is not an integer column.
 
     A bool column is not an integer column. A column of a nullable integer dtype must have a value
-    in each row.
+    in each row. With a `label`, the message starts with the label, which names the table.
     """
+    subject = "column" if label is None else f"{label} column"
     for name in names:
         column = table[name]
         if not pd.api.types.is_integer_dtype(column.dtype):
-            message = f"column {name!r} has dtype {column.dtype}; expected an integer dtype"
+            message = f"{subject} {name!r} has dtype {column.dtype}; expected an integer dtype"
             raise InputError(message)
         if column.hasnans:
-            message = f"column {name!r} has missing values; expected an integer in each row"
+            message = f"{subject} {name!r} has missing values; expected an integer in each row"
             raise InputError(message)
 
 

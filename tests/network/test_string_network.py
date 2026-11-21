@@ -120,8 +120,9 @@ def test_string_gene_network_joins_the_proteins_of_a_gene_D060():
 
 
 def test_string_gene_network_gives_a_pair_the_highest_score_of_its_links_D060():
-    # P1 and P2 are proteins of G1. P1-P2 joins one gene and gives no pair.
-    links = links_of((1, 6, 700), (2, 6, 900), (6, 1, 500), (1, 2, 800))
+    # P1 and P2 are proteins of G1. P1-P2 joins one gene and gives no pair. P1-P1 and P6-P6 link a
+    # protein with itself. R keeps such a link as a loop of the gene, and the port drops it (D-060).
+    links = links_of((1, 1, 950), (1, 6, 700), (2, 6, 900), (6, 1, 500), (1, 2, 800), (6, 6, 950))
     with fixture_reference() as reference:
         got = string_gene_network(links, reference)
     assert edges_of(got) == edges((1, 4, 900), (4, 1, 900))
@@ -264,7 +265,14 @@ def empty_links():
         ),
         (
             links_of((1, 6, 900)).astype({"combined_score": "float64"}),
-            "column 'combined_score' has dtype float64; expected an integer dtype",
+            "links table column 'combined_score' has dtype float64; expected an integer dtype",
+        ),
+        (
+            scored_links([900, None], dtype="Int64"),
+            (
+                "links table column 'combined_score' has missing values; "
+                "expected an integer in each row"
+            ),
         ),
         (empty_links(), "the links table has no row; expected at least one link"),
         (
@@ -301,6 +309,7 @@ def empty_links():
         "no_score",
         "number_protein",
         "float_score",
+        "missing_score",
         "no_row",
         "score_above_the_maximum",
         "score_below_zero",

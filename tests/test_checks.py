@@ -242,6 +242,20 @@ def test_check_integer_columns_rejects_a_missing_value_in_a_nullable_column():
         check_integer_columns(table, ["value"])
 
 
+def test_check_integer_columns_starts_the_message_with_the_label():
+    table = pd.DataFrame({"value": pd.Series([1.5, 2.5], dtype="float64")})
+    message = "links table column 'value' has dtype float64; expected an integer dtype"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_integer_columns(table, ["value"], label="links table")
+
+
+def test_check_integer_columns_starts_the_missing_value_message_with_the_label():
+    table = pd.DataFrame({"value": pd.array([1, None], dtype="Int64")})
+    message = "links table column 'value' has missing values; expected an integer in each row"
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        check_integer_columns(table, ["value"], label="links table")
+
+
 @pytest.mark.parametrize(("de", "type_name"), NOT_A_DATA_FRAME)
 def test_check_columns_rejects_a_table_that_is_not_a_data_frame(de, type_name):
     message = f"de has type {type_name}; expected a pandas.DataFrame"

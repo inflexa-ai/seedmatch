@@ -36,7 +36,7 @@ from seedmatch._lines import (
 from seedmatch._rmath import r_quantile
 from seedmatch.annotation.reference import Reference
 from seedmatch.errors import InputError, SeedMatchWarning
-from seedmatch.network.messages import Aggregator, mean_messages, sender_weights
+from seedmatch.network.messages import Aggregator, mean_messages, pair_keys, sender_weights
 
 STRING_HEADER: Final = "protein1 protein2 combined_score"
 STRING_SCORE_MAX: Final = 1000
@@ -325,9 +325,9 @@ def string_gene_network(links: pd.DataFrame, reference: Reference) -> GeneNetwor
     A STRING protein ID has the form `<taxon>.<protein ID>`. The protein ID of the EnsDb is the
     text after the first `.`, also if the ID has a second `.` (`D-061`). A link of two proteins
     with a gene each gives the pair of their genes. A link of two proteins of one gene gives no
-    pair, and a link of a protein with no gene gives no pair (`D-061`). Thus the network has gene
-    IDs only, and `unmapped_proteins` lists the other proteins. A protein of a transcript without
-    a gene is one of them.
+    pair, and a link of a protein with itself gives no pair (`D-060`). A link of a protein with no
+    gene gives no pair (`D-061`). Thus the network has gene IDs only, and `unmapped_proteins`
+    lists the other proteins. A protein of a transcript without a gene is one of them.
 
     R keeps the first protein of each gene and drops the links of the others. Here the links of
     each protein of a gene join, and a pair gets the highest score of its links (`D-060`).
@@ -356,12 +356,12 @@ def string_gene_network(links: pd.DataFrame, reference: Reference) -> GeneNetwor
     is 1,112 rows more than the gene pairs of R. The first call takes 0.2 seconds, a later call
     takes 0.04 seconds, and the peak memory above the start is about 25 MB. With
     `score_threshold=0` and `percentile=0`, the links have 13,894,314 rows. The call takes 3.6
-    seconds, and the result has 11,097,016 rows. The peak memory above the start is about 1.5 GB,
-    or 110 bytes for each link. Machine: Apple M2 Max, Python 3.12.
+    seconds, and the result has 11,097,016 rows. The peak memory above the start is about 1.8 GB,
+    or 130 bytes for each link. Machine: Apple M2 Max, Python 3.12.
     """
     check_columns(links, _COLUMNS, name="links", label=_LINKS_LABEL)
     check_text_columns(links, _PROTEIN_COLUMNS, label=_LINKS_LABEL)
-    check_integer_columns(links, _SCORE_COLUMNS)
+    check_integer_columns(links, _SCORE_COLUMNS, label=_LINKS_LABEL)
     _check_scores(links["combined_score"])
     if not len(links):
         message = "the links table has no row; expected at least one link"
@@ -394,10 +394,10 @@ def string_gene_network(links: pd.DataFrame, reference: Reference) -> GeneNetwor
     first, second = first[is_pair], second[is_pair]
     scores = links["combined_score"].to_numpy(dtype=np.int64)[is_pair]
 
-    # A key is below G^2 for G genes, and G is at most 2 * rows. Thus a key fits an int64 for a
-    # table of fewer than 1.5e9 rows.
     gene_count = len(genes)
-    keys = np.concatenate([first * gene_count + second, second * gene_count + first])
+    keys = np.concatenate(
+        [pair_keys(first, second, gene_count), pair_keys(second, first, gene_count)]
+    )
     order = np.argsort(keys)
     keys = keys[order]
     is_start = np.ones(len(keys), dtype=np.bool_)
@@ -488,7 +488,7 @@ def string_scores(
     network of the STRING rat file, with 84,654 rows and 7,979 genes, and a `de` of 20,000 rows,
     the call takes 0.015 seconds, and the peak memory above the start is about 5 MB. With
     `score_threshold=0` and `percentile=0`, the network has 11,097,016 rows and 18,223 genes. The
-    call takes 1.8 seconds, and the peak memory above the start is about 540 MB, or 51 bytes for
+    call takes 1.8 seconds, and the peak memory above the start is about 630 MB, or 57 bytes for
     each row. Machine: Apple M2 Max, Python 3.12.
     """
     check_columns(network, _GENE_COLUMNS, name="network", label=_NETWORK_LABEL)
@@ -552,10 +552,8 @@ def _check_pairs(
         )
         raise InputError(message)
 
-    # A key is below G^2 for G genes, and G is at most 2 * rows. Thus a key fits an int64 for a
-    # table of fewer than 1.5e9 rows.
     gene_count = len(genes)
-    keys = first * gene_count + second
+    keys = pair_keys(first, second, gene_count)
     order = np.argsort(keys)
     ordered = keys[order]
     is_repeat = ordered[1:] == ordered[:-1]
@@ -573,7 +571,7 @@ def _check_pairs(
         )
         raise InputError(message)
 
-    reverse_keys = second * gene_count + first
+    reverse_keys = pair_keys(second, first, gene_count)
     position = np.minimum(np.searchsorted(ordered, reverse_keys), len(ordered) - 1)
     has_reverse = ordered[position] == reverse_keys
     if not has_reverse.all():

@@ -31,6 +31,19 @@ def sender_weights(aggregator: Aggregator, out_degree: NDArray[np.int64]) -> NDA
             assert_never(aggregator)
 
 
+def pair_keys(
+    first: NDArray[np.intp], second: NDArray[np.intp], gene_count: int
+) -> NDArray[np.int64]:
+    """Return the key `first * gene_count + second` of each pair, as `int64`.
+
+    The codes in `first` and `second` are from 0 to `gene_count` - 1, thus two pairs have the same
+    key only if they are the same pair, and the order of the keys is the order of the pairs.
+    """
+    # A key is below G^2 for G genes. A table of R rows has at most 2 * R genes, thus a key fits an
+    # int64 for a table of fewer than 1.5e9 rows.
+    return first.astype(np.int64, copy=False) * gene_count + second
+
+
 def mean_messages(
     receivers: NDArray[np.intp],
     senders: NDArray[np.intp],

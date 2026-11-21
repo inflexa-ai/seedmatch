@@ -742,10 +742,11 @@ The IDs of the known divergences have the same order as the rows of the table in
 
 - ID: `D-060`
 - R location: `get_stringPPI_to_stringGGI` (`R/get_stringPPI_to_stringGGI.R:62-64`).
-- R behavior: `adj_matrix[!duplicated(newnames), !duplicated(newnames)]` keeps only the row and the column of the first protein of each gene. R drops the links of the other proteins, and then the genes without a link.
+- R behavior: `adj_matrix[!duplicated(newnames), !duplicated(newnames)]` keeps only the row and the column of the first protein of each gene. R drops the links of the other proteins, and then the genes without a link. R keeps a link of a protein with itself as a loop of the gene.
   - Evidence: `tests/golden/network/string_ppi.tsv`, case `p50`, has the pairs G1-G4 and G2-G6. Gn is the fixture gene `ENSSYNG<n>`, with n as 11 digits. The case does not have G1-G5 of the second protein of G1, or G2-G8 of the second protein of G2.
   - Evidence: on the rat file of STRING 12.5 and the EnsDb 109, 96 genes of the default network have more than one protein. Each gene pair of R is a pair of the port, and the port has 1,112 rows more.
-- New behavior: The links of a gene are the links of each of its proteins. A gene pair gets the highest score of its links. A link of two proteins of one gene gives no pair.
+  - Evidence: the steps of `R/get_stringPPI_to_stringGGI.R:22-64` on the links P1-P1 and P1-P6 give the entry `G1 G1 = 1` in the matrix of the gene pairs (R 4.5.3).
+- New behavior: The links of a gene are the links of each of its proteins. A gene pair gets the highest score of its links. A link of two proteins of one gene gives no pair. A link of a protein with itself gives no pair.
 - Reason: A gene-level result uses each sequence of the gene (`D-003`). In the same way, the network uses each protein of the gene.
 - Test: `test_string_gene_network_joins_the_proteins_of_a_gene_D060` and `test_string_gene_network_gives_a_pair_the_highest_score_of_its_links_D060` in `tests/network/test_string_network.py`.
 
