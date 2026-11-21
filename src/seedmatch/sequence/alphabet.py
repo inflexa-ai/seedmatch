@@ -104,9 +104,14 @@ def _translate(text: str, table: bytes) -> bytes:
     return translated
 
 
+def encode_dna_bytes(text: str) -> bytes:
+    """Encode IUPAC DNA text as one mask byte per letter, as `encode_dna` does, with no array."""
+    return _translate(text, _ENCODE_TABLE)
+
+
 def encode_dna(text: str) -> NDArray[np.uint8]:
     """Encode IUPAC DNA text as one mask per letter. Lowercase letters give the uppercase mask."""
-    return np.frombuffer(_translate(text, _ENCODE_TABLE), dtype=np.uint8).copy()
+    return np.frombuffer(encode_dna_bytes(text), dtype=np.uint8).copy()
 
 
 def decode_dna(codes: NDArray[np.uint8]) -> str:

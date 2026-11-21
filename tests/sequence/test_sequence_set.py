@@ -1,4 +1,5 @@
 import re
+import tracemalloc
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,7 @@ from helpers import DATA, sirna_seqs
 
 from seedmatch.errors import InputError
 from seedmatch.sequence import SequenceSet, read_fasta, write_fasta
+from seedmatch.sequence.alphabet import MASKS
 
 
 def naive_fasta_records(path: Path) -> list[tuple[str, str]]:
@@ -228,10 +230,70 @@ def test_read_fasta_rejects_a_sequence_line_before_the_first_header(tmp_path):
         read_fasta(tmp_path / "x.fa")
 
 
-def test_read_fasta_names_the_record_of_a_bad_letter(tmp_path):
-    (tmp_path / "x.fa").write_text(">a\nACGT\n>b desc\nAC\nGUT\n")
-    with pytest.raises(InputError, match=r"record 'b'.*'U' at position 4"):
-        read_fasta(tmp_path / "x.fa")
+@pytest.mark.parametrize(("line", "letter", "position"), [("GUT", "U", 2), ("ACé", "é", 3)])
+def test_read_fasta_names_the_path_the_line_and_the_record_of_a_bad_letter(
+    tmp_path, line, letter, position
+):
+    path = tmp_path / "x.fa"
+    path.write_text(f">a\nACGT\n>b desc\nAC\n{line}\n", encoding="utf-8")
+    message = (
+        f"{path}, line 5: record 'b': invalid DNA letter {letter!r} at position {position}; "
+        f"expected one of {''.join(MASKS)} in either case"
+    )
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        read_fasta(path)
+
+
+def test_d071_read_fasta_skips_a_byte_order_mark_at_the_start_of_the_file(tmp_path):
+    """D-071: readDNAStringSet stops at the mark, but the port skips it."""
+    path = tmp_path / "x.fa"
+    path.write_text("\ufeff>a desc\nACGT\n>b\nGG\n", encoding="utf-8")
+    seqs = read_fasta(path)
+    assert seqs.ids == ("a", "b")
+    assert [seqs.sequence(i) for i in range(2)] == ["ACGT", "GG"]
+
+
+def test_read_fasta_reads_a_byte_order_mark_after_the_start_as_a_letter(tmp_path):
+    path = tmp_path / "x.fa"
+    path.write_text(">a\n\ufeffAC\n", encoding="utf-8")
+    message = f"line 2: record 'a': invalid DNA letter {'\ufeff'!r} at position 1"
+    with pytest.raises(InputError, match=re.escape(message)):
+        read_fasta(path)
+
+
+def test_read_fasta_names_the_line_of_a_bad_letter_after_many_lines_and_a_blank_line(tmp_path):
+    path = tmp_path / "x.fa"
+    count = 3 * 2**18 // 60
+    path.write_text(">a\n" + ("ACGT" * 15 + "\n") * count + "\nACGU\n")
+    message = f"line {count + 3}: record 'a': invalid DNA letter 'U' at position 4"
+    with pytest.raises(InputError, match=re.escape(message)):
+        read_fasta(path)
+
+
+def test_read_fasta_keeps_the_bases_of_records_longer_than_one_batch(tmp_path):
+    lines = [("ACGTRYKMN" * 9)[: 1 + i % 80] for i in range(20_000)]
+    text = "".join(f"{line}\n\n" if i % 997 == 0 else f"{line}\r\n" for i, line in enumerate(lines))
+    path = tmp_path / "x.fa"
+    path.write_bytes(f">a\n{text}>b\nGG\n>c\n{text}".encode())
+    expected = SequenceSet.from_records([("a", "".join(lines)), ("b", "GG"), ("c", "".join(lines))])
+    got = read_fasta(path)
+    assert got.ids == expected.ids
+    assert np.array_equal(got.offsets, expected.offsets)
+    assert np.array_equal(got.codes, expected.codes)
+
+
+def test_read_fasta_keeps_the_peak_memory_near_the_size_of_the_bases(tmp_path):
+    path = tmp_path / "x.fa"
+    bases = 60 * 2**16
+    path.write_text(">a\n" + ("ACGT" * 15 + "\n") * (bases // 60))
+    tracemalloc.start()
+    try:
+        seqs = read_fasta(path)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert len(seqs.codes) == bases
+    assert peak < 2 * bases
 
 
 @pytest.mark.parametrize("letter", ["-", "+", "."])
@@ -248,9 +310,10 @@ def test_read_fasta_rejects_white_space_inside_a_sequence_line(tmp_path):
         read_fasta(tmp_path / "x.fa")
 
 
-def test_read_fasta_rejects_a_file_that_is_not_utf8(tmp_path):
-    (tmp_path / "x.fa").write_bytes(b">a\xff\nAC\n")
-    with pytest.raises(InputError, match=r"x\.fa.*UTF-8"):
+@pytest.mark.parametrize("data", [b">a\xff\nAC\n", b"\xef", b"\xef\xbb", b"\xef\xbb>a\nAC\n"])
+def test_read_fasta_rejects_a_file_that_is_not_utf8(tmp_path, data):
+    (tmp_path / "x.fa").write_bytes(data)
+    with pytest.raises(InputError, match=r"x\.fa is not valid UTF-8 text"):
         read_fasta(tmp_path / "x.fa")
 
 

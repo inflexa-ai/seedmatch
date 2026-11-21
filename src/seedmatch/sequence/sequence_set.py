@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 
 from seedmatch._checks import check_offsets, check_vector, shown
 from seedmatch.errors import InputError
-from seedmatch.sequence.alphabet import MASKS, decode_dna, encode_dna
+from seedmatch.sequence.alphabet import MASKS, decode_dna, encode_dna_bytes
 
 _MAX_MASK: Final = max(MASKS.values())
 
@@ -85,7 +85,7 @@ class SequenceSet:
         buffer = bytearray()
         for name, text in records:
             try:
-                buffer += encode_dna(text).data
+                buffer += encode_dna_bytes(text)
             except InputError as exc:
                 message = f"record {name!r}: {exc}"
                 raise InputError(message) from exc

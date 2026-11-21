@@ -221,7 +221,7 @@ The IDs of the known divergences have the same order as the rows of the table in
 - ID: `D-017`
 - R location: `Biostrings::DNAString` and `Biostrings::readDNAStringSet`. SeedMatchR makes its patterns with `DNAString` (`R/vmatchPattern2.R:24`, `R/get_seed.R:172`), and its tests read the subjects with `readDNAStringSet` (`tests/testthat/helper.R:10`).
 - R behavior: Both functions accept the gap letter `-`, the mask letter `+`, and the unknown letter `.`, and they keep these letters. R probe with Biostrings 2.78.0: `as.character(DNAString("AC-GT+A."))` is `"AC-GT+A."`, and `as.character(readDNAStringSet(file))` of a record with this sequence is `"AC-GT+A."`. `DNA_ALPHABET` lists these letters after the IUPAC letters.
-- New behavior: `encode_dna`, `reverse_complement`, `SequenceSet.from_records`, and `read_fasta` raise `InputError` for each of these letters. The message gives the letter and its 1-based position. For a record, the message also gives the ID of the record.
+- New behavior: `encode_dna`, `reverse_complement`, `SequenceSet.from_records`, and `read_fasta` raise `InputError` for each of these letters. The message gives the letter and its 1-based position. For a record, the message also gives the ID of the record. For `read_fasta`, the message also gives the path and the line, and the position is in the line.
 - Reason: These letters are not bases. A search over them has no defined meaning in the port, and an error at the input boundary is better than a silent result.
 - Test: `test_d017_gap_mask_and_unknown_letters_are_an_error` in `tests/sequence/test_alphabet.py` and `test_d017_read_fasta_rejects_gap_mask_and_unknown_letters` in `tests/sequence/test_sequence_set.py`.
 
@@ -893,3 +893,12 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `seed_window` of `Seed.FULL`, `Seed.MER18`, and `Seed.MER15` for the guide gives the labels. The table has the class `seedmatch-report` and no ID, and each CSS rule selects this class.
 - Reason: a label must give the window of the search, and an ID must be unique in a page.
 - Test: `test_report_html_labels_the_windows_from_the_guide_D070` and `test_report_html_has_no_fixed_id_D070` in `tests/report/test_report_html.py`.
+
+## D-071: read_fasta skips a byte order mark at the start of the file
+
+- ID: `D-071`
+- R location: `Biostrings::readDNAStringSet`. The tests of SeedMatchR call it (`tests/testthat/helper.R:10`).
+- R behavior: a FASTA file that starts with a UTF-8 byte order mark stops the read. R probe with R 4.5.3 and Biostrings 2.78.0: `readDNAStringSet` of a file with the bytes `EF BB BF` before `>a` stops with `reading FASTA file ...: ">" expected at beginning of line 1`.
+- New behavior: `read_fasta` skips a byte order mark at the start of the file. A U+FEFF after the start is not a DNA letter, thus it raises `InputError`. An incomplete mark is not valid UTF-8, thus it also raises `InputError`.
+- Reason: some text editors write the mark at the start of a file. The table readers of the port also skip it at the start of a file, as R does for a table file.
+- Test: `test_d071_read_fasta_skips_a_byte_order_mark_at_the_start_of_the_file` in `tests/sequence/test_sequence_set.py`.
