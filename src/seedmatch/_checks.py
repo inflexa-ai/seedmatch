@@ -11,9 +11,8 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from seedmatch._io import INT64_MAX, limit_text
 from seedmatch.errors import InputError
-
-_KERNEL_INT_MAX = np.iinfo(np.int64).max
 
 
 def shown(value: object) -> str:
@@ -40,8 +39,8 @@ def as_limit(name: str, value: object) -> int:
     except TypeError:
         # Each ndarray has __index__, but only an integer array with one element converts.
         raise InputError(_not_an_integer(name, value)) from None
-    if limit > _KERNEL_INT_MAX:
-        message = f"{name} {shown(limit)} is too large; expected at most 2^63 - 1"
+    if limit > INT64_MAX:
+        message = f"{name} {shown(limit)} is too large; expected at most {limit_text(INT64_MAX)}"
         raise InputError(message)
     return limit
 

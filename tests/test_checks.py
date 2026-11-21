@@ -8,7 +8,7 @@ from fractions import Fraction
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import NOT_A_DATA_FRAME
+from helpers import NOT_A_DATA_FRAME, exactly
 
 from seedmatch import Guide
 from seedmatch._checks import (
@@ -33,6 +33,7 @@ from seedmatch._checks import (
     number_text,
     shown,
 )
+from seedmatch._io import INT64_MAX, limit_text
 from seedmatch.errors import InputError
 from seedmatch.report import FullSearchOptions
 
@@ -125,6 +126,13 @@ def test_as_number_returns_a_float_and_keeps_nan_and_infinity():
         as_number("x", value=True)
     with pytest.raises(InputError, match=r"x '1' has type str; expected an int or a float"):
         as_number("x", "1")
+
+
+def test_as_limit_accepts_the_int64_limit_and_gives_the_text_of_the_file_readers():
+    assert as_limit("distance", INT64_MAX) == INT64_MAX
+    message = f"distance {INT64_MAX + 1} is too large; expected at most {limit_text(INT64_MAX)}"
+    with pytest.raises(InputError, match=exactly(message)):
+        as_limit("distance", INT64_MAX + 1)
 
 
 def test_a_value_with_a_text_form_is_named_by_its_repr():
