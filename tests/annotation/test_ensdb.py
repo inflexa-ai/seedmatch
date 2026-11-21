@@ -656,7 +656,8 @@ def test_protein_genes_reject_an_annotation_without_a_protein_table(tmp_path):
     db = AnnotationDb.open(path)
     message = (
         f"{os.fspath(path)!r}: the annotation has no table 'protein'; "
-        "expected an EnsDb file with this table"
+        "expected an EnsDb file with this table, "
+        "or a GTF with the attribute protein_id on its CDS lines"
     )
     with pytest.raises(InputError, match=re.escape(message)):
         db.protein_genes(["ENSSYNP00000000001"])

@@ -80,7 +80,7 @@ The files in `annotation/` are synthetic. They are not copies of SeedMatchR data
 - `synthetic.fa`: the genome in the FASTA format, with the soft-masked bases in lowercase
 - `synthetic.fa.gz`: the BGZF file of `synthetic.fa`
 - the `.fai` and `.gzi` files: the indexes that `samtools faidx` and `bgzip` write
-- `synthetic.gtf` and `synthetic.gencode.gtf.gz`: the annotation in the Ensembl style and in the GENCODE style
+- `synthetic.gtf` and `synthetic.gencode.gtf.gz`: the annotation in the Ensembl style and in the GENCODE style. Each `CDS` line has the attribute `protein_id` of its transcript, the protein of the table `protein`.
 
 To make the files again, run the script from the repository root. The script runs `bgzip` of htslib and `samtools`, thus they must be on `PATH`:
 

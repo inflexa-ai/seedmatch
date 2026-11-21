@@ -41,6 +41,10 @@ CREATE UNIQUE INDEX gene_gene_id_idx ON gene (gene_id);
 CREATE UNIQUE INDEX tx_tx_id_idx ON tx (tx_id);
 CREATE INDEX tx_gene_id_idx ON tx (gene_id);
 """
+_PROTEIN_INDEXES: Final = """
+CREATE INDEX protein_tx_id_idx ON protein (tx_id);
+CREATE INDEX protein_protein_id_idx ON protein (protein_id);
+"""
 _MISPLACED_EXON: Final = """
 SELECT staged.line, staged.tx_id, staged.exon_id, staged.seq_name, staged.seq_strand,
        gene.seq_name, gene.seq_strand
@@ -115,8 +119,10 @@ def load_gtf(path: str | os.PathLike[str]) -> AnnotationDb:
     transcript line of its gene. The CDS of a transcript goes from the first base to the last base
     of its `CDS` and `stop_codon` lines. The columns `tx_is_canonical` and `tx_support_level` are
     in the database only if some transcript has the tag `Ensembl_canonical` or the attribute
-    `transcript_support_level`. The database has no `chromosome` table and no `entrezgene` table.
-    The reader writes no file.
+    `transcript_support_level`. The database has a `protein` table only if a `CDS` line has the
+    attribute `protein_id`. A transcript gets the `protein_id` of its `CDS` lines, and two
+    different IDs raise `InputError`. The database has no `chromosome` table and no `entrezgene`
+    table. The reader writes no file.
 
     A URL, a line that is not valid, a line of more than 2^20 characters with its line end, a
     coordinate above 2^62 - 1, and a repeated transcript raise `InputError`. After the last line,
@@ -160,6 +166,7 @@ class _Reader:
         self._genes: dict[str, _Gene] = {}
         self._transcripts: dict[str, _Transcript] = {}
         self._cds: dict[str, tuple[int, int]] = {}
+        self._proteins: dict[str, str] = {}
         # The line number and the feature of the first coding line that comes before the line of
         # its transcript.
         self._early_coding: dict[str, tuple[int, str]] = {}
@@ -200,7 +207,7 @@ class _Reader:
         self._flush()
 
     def finish(self) -> None:
-        """Write the genes, the transcripts, and the exon tables, then the indexes."""
+        """Write the genes, the transcripts, the proteins, and the exon tables, then the indexes."""
         for tx_id, (number, feature) in self._early_coding.items():
             if tx_id not in self._transcripts:
                 self._fail(number, _no_transcript_line(feature, tx_id))
@@ -226,6 +233,10 @@ class _Reader:
             ),
         )
         connection.executescript(_UNIQUE_IDS)
+        if self._proteins:
+            connection.execute("CREATE TABLE protein (tx_id TEXT, protein_id TEXT)")
+            connection.executemany("INSERT INTO protein VALUES (?, ?)", self._proteins.items())
+            connection.executescript(_PROTEIN_INDEXES)
         self._write_exons()
         for present, column in (
             (self._has_support_level, "tx_support_level"),
@@ -287,9 +298,19 @@ class _Reader:
 
     def _coding(self, number: int, fields: list[str]) -> None:
         start, end = self._span(number, fields)
-        tx_id = self._required(number, _attributes(fields[8]), "transcript_id", fields[2])
+        attributes = _attributes(fields[8])
+        tx_id = self._required(number, attributes, "transcript_id", fields[2])
         if tx_id not in self._transcripts:
             self._early_coding.setdefault(tx_id, (number, fields[2]))
+        if fields[2] == "CDS" and (protein_id := attributes.get("protein_id")):
+            known = self._proteins.setdefault(tx_id, protein_id)
+            if known != protein_id:
+                self._fail(
+                    number,
+                    f"the CDS line of transcript {tx_id!r} has the protein_id {protein_id!r}, "
+                    f"but an earlier CDS line has {known!r}; "
+                    "expected one protein_id for each transcript",
+                )
         first, last = self._cds.get(tx_id, (start, end))
         self._cds[tx_id] = (min(first, start), max(last, end))
 

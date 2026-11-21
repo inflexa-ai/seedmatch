@@ -22,6 +22,10 @@ D030_TIE = ["ENSSYNT00000000010", "ENSSYNT00000000002", "ENSSYNT00000000001"]
 BIOTYPES = 'gene_biotype "protein_coding"; transcript_biotype "protein_coding";'
 TX1 = f'gene_id "G1"; transcript_id "T1"; gene_name "Name"; {BIOTYPES}'
 EXON1 = 'gene_id "G1"; transcript_id "T1"; exon_id "E1";'
+NO_PROTEIN_TABLE = (
+    "the annotation has no table 'protein'; expected an EnsDb file with this table, "
+    "or a GTF with the attribute protein_id on its CDS lines"
+)
 
 
 def line(feature, start, end, attributes, *, strand="+"):
@@ -32,6 +36,11 @@ def write_gtf(directory, *lines):
     path = directory / "test.gtf"
     path.write_text("\n".join(lines) + "\n")
     return path
+
+
+def coding(protein_id=None):
+    protein = f' protein_id "{protein_id}";' if protein_id is not None else ""
+    return f'gene_id "G1"; transcript_id "T1";{protein}'
 
 
 def transcripts_of(directory, *lines):
@@ -713,16 +722,21 @@ def test_a_directory_as_a_gtf_raises(tmp_path):
         load_gtf(tmp_path)
 
 
-@pytest.mark.parametrize("fault", ["repeated transcript", "exon without a transcript"])
-def test_load_gtf_closes_its_connection_when_it_raises(tmp_path, monkeypatch, fault):
-    connections = []
+@pytest.fixture
+def connections(monkeypatch):
+    opened = []
     connect = sqlite3.connect
 
     def recording_connect(*args, **kwargs):
-        connections.append(connect(*args, **kwargs))
-        return connections[-1]
+        opened.append(connect(*args, **kwargs))
+        return opened[-1]
 
     monkeypatch.setattr(sqlite3, "connect", recording_connect)
+    return opened
+
+
+@pytest.mark.parametrize("fault", ["repeated transcript", "exon without a transcript"])
+def test_load_gtf_closes_its_connection_when_it_raises(tmp_path, connections, fault):
     faults = {
         "repeated transcript": [line("transcript", 1, 9, TX1), line("transcript", 1, 9, TX1)],
         "exon without a transcript": [line("exon", 1, 9, EXON1)],
@@ -736,3 +750,150 @@ def test_load_gtf_closes_its_connection_when_it_raises(tmp_path, monkeypatch, fa
     assert len(connections) == 1
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
         connections[0].execute("SELECT 1")
+
+
+def test_load_gtf_maps_the_protein_id_of_the_cds_lines_to_the_gene(tmp_path):
+    path = write_gtf(
+        tmp_path,
+        line("transcript", 1, 100, TX1),
+        line("exon", 1, 100, EXON1),
+        line("CDS", 10, 40, coding("P1")),
+        line("CDS", 50, 60, coding("P1")),
+        line("stop_codon", 61, 63, coding("P9")),
+    )
+    annotation = load_gtf(path)
+    try:
+        assert annotation.protein_genes(["P1", "P9"]) == {"P1": "G1"}
+    finally:
+        annotation.close()
+
+
+def test_load_gtf_rejects_two_protein_ids_for_one_transcript(tmp_path):
+    path = write_gtf(
+        tmp_path,
+        line("transcript", 1, 100, TX1),
+        line("CDS", 10, 40, coding("P1")),
+        line("CDS", 50, 60, coding("P2")),
+    )
+    message = (
+        f"{str(path)!r}: line 3: the CDS line of transcript 'T1' has the protein_id 'P2', "
+        "but an earlier CDS line has 'P1'; expected one protein_id for each transcript"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        load_gtf(path)
+
+
+def test_load_gtf_without_a_protein_id_has_no_protein_table(tmp_path):
+    path = write_gtf(tmp_path, line("transcript", 1, 100, TX1), line("CDS", 10, 40, coding()))
+    annotation = load_gtf(path)
+    try:
+        with pytest.raises(InputError, match=re.escape(f"{str(path)!r}: {NO_PROTEIN_TABLE}")):
+            annotation.protein_genes(["P1"])
+    finally:
+        annotation.close()
+
+
+def test_load_gtf_reads_an_empty_protein_id_as_no_protein_id(tmp_path):
+    path = write_gtf(tmp_path, line("transcript", 1, 100, TX1), line("CDS", 10, 40, coding("")))
+    annotation = load_gtf(path)
+    try:
+        with pytest.raises(InputError, match=re.escape(f"{str(path)!r}: {NO_PROTEIN_TABLE}")):
+            annotation.protein_genes([""])
+    finally:
+        annotation.close()
+
+
+def test_load_gtf_skips_an_empty_protein_id_before_a_protein_id(tmp_path):
+    path = write_gtf(
+        tmp_path,
+        line("transcript", 1, 100, TX1),
+        line("CDS", 10, 40, coding("")),
+        line("CDS", 50, 60, coding("P1")),
+    )
+    annotation = load_gtf(path)
+    try:
+        assert annotation.protein_genes(["", "P1"]) == {"P1": "G1"}
+    finally:
+        annotation.close()
+
+
+def test_load_gtf_maps_the_protein_id_of_a_cds_line_before_its_transcript_line(tmp_path):
+    path = write_gtf(tmp_path, line("CDS", 10, 40, coding("P1")), line("transcript", 1, 100, TX1))
+    annotation = load_gtf(path)
+    try:
+        assert annotation.protein_genes(["P1"]) == {"P1": "G1"}
+    finally:
+        annotation.close()
+
+
+def test_load_gtf_rejects_two_protein_ids_before_the_transcript_line(tmp_path):
+    path = write_gtf(
+        tmp_path,
+        line("CDS", 10, 40, coding("P1")),
+        line("CDS", 50, 60, coding("P2")),
+        line("transcript", 1, 100, TX1),
+    )
+    message = (
+        f"{str(path)!r}: line 2: the CDS line of transcript 'T1' has the protein_id 'P2', "
+        "but an earlier CDS line has 'P1'; expected one protein_id for each transcript"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        load_gtf(path)
+
+
+@pytest.mark.parametrize("ids", [("P1", None), (None, "P1"), (None, "P1", None)])
+def test_load_gtf_gives_a_transcript_the_protein_id_of_some_of_its_cds_lines(tmp_path, ids):
+    cds = [line("CDS", 10 * k, 10 * k + 5, coding(protein)) for k, protein in enumerate(ids, 1)]
+    annotation = load_gtf(write_gtf(tmp_path, line("transcript", 1, 100, TX1), *cds))
+    try:
+        assert annotation.protein_genes(["P1"]) == {"P1": "G1"}
+    finally:
+        annotation.close()
+
+
+def test_load_gtf_makes_the_two_indexes_of_the_protein_table(tmp_path, connections):
+    path = write_gtf(tmp_path, line("transcript", 1, 100, TX1), line("CDS", 10, 40, coding("P1")))
+    annotation = load_gtf(path)
+    try:
+        rows = connections[0].execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'protein'"
+        )
+        assert {name for (name,) in rows} == {"protein_tx_id_idx", "protein_protein_id_idx"}
+    finally:
+        annotation.close()
+
+
+def test_load_gtf_maps_a_protein_id_of_two_transcripts_of_one_gene(tmp_path):
+    path = write_gtf(
+        tmp_path,
+        line("transcript", 1, 100, TX1),
+        line("CDS", 10, 40, coding("P1")),
+        line("transcript", 1, 100, TX1.replace("T1", "T2")),
+        line("CDS", 10, 40, coding("P1").replace("T1", "T2")),
+    )
+    annotation = load_gtf(path)
+    try:
+        assert annotation.protein_genes(["P1"]) == {"P1": "G1"}
+    finally:
+        annotation.close()
+
+
+def test_load_gtf_rejects_a_protein_id_of_two_genes_when_a_caller_asks_for_it(tmp_path):
+    other = TX1.replace("T1", "T2").replace("G1", "G2")
+    path = write_gtf(
+        tmp_path,
+        line("transcript", 1, 100, TX1),
+        line("CDS", 10, 40, coding("P1")),
+        line("transcript", 1, 100, other),
+        line("CDS", 10, 40, coding("P1").replace("T1", "T2").replace("G1", "G2")),
+    )
+    message = (
+        f"{str(path)!r}: protein 'P1' has the genes 'G1' and 'G2'; "
+        "expected one gene for each protein"
+    )
+    annotation = load_gtf(path)
+    try:
+        with pytest.raises(InputError, match=re.escape(message)):
+            annotation.protein_genes(["P1"])
+    finally:
+        annotation.close()

@@ -239,7 +239,7 @@ A gene of `seed_genes` has the flag 1, and each other gene has the flag 0. A gen
 
 `read_trrust` keeps line 1 as an edge, because the file has no header. R loses this edge. The reader keeps `#`, quote characters, and the text `NA` as text (D-057). If no gene of `seed_genes` is a gene of the table, `trrust_scores` warns with `SeedMatchWarning` (D-058).
 
-`read_string_links` reads the STRING protein links. This is the file that `seedmatch-fetch string` downloads. `string_gene_network` maps the proteins to genes with the EnsDb of a `Reference`. `string_scores` gives each gene of the network a score from the seed counts of its neighbors and its own seed count. This example reads the rat file, and it uses the `utr3` and the `utr3_counts` of the annotation example.
+`read_string_links` reads the STRING protein links. This is the file that `seedmatch-fetch string` downloads. `string_gene_network` maps the proteins to genes with the annotation of a `Reference`, an EnsDb or a GTF. `string_scores` gives each gene of the network a score from the seed counts of its neighbors and its own seed count. This example reads the rat file, and it uses the `utr3` and the `utr3_counts` of the annotation example.
 
 ```python
 import pandas as pd
@@ -261,11 +261,11 @@ print(string_result.head())
 
 `read_string_links` keeps the links with `combined_score >= score_threshold`. The default 400 is the default of STRINGdb. Then it keeps the links with a score above the `percentile` of these scores. The default 0.95 is the default `p` of R, and `links.cutoff` is the score at this percentile. For the STRING rat file, the defaults give the cutoff 940.
 
-`string_gene_network` takes the gene of a protein from the `protein` table of the EnsDb, not from BioMart (D-013). `GeneNetwork.unmapped_proteins` lists each protein without a gene, and a link of such a protein gives no pair (D-061). A gene with more than one protein gets the links of each protein, and a pair gets the highest score of its links (D-060). `network.edges` has a row for each order of each pair.
+`string_gene_network` takes the gene of a protein from the `protein` table of the annotation, not from BioMart (D-013). For a GTF, `load_gtf` makes this table from the attribute `protein_id` of the `CDS` lines. `GeneNetwork.unmapped_proteins` lists each protein without a gene, and a link of such a protein gives no pair (D-061). A gene with more than one protein gets the links of each protein, and a pair gets the highest score of its links (D-060). `network.edges` has a row for each order of each pair.
 
 The neighbors of a gene are the `gene2` values of its rows. The score of a gene is the sum of two terms, divided by 2. The terms are the mean of the seed counts of its neighbors, and its own seed count. `aggregator=Aggregator.DEGREE_IMPORTANCE` divides the count of a neighbor by the number of its neighbors.
 
-The gene IDs of `de` must be the Ensembl gene IDs of the EnsDb. A gene with more than one row in `de` gets the highest count. R keeps the first count (D-062). A count that is NaN, infinite, or negative raises `InputError`, also in a row of a gene outside the network. If no gene of `de` is a gene of the network, `string_scores` warns with `SeedMatchWarning` (D-062).
+The gene IDs of `de` must be the Ensembl gene IDs of the annotation. A gene with more than one row in `de` gets the highest count. R keeps the first count (D-062). A count that is NaN, infinite, or negative raises `InputError`, also in a row of a gene outside the network. If no gene of `de` is a gene of the network, `string_scores` warns with `SeedMatchWarning` (D-062).
 
 `score_threshold=0` and `percentile=0` make a large network. On the STRING rat file, the reader keeps 13,894,314 links. The read takes 10.1 seconds, and the peak memory above the start is about 660 MB. `string_gene_network` takes 3.6 seconds and about 1.8 GB more, and it gives 11,097,016 rows. `string_scores` takes 1.8 seconds and about 630 MB more. In a sandbox with a small memory limit, keep the defaults.
 

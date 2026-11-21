@@ -176,15 +176,15 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: A caller who selects seeds or edit distances for `full_search` expects the best match of the columns that the search made. A missing column is not an error.
 - Test: `test_best_match_skips_absent_columns_D012`, `test_best_match_of_a_frame_without_count_columns_is_no_matches_D012`, and `test_best_match_of_a_frame_without_rows_is_empty_D012` in `tests/report/test_full_search.py`.
 
-## D-013: string_gene_network maps the proteins with the EnsDb
+## D-013: string_gene_network maps the proteins with the annotation of the Reference
 
 - ID: `D-013`
 - R location: `get_stringPPI_to_stringGGI` (`R/get_stringPPI_to_stringGGI.R:32-60`).
 - R behavior: `biomaRt::getBM` gives the gene of each protein. The rat query uses the current Ensembl release of BioMart. The human query uses the archive `grch37.ensembl.org` (`:32-39`).
   - For a value of `sp` other than `rat` and `human`, `mart` has no value. Evidence: the source. There is no R run, because biomaRt is not in `tools/golden/.rlib`, and the tests do not use the internet.
-- New behavior: `string_gene_network` maps the protein IDs with the tables `protein` and `tx` of the EnsDb of the `Reference`.
+- New behavior: `string_gene_network` maps the protein IDs with the tables `protein` and `tx` of the annotation of the `Reference`. For a GTF reference, `load_gtf` makes the `protein` table from the attribute `protein_id` of the `CDS` lines.
 - Reason: The map then uses the Ensembl release of the sequences, and it uses no internet. A GRCh37 map does not agree with a GRCh38 reference.
-- Test: `test_string_gene_network_maps_with_the_protein_table_D013` in `tests/network/test_string_network.py`. The `test_protein_genes_*` tests in `tests/annotation/test_ensdb.py` check the method of the EnsDb.
+- Test: `test_string_gene_network_maps_with_the_protein_table_D013` and `test_string_gene_network_maps_with_the_protein_ids_of_a_gtf_D013` in `tests/network/test_string_network.py`. The `test_protein_genes_*` tests in `tests/annotation/test_ensdb.py` check the method of the EnsDb.
 
 ## D-014: The documentation uses only functions that exist
 

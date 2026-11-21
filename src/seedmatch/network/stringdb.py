@@ -316,15 +316,18 @@ class GeneNetwork:
 
 
 def string_gene_network(links: pd.DataFrame, reference: Reference) -> GeneNetwork:
-    """Map the proteins of STRING links to genes with the EnsDb of the reference.
+    """Map the proteins of STRING links to genes with the annotation of the reference.
 
     This is the map of `get_stringPPI_to_stringGGI` of SeedMatchR, with the `protein` table of
-    the EnsDb in place of BioMart (`D-013`). `links` has the columns `protein1` and `protein2`
-    (`str`) and `combined_score` (an integer dtype), as `StringLinks.links` has. `reference` must
-    have an EnsDb. An annotation of `load_gtf` has no `protein` table.
+    the annotation in place of BioMart (`D-013`). `links` has the columns `protein1` and `protein2`
+    (`str`) and `combined_score` (an integer dtype), as `StringLinks.links` has. The `protein`
+    table is the table of an EnsDb, or the table that `load_gtf` makes from the attribute
+    `protein_id` of the `CDS` lines. A GTF without this attribute has no `protein` table. A
+    GENCODE `protein_id` has a version suffix, but a STRING ID has none. Thus no protein of such
+    a GTF maps.
 
-    A STRING protein ID has the form `<taxon>.<protein ID>`. The protein ID of the EnsDb is the
-    text after the first `.`, also if the ID has a second `.` (`D-061`). A link of two proteins
+    A STRING protein ID has the form `<taxon>.<protein ID>`. The protein ID of the annotation is
+    the text after the first `.`, also if the ID has a second `.` (`D-061`). A link of two proteins
     with a gene each gives the pair of their genes. A link of two proteins of one gene gives no
     pair, and a link of a protein with itself gives no pair (`D-060`). A link of a protein with no
     gene gives no pair (`D-061`). Thus the network has gene IDs only, and `unmapped_proteins`
@@ -346,12 +349,12 @@ def string_gene_network(links: pd.DataFrame, reference: Reference) -> GeneNetwor
     - a `links` without a row
     - a `reference` that is not a `Reference`, or that has no `protein` table
     - a protein ID without a taxon prefix, an empty taxon, or an empty protein ID
-    - a protein with more than one gene in the EnsDb
+    - a protein with more than one gene in the annotation
     - links that join no two genes. The message names the annotation.
 
     The time is O(E log E) for E links, because the function sorts the keys `gene1 * G + gene2`
-    for G genes one time. The memory is O(E). The map asks the EnsDb for the proteins of the links
-    with one query. The default links of the STRING rat file (`read_string_links`) have 98,920
+    for G genes one time. The memory is O(E). The map asks the annotation for the proteins of the
+    links with one query. The default links of the STRING rat file (`read_string_links`) have 98,920
     links and 8,809 proteins. With the EnsDb 109 of `rnor7`, 628 proteins have no gene, and 96
     genes have more than one protein (at most 4). The result has 84,654 rows and 7,979 genes. This
     is 1,112 rows more than the gene pairs of R. The first call takes 0.2 seconds, a later call

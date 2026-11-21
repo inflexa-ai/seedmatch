@@ -661,13 +661,14 @@ def attributes(
         fields.append(("transcript_id", q(tx.tx_id)))
     name = [("gene_name", q(gene.name))] if gene.name else []
     tsl = "NA" if tx is None or tx.support_level is None else str(tx.support_level)
+    protein = [("protein_id", q(tx.protein_id))] if tx is not None and feature == "CDS" else []
     if style.gencode:
         fields += [("gene_type", q(gene.biotype)), *name]
         if tx is not None:
             fields.append(("transcript_type", q(tx.biotype)))
         if exon is not None:
             fields += [("exon_number", str(exon[0])), ("exon_id", q(exon[1]))]
-        fields.append(("level", "2"))
+        fields += [("level", "2"), *protein]
         if tx is not None:
             fields += [("transcript_support_level", q(tsl)), ("tag", q("basic"))]
             fields += [("tag", q("Ensembl_canonical"))] if tx.canonical else []
@@ -676,7 +677,7 @@ def attributes(
             fields.append(("exon_number", q(exon[0])))
         fields += [*name, ("gene_biotype", q(gene.biotype))]
         if tx is not None:
-            fields.append(("transcript_biotype", q(tx.biotype)))
+            fields += [("transcript_biotype", q(tx.biotype)), *protein]
             fields += [("tag", q("Ensembl_canonical"))] if tx.canonical else []
             if tsl != "NA":
                 tsl = f"{tsl} (assigned to previous version 2)"

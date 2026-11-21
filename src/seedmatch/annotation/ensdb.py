@@ -353,15 +353,17 @@ class AnnotationDb:
 
         A protein ID that the table lacks is not in the result. A protein of a transcript without a
         gene (`tx.gene_id` is NULL) is not in the result either. An annotation without a `protein`
-        table, for example one from `load_gtf`, raises `InputError`, and so does a protein with
-        more than one gene. A protein of two transcripts of one gene is valid. The IDs go to SQLite
-        as one JSON array, so their number has no limit of SQLite. The query uses the index
-        `protein_protein_id_idx` of the EnsDb, and the memory is O(P) for P IDs.
+        table raises `InputError`. An example is an annotation of `load_gtf` without `protein_id`
+        attributes. A protein with more than one gene raises `InputError` too. A protein of two
+        transcripts of one gene is valid. The IDs go to SQLite as one JSON array, so their number
+        has no limit of SQLite. The query uses the index `protein_protein_id_idx` of the `protein`
+        table, and the memory is O(P) for P IDs.
         """
         if "protein" not in self._tables:
             message = (
                 f"{self.source!r}: the annotation has no table 'protein'; "
-                "expected an EnsDb file with this table"
+                "expected an EnsDb file with this table, "
+                "or a GTF with the attribute protein_id on its CDS lines"
             )
             raise InputError(message)
         # The text holds only fixed names, and the IDs are one parameter.

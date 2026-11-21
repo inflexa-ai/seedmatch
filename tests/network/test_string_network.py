@@ -1,4 +1,5 @@
 import dataclasses
+import re
 
 import pandas as pd
 import pytest
@@ -220,15 +221,30 @@ def test_string_gene_network_rejects_a_protein_id_without_a_taxon_prefix_D061(co
             string_gene_network(links, reference)
 
 
-def test_string_gene_network_rejects_a_gtf_reference():
-    links = sample_links()
-    with Reference.from_gtf(ANNOTATION / "synthetic.gtf", ANNOTATION / "synthetic.2bit") as gtf:
+GTF_PAIRS = [("synthetic.gtf", "synthetic.2bit"), ("synthetic.gencode.gtf.gz", "synthetic.fa.gz")]
+
+
+@pytest.mark.parametrize(("gtf", "genome"), GTF_PAIRS)
+def test_string_gene_network_maps_with_the_protein_ids_of_a_gtf_D013(gtf, genome):
+    expected = network_of()
+    with Reference.from_gtf(ANNOTATION / gtf, ANNOTATION / genome) as reference:
+        got = string_gene_network(sample_links(), reference)
+    assert edges_of(got) == edges_of(expected) == edges((1, 4, 900), (4, 1, 900))
+    assert got.unmapped_proteins == expected.unmapped_proteins
+
+
+def test_string_gene_network_rejects_a_gtf_reference_without_protein_ids(tmp_path):
+    path = tmp_path / "synthetic.gtf"
+    text = (ANNOTATION / "synthetic.gtf").read_text()
+    path.write_text(re.sub(r' protein_id "[^"]*";', "", text))
+    with Reference.from_gtf(path, ANNOTATION / "synthetic.2bit") as gtf:
         message = (
             f"{gtf.annotation.source!r}: the annotation has no table 'protein'; "
-            "expected an EnsDb file with this table"
+            "expected an EnsDb file with this table, "
+            "or a GTF with the attribute protein_id on its CDS lines"
         )
         with pytest.raises(InputError, match=exactly(message)):
-            string_gene_network(links, gtf)
+            string_gene_network(sample_links(), gtf)
 
 
 def scored_links(scores, dtype="int64"):

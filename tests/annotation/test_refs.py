@@ -1,5 +1,6 @@
 import hashlib
 import os
+import sqlite3
 from pathlib import Path
 from typing import NamedTuple
 
@@ -172,3 +173,20 @@ def test_gtf_gives_the_transcripts_of_the_ensdb(ensdb_ref, gtf_ref):
     got = gtf_ref.transcripts(ALL).sort_values("tx_id", ignore_index=True)
     assert len(expected) > 0
     pd.testing.assert_frame_equal(got, expected)
+
+
+# The hg38 EnsDb also has the proteins of the patch scaffolds (CHR_*) and of the LRG transcripts,
+# which the primary-assembly GTF lacks.
+GTF_PROTEINS = {"rnor7": 45936, "hg38": 111317}
+
+
+def test_gtf_gives_the_protein_genes_of_the_ensdb(refs_dir, build, ensdb_ref, gtf_ref):
+    _, ensdb = lookup(Group.REFERENCE, build).resources
+    uri = f"{(refs_dir / build / ensdb.name).resolve().as_uri()}?mode=ro&immutable=1"
+    with sqlite3.connect(uri, uri=True) as connection:
+        ids = [protein_id for (protein_id,) in connection.execute("SELECT protein_id FROM protein")]
+    connection.close()
+    expected = ensdb_ref.annotation.protein_genes(ids)
+    got = gtf_ref.annotation.protein_genes(ids)
+    assert len(got) == GTF_PROTEINS[build]
+    assert got.items() <= expected.items()
