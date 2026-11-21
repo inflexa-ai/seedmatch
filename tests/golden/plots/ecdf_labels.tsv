@@ -1,0 +1,27 @@
+# generated-by: tools/golden/R/plots.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# ggplot2: 4.0.2
+# gt: 1.4.0
+# scales: 1.4.0
+# PRROC: 1.4
+# label is the text after p-value: in the subtitle of .plot_ecdf, with test_results = list(statistic = c(D = 0.123456), p.value = p)
+# p_value is the text of double_to_string, or NaN, NA, or NULL
+p_value	label
+0.050000000000000003	0.05
+0.0149	0.01
+0.010500000000000001	0.01
+0.01	ERROR: object 'pvalue_label' not found
+0.0099999000000000008	0.01
+0.0099900000000000006	0.01
+0.0050000000000000001	0.005
+0.0025000000000000001	0.002
+0.001	0.001
+0.0009990000000000001	p<0.001
+1e-10	p<0.001
+0.996	1
+1	1
+NaN	ERROR: missing value where TRUE/FALSE needed
+NA	ERROR: missing value where TRUE/FALSE needed
+NULL	Undefined

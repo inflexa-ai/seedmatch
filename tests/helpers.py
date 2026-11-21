@@ -1,5 +1,6 @@
 import bz2
 import gzip
+import io
 import lzma
 import math
 import re
@@ -67,8 +68,16 @@ def exactly(message: str) -> str:
     return f"^{re.escape(message)}$"
 
 
+# Only a line that starts with `#` is a note. The option comment="#" of pandas would also cut a data
+# cell such as the color #FF0000.
 def golden(path: str) -> pd.DataFrame:
-    return pd.read_csv(GOLDEN / path, sep="\t", comment="#", dtype=str, keep_default_na=False)
+    file = GOLDEN / path
+    if file.suffix == ".gz":
+        text = gzip.decompress(file.read_bytes()).decode()
+    else:
+        text = file.read_text(encoding="utf-8")
+    rows = "\n".join(line for line in text.split("\n") if not line.startswith("#"))
+    return pd.read_csv(io.StringIO(rows), sep="\t", dtype=str, keep_default_na=False)
 
 
 # The field names of each tuple are the columns of the golden file, so no static type can name them.
@@ -103,7 +112,7 @@ def golden_note(path: str, pattern: str) -> str:
 
     A note is a line of the golden file that starts with `#`.
     """
-    for line in (GOLDEN / path).read_text().splitlines():
+    for line in (GOLDEN / path).read_text(encoding="utf-8").splitlines():
         found = re.search(pattern, line) if line.startswith("#") else None
         if found:
             return found.group(1)

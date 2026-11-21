@@ -1,0 +1,17 @@
+# generated-by: tools/golden/R/plots.R
+# R: 4.5.3
+# Biostrings: 2.78.0
+# SeedMatchR: 2.0.0 (2fc0c4f)
+# ggplot2: 4.0.2
+# gt: 1.4.0
+# scales: 1.4.0
+# PRROC: 1.4
+# text is the line of the label of the layer of plotAlignment(match, GUIDE, seqs, output.type = "ggplot") of tools/golden/patches/plotAlignment.R. The match is ENSRNOG00000016275 from 73 to 79, the case mer7m8_1 of analyses/alignment.tsv
+# text: family mono / face bold / size 3.86605783866058 / hjust 0.5 / vjust 0.5 / colour black
+# theme: panel.background ggplot2::element_blank / equal to theme_void() TRUE
+# data.frame row names: [siRNA ],[      ],[target]
+# unpatched: nchar(s1) == nchar(s2) is not TRUE
+case	line	text
+mer7m8_1	1	miRNA       3'-UUUUGUCACAAGAACGAGAUAUU-5'   
+mer7m8_1	2	                ||||||||||||||||||||||      
+mer7m8_1	3	target   5'-...GAAACAGUGUUCUUGCUCUAUAA...-3'

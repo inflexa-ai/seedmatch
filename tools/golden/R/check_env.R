@@ -14,10 +14,11 @@ if (seedmatchr != "2.0.0" || !startsWith(biostrings, "2.78.")) {
   stop("SeedMatchR ", seedmatchr, " and Biostrings ", biostrings, ", expected 2.0.0 and 2.78.x")
 }
 
-# The annotation goldens (annotation.R) and the network goldens (network.R) need these versions.
+# The annotation goldens (annotation.R), the network goldens (network.R), and the plot goldens (plots.R) need these versions.
 pinned <- c(
   ensembldb = "2.34.", GenomicFeatures = "1.62.", rtracklayer = "1.70.", Rsamtools = "2.26.",
-  AnnotationFilter = "1.34.", igraph = "2.3.", Matrix = "1.7.", DBI = "1.3.", RSQLite = "3.53."
+  AnnotationFilter = "1.34.", igraph = "2.3.", Matrix = "1.7.", DBI = "1.3.", RSQLite = "3.53.",
+  ggplot2 = "4.0.", gt = "1.4.", scales = "1.4."
 )
 installed <- vapply(names(pinned), function(p) as.character(packageVersion(p)), character(1))
 wrong <- !startsWith(installed, pinned)
@@ -28,7 +29,7 @@ if (any(wrong)) {
   )
 }
 
-# The benchmark goldens (analyses.R) need PRROC 1.4, which has no third version part.
+# The benchmark goldens (analyses.R) and the plot goldens (plots.R) need PRROC 1.4, which has no third version part.
 prroc <- as.character(packageVersion("PRROC"))
 if (prroc != "1.4") {
   stop("PRROC ", prroc, ", expected 1.4")

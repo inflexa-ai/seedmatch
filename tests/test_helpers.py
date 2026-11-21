@@ -1,7 +1,9 @@
+import gzip
+
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import R_COLUMNS, assert_frame_matches_golden
+from helpers import R_COLUMNS, assert_frame_matches_golden, golden
 
 
 def write(tmp_path, text):
@@ -93,3 +95,20 @@ def test_a_string_must_be_equal(tmp_path):
     path = write(tmp_path, "s\nFull-D0\n")
     with pytest.raises(AssertionError, match=r"column 's'.*got 'Full-D1'.*expected 'Full-D0'"):
         assert_frame_matches_golden(pd.DataFrame({"s": ["Full-D1"]}), path)
+
+
+def test_a_hash_inside_a_data_line_is_data(tmp_path):
+    path = write(tmp_path, "case\tcolor\nx\t#FF0000\n")
+    assert golden(path)["color"].tolist() == ["#FF0000"]
+
+
+def test_the_colors_of_the_benchmark_plot_golden_start_with_a_hash():
+    table = golden("plots/benchmark_plot.tsv")
+    first_roc = table[(table["case"] == "benchmark_1") & (table["curve"] == "ROC")].iloc[0]
+    assert first_roc["color"].startswith("#")
+
+
+def test_a_gzipped_golden_is_decompressed_and_keeps_a_hash_in_a_data_line(tmp_path):
+    path = tmp_path / "case.tsv.gz"
+    path.write_bytes(gzip.compress(b"# generated-by: test\ncase\tcolor\nx\t#FF0000\n"))
+    assert golden(str(path))["color"].tolist() == ["#FF0000"]

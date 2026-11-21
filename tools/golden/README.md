@@ -170,7 +170,7 @@ The second run of the script writes the same bytes as the first run. A section t
 
 ### Patches
 
-`analyses.R` puts these patches into the SeedMatchR namespace with `with_seedmatchr_patch`. A patch is a copy of one SeedMatchR function. Its first comment gives the divergence, the R line, and the fix:
+`analyses.R` and `plots.R` put these patches into the SeedMatchR namespace with `with_seedmatchr_patch`. A patch is a copy of one SeedMatchR function. Its first comment gives the divergence, the R line, and the fix:
 
 - `tools/golden/patches/plotAlignment.R` (`D-045`): `plotAlignment` takes the guide target from `get_seed(guide.seq, "Full", ...)` (`R/plotAlignment.R:32`). This target starts at g2, thus the guide string is one base shorter than the window, and R stops. The patch takes the target from `.get_custom_sequence(guide.seq, 1, guide.len)`. As a result, the guide string has the full guide, g1 to gN.
 - `tools/golden/patches/benchmark_preds.R` (`D-006`): the filter `padj <= padj` of `benchmark_preds` (`R/benchmark.R:23`) compares the column `padj` with itself, thus the argument `padj` has no effect. The patch compares the column with the argument. It also gives `roc.curve` the labels as `weights.class0`, as `pr.curve` gets them.
@@ -471,6 +471,60 @@ The comment lines of `string_features.tsv` give these R results:
 - `repeated_graph`: `igraph::is_directed`, `igraph::ecount`, and the neighbors of G1 for the graph of `repeated`.
 - `no_counts`: the error of `create_graph` for a `res` that has a gene of the network and no column `overall_matches`.
 
+## Golden files of the plots and the report table
+
+The script `plots.R` writes the golden files in `tests/golden/plots/`. They give the data that SeedMatchR draws in its plots, and the cells of the `gt` table of `SeedMatchReport`:
+
+```bash
+tools/golden/run.sh tools/golden/R/plots.R
+```
+
+The script uses ggplot2, gt, scales, and PRROC. `check_env.R` stops unless ggplot2 is 4.0.x, gt is 1.4.x, scales is 1.4.x, and PRROC is 1.4. The comment lines of each file give these versions.
+
+The script reads `Test_seqs.fa` and `DESEQ2_results.tsv` from `tests/data/`. It also reads the golden files `stats/samples.tsv` and `analyses/alignment.tsv`. The only random call is the DTS test, and `set.seed(1)` comes before it. Thus the second run writes the same bytes as the first run.
+
+### Device rule
+
+The first statement after `source` is `grDevices::pdf(NULL)`. `ggplot_build` and `hist` open a graphics device. Without this statement, R writes `Rplots.pdf` into the root of the repository.
+
+The script traces `graphics::title`, `graphics::arrows`, `graphics::segments`, `graphics::image.default`, and `graphics::axis` to read their arguments. It does not trace `graphics::layout`. A tracer that reads the default `widths` of `layout` stops `layout(1)` with `invalid type (NULL) for 'times'`.
+
+### Notes and colors
+
+A line that starts with `#` is a note. A `#` inside a data line is data, for example the color `#FF0000` in `benchmark_plot.tsv` and `report_table.tsv`. The helper `golden` of `tests/helpers.py` obeys this rule.
+
+A note with a value has the form `# <key>: <value>`. A line end in a value becomes ` | `. Read a note in Python with `golden_note`. The notes give the values that are not rows, for example titles, labels, errors, and the colors of a scale.
+
+### Files and cases
+
+- `ecdf_lines.tsv`: the columns `case`, `group`, `x`, and `y`. The rows are the layer data of the plot of `deseq_fc_ecdf`, sorted by group and then by x, as the step line goes. `group` is the legend key: `Background`, `mer7m8`, or `NA` for a gene in no list. The case `test_data` is `deseq_fc_ecdf(res, list(Background = background, mer7m8 = seed_genes))` for the test data. The case `no_group_r` has one more row of `res`, and this row is in no list. The notes give more legends, the subtitle of each test, and the labels. They also give the layer, the limits, and the effect of the argument `theme`. They give the error for too many groups and the values of `SeedMatchR.theme`.
+- `ecdf_labels.tsv`: the columns `p_value` and `label`. `label` is the p-value text in the subtitle that `.plot_ecdf` writes, or `ERROR: <message>`. `p_value` is `NaN`, `NA`, `NULL`, or the text of `double_to_string`.
+- `wasserstein_ecdf.tsv`: the columns `case`, `group`, `x`, and `y`. The rows are the layer data of `cdf.plot`, sorted by group and then by x. `group` is `non-seed` or `seed`.
+- `wasserstein_density.tsv`: the columns `case`, `group`, `x`, and `density`. The rows are the layer data of `dens.plot`. This file also holds the notes of the Wasserstein plots. They give the bandwidths, the titles, the range of x, the geoms, the colors, and the labels.
+- `wasserstein_difference.tsv`: the columns `case`, `n_interp`, `x`, and `difference`. The rows are the layer data of `diff.plot` of `wass_dist(..., n.interp = 100)`.
+- `kmer_hist.tsv`: the columns `gene_count` and `kmers`, from `as.data.frame(table(gene.counts))` for `Test_seqs.fa` with width 7. The notes give the breaks and the counts of `hist(gene.counts, breaks = 50, plot = FALSE)`. They also give the gene count of some targets and the return value of `kmer_hist`. They give the pages, the calls of `title`, and the line width of `abline`.
+- `alignment_plot.tsv`: the columns `case`, `line`, and `text`. The case `mer7m8_1` is the match of the same case in `analyses/alignment.tsv`. `text` is one line of the label of the text layer. The notes give the font and the size of the text, and the theme. They also give the row names of the data frame and the error of the unpatched function.
+- `ranges_plot.tsv`: the columns `case`, `xmin`, `xmax`, `ymin`, and `ymax`. The rows are the layer data of `SeedMatchR:::plotRangesDF`. The notes give the effect of the options, the fill, and the effect of `bar_height`. They also give the warning for text row names. They give the arrows, the titles, the warnings, and the errors of `plotIRanges`.
+- `benchmark_plot.tsv`: the columns `case`, `curve`, `segment`, `x0`, `y0`, `x1`, `y1`, and `color`. The rows are the arguments of `graphics::segments` in `plot(res$PRC)` (`PR`) and `plot(res$ROC)` (`ROC`). `segment` is the 1-based position in the call. The notes give the titles, the labels, `lwd`, and `par("usr")`. They also give the sides of `axis`, the colors of the scale, and the color bars. They give the errors of `plot` for a score of 0, a score of -3, and an infinite score.
+- `report_table.tsv`: the columns `row`, `column`, `text`, `background`, and `color`. The rows are the cells of `gt::as_raw_html(tab, inline_css = FALSE)`, where `tab` is the table of `SeedMatchReport` for the test data. `background` and `color` come from `gt:::dt_styles_get(gt:::build_data(tab, context = "html"))`, or they are `NA` without a style. The notes give the title, the subtitle, the group, and the order of the columns. They also give the spanners, the table ID, the first selector of the CSS, and the striped rows.
+
+The cases of the Wasserstein files are `test_data` and `wass_40x300_ties`. For `test_data`, the seed sample has the fold changes of the genes with `mer7m8 >= 1`, and the non-seed sample has the others. For `wass_40x300_ties`, the sample `x` of `stats/samples.tsv` is the seed sample.
+
+The cases of `ranges_plot.tsv` come from the table `eight`. It has the starts 10, 30, ..., 150 and the ends start + 6.
+
+- `eight_rows`: `eight`.
+- `subset`: `eight[c(3, 7, 8), ]`.
+- `text_row_names`: `eight[1:3, ]` with the row names `a`, `b`, and `c`.
+- `one_base`: `data.frame(start = c(5, 20), end = c(10, 20))`.
+
+The cases of `benchmark_plot.tsv` are `benchmark_1` and `one_score_2`. `benchmark_1` is `benchmark_preds(res, padj = 0.15, l2fc = 0)` for the test data. `one_score_2` is `pr.curve(scores.class0 = rep(2, 20), weights.class0 = rep(c(1, 0), 10), curve = TRUE)`, and it has only the curve `PR`.
+
+### Patches of the plot goldens
+
+The case `mer7m8_1` of `alignment_plot.tsv` uses `tools/golden/patches/plotAlignment.R` (`D-045`). Without the patch, `plotAlignment` with `output.type = "ggplot"` stops with `nchar(s1) == nchar(s2) is not TRUE`. The note `unpatched` gives this error.
+
+The case `benchmark_1` uses `tools/golden/patches/benchmark_preds.R` (`D-006`). The note `title ROC unpatched` gives the ROC title of the unpatched function.
+
 ## Patch of vmatchPattern2
 
 `vmatchPattern2` of SeedMatchR ignores `with.indels` and `min.mismatch` (`docs/divergences.md`, `D-001`). The file `tools/golden/patches/vmatchPattern2.R` defines a patched function with the same arguments and the same data frame. `full_search.R` puts it into the SeedMatchR namespace with `assignInNamespace`. As a result, the ranges in the golden files obey the same rules as the counts. A script that needs the original function does not source the patch.
@@ -500,6 +554,6 @@ An annotation script also sources `tools/golden/R/annotation_common.R`, which ha
 - `run_config(name, config)` runs `load_annotations` for the config, with the patch of the config. It returns a list. The element `result` holds the result of `load_annotations` for each value of `return_gene_name`. The element `notes` holds the notes for the golden files.
 - `sequences_table(result)` returns the names, the widths, and the sequences of the element `result` of the `run_config` list.
 
-A golden file is a TSV file. Its first lines are comments that give the script, the R version, the Biostrings version, and the SeedMatchR version. Read it in Python with `comment="#"` and `dtype=str`.
+A golden file is a TSV file. Its first lines are comments that give the script, the R version, the Biostrings version, and the SeedMatchR version. A test reads the rows with `golden` and the notes with `golden_note`, both from `tests/helpers.py`. A line that starts with `#` is a note, and a `#` inside a data line is data.
 
 A double in the file has 17 significant digits. A correctly rounded reader, for example Python `float()`, gives the same double as R.
