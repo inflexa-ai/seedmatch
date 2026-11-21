@@ -287,6 +287,13 @@ def test_new_figure_has_the_size_and_the_constrained_layout():
     assert to_hex(figure.get_facecolor()) == "#ffffff"
 
 
+@pytest.mark.parametrize("size", [(1e-320, 5.0), (5.0, 1e-320), (0.005, 5.0)])
+def test_new_figure_rejects_a_side_below_one_pixel_before_an_artist_exists(size):
+    # On Linux, np.dot warns for the transforms of the first artist of such a figure.
+    with pytest.raises(InputError, match=exactly(too_small(size))):
+        new_figure(size)
+
+
 def test_style_theme_axes_applies_the_theme_of_r():
     axes = new_figure((5.0, 5.0)).add_subplot()
     style_theme_axes(axes)

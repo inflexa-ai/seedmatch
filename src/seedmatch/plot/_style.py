@@ -158,11 +158,6 @@ def as_written[T: Text](text: T) -> T:
     return text
 
 
-def new_figure(size: tuple[float, float]) -> Figure:
-    """Return an empty `Figure` of the size in inches. It does not use `matplotlib.pyplot`."""
-    return Figure(figsize=size, layout="constrained", facecolor="white")
-
-
 def _too_small(figure: Figure) -> InputError:
     size = tuple(figure.get_size_inches().tolist())
     message = (
@@ -172,15 +167,25 @@ def _too_small(figure: Figure) -> InputError:
     return InputError(message)
 
 
+def new_figure(size: tuple[float, float]) -> Figure:
+    """Return an empty `Figure` of the size in inches. It does not use `matplotlib.pyplot`.
+
+    A side below one pixel at the dpi of the figure raises `InputError`.
+    """
+    figure = Figure(figsize=size, layout="constrained", facecolor="white")
+    # Such a side makes the transforms of matplotlib divide to infinity. Then the first artist
+    # warns in np.dot on some platforms, and the layout raises a raw error.
+    if figure.get_size_inches().min() * figure.dpi < 1:
+        raise _too_small(figure)
+    return figure
+
+
 def apply_layout(figure: Figure) -> Figure:
     """Apply the constrained layout of the figure one time, and keep the positions of the Axes.
 
     The positions stay for each later draw. Thus a save at each dpi gives no layout warning. A size
-    too small for the texts, or a side below one pixel, raises `InputError`.
+    too small for the texts raises `InputError`.
     """
-    # A denormal side makes the layout divide to infinity, and matplotlib then raises a raw error.
-    if figure.get_size_inches().min() * figure.dpi < 1:
-        raise _too_small(figure)
     # new_figure gives each figure of a plot function a constrained layout engine.
     engine = cast("LayoutEngine", figure.get_layout_engine())
     with warnings.catch_warnings():
