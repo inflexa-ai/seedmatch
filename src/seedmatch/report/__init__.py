@@ -10,6 +10,7 @@ from seedmatch.report.grid import (
     full_search,
     full_search_ranges,
 )
+from seedmatch.report.html import report_html
 from seedmatch.report.report import (
     REPORT_CATEGORIES,
     ReportOptions,
@@ -29,5 +30,6 @@ __all__ = [
     "best_match",
     "full_search",
     "full_search_ranges",
+    "report_html",
     "seed_match_report",
 ]

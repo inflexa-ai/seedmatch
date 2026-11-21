@@ -80,7 +80,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 
 - The DTS p-value comes from permutations. The statistic is identical. The p-value agrees with R only within random error. The caller gives the random generator.
 - Plots use matplotlib.
-- The report table uses a pandas `Styler` in HTML, not `gt`.
+- The report table is the HTML of `report_html`, not `gt`. pandas 2.3.3 gives a `Styler` only with jinja2 3.1.2 or later, and the store lock has jinja2 3.0.3.
 - Each entry in `docs/divergences.md` changes the R behavior.
 
 ## Architecture
@@ -96,7 +96,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 | `seedmatch.de` | DE table schema, the reader for the GEO DESeq2 files, the filter. |
 | `seedmatch.mirdb` | The reader of the miRDB table of predicted miRNA targets. |
 | `seedmatch.stats` | KS and Wilcoxon with the R rules, DTS, Wasserstein areas, ECDF test, PR and ROC curves, and the benchmark of seed counts. |
-| `seedmatch.report` | Full search, best match, report. |
+| `seedmatch.report` | Full search, best match, report, and the HTML of the report table. |
 | `seedmatch.noncanonical` | Wobble and bulge search, 3' compensatory search. |
 | `seedmatch.network` | TRRUST message passing and the STRING gene network. |
 | `seedmatch.kmers`, `seedmatch.alignment`, `seedmatch.distances`, `seedmatch.evalue` | The smaller analyses. |
@@ -516,6 +516,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `plotAlignment` (the figure) | The figure names the guide line `miRNA`, but the data.frame names it `siRNA ` (`R/plotAlignment.R:63`, `:135-137`). | `plot_alignment` names the guide line `siRNA `, as the data.frame does. |
 | `plotRangesDF`, `plotIRanges` (the bars) | `plotRangesDF` draws only the first 6 rows, because of `head()`, and it ignores `xlim`, `main`, and `col`. The y value of a row is its row name. Thus a subset keeps the old positions of its rows, and text row names give NA. The bar of a range of one base has the width 0, and `plotIRanges` skips such a range with a warning (`R/plotIRanges.R:3-21`). | `plot_ranges` draws one bar for each row, at the position of the row in the table. A bar goes from `start - 0.5` to `end + 0.5`, and each option has an effect. |
 | `plot.PRROC` (the curves of `benchmark_preds`) | For one distinct score s, the color range goes from 0.9 s to s + 0.09 s, and for s = 0 each color is NA. For s <= 0, `image` stops R. An infinite score gives the color NA to its threshold, and R stops (`R/benchmark.R:32-40`). | `plot_benchmark` takes the color range from the finite thresholds, and an infinite threshold gets the color of the nearest end of the scale. Without two distinct finite thresholds, each segment gets the middle color, and the color bar goes from c - 0.5 to c + 0.5. |
+| `.make_table` (the labels and the ID of the report table) | The labels of the windows are fixed texts: `Full Guide Strand (g2:g23)`, `18-mer (g2:g19)`, and `15-mer (g2:g19)` (`R/SeedMatchReport.R:158`, `:162`, `:166`). The window of `15mer` is g2 to g16 (`R/get_seed.R:121-123`), and a guide of another length than 23 bases has another `Full` window. `gt::gt(..., id = "mygt")` gives each table the element ID `mygt` (`:145`). | `report_html` gives the labels from `seed_window` for the guide. The table has the class `seedmatch-report` and no ID. |
 
 ## Tests
 
@@ -621,6 +622,7 @@ A test runs each code example in `README.md` and in `docs/`.
 - `plot_alignment` puts the lines of the text, each after its name, in one `Figure.text`. The time and the memory are O(W) for a label whose longest line has W characters. The label is the text with the names. The figure is 0.1 inch wide for each character, thus `Figure.savefig` at 100 dpi draws a canvas of 3,600 bytes for each character. For the label of the first `mer7m8` match of the test data with `left_pad=20` and `right_pad=20`, W is 84. The call takes 0.1 ms, and 13 ms with `Figure.savefig` to PNG at 100 dpi. For W = 2,000, `Figure.savefig` takes 0.27 seconds. Machine: Apple M2 Max, Python 3.12.
 - `plot_ranges` puts the bars of all rows in one `PolyCollection`, with 4 vertices for each row. The time and the memory are O(n) for n rows. The function has no row limit, because a limit drops rows without a message, as `head()` of R does. For 10^5 ranges, the call takes 0.065 seconds, 0.65 µs for each row. With `Figure.savefig` to PNG at 100 dpi, it takes 0.24 seconds, 2.4 µs for each row. The peak of `tracemalloc` is 40.7 MiB, 427 bytes for each row. Machine: Apple M2 Max, Python 3.12.
 - `plot_benchmark` puts the segments of each curve in one `LineCollection`, with a segment from each row to the next row. The time and the memory are O(R) for R rows of the two curves. The PR curve has at most 2K + 2 + max(100, P) rows for K distinct scores and P positives. The function has no row limit, because a limit drops rows without a message. For 10^5 distinct scores (200,003 rows), the call takes 0.32 seconds, 1.6 µs for each row. With `Figure.savefig` to PNG at 100 dpi, it takes 0.71 seconds, 3.5 µs for each row. The peak of `tracemalloc` is 69.1 MiB, 362 bytes for each row, and 71.4 MiB, 374 bytes for each row, with `savefig`. For 10^6 scores of 8 values with 30% positives (262,411 rows), the call takes 0.41 seconds, and 0.89 seconds with `savefig`. The peak is 94.7 MiB, 379 bytes for each row, and 98.3 MiB, 393 bytes for each row, with `savefig`. Machine: Apple M2 Max, Python 3.12.
+- `report_html` writes the table in one pass over the rows of `report.report`. A dict of lists groups the row positions by group, and each row takes one f-string for each cell. The time and the memory are O(R) for R rows. For 10^5 rows in 25,000 groups, the call takes 1.0 seconds, 10 µs for each row. The peak of `tracemalloc` is 119 MiB, and the result is 46 MiB. The report of the test data has 4 rows, and the call takes 0.3 ms. Machine: Apple M2 Max, Python 3.12.
 - `docs/performance.md` records the wall time and the peak memory of `seed_match_report` on the canonical 3' UTRs of `rnor7`, for Python and for R.
 - Target: after the JIT compilation, Python is not slower than R by more than a factor of 2.
 

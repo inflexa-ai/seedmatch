@@ -39,6 +39,7 @@ from seedmatch.report import (
     best_match,
     full_search,
     full_search_ranges,
+    report_html,
     seed_match_report,
 )
 from seedmatch.search import SearchOptions, count_matches, find_matches
@@ -125,6 +126,7 @@ __all__ = [
     "read_mirdb",
     "read_string_links",
     "read_trrust",
+    "report_html",
     "reverse_complement",
     "roc_curve",
     "seed_match_report",

@@ -864,3 +864,16 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: a finite threshold outside -9e305 to 9e305 raises `InputError`. Inside this bound, each position on the scale and each boundary of the color bar is finite.
 - Reason: each result of `benchmark_predictions` must give a figure. A seed count of 0 for each gene is a valid input.
 - Test: `test_plot_benchmark_colors_one_distinct_score_D069`, `test_plot_benchmark_colors_an_infinite_score_D069`, `test_plot_benchmark_colors_a_negative_infinite_score_D069`, `test_plot_benchmark_rejects_a_threshold_that_is_too_large_D069`, and `test_plot_benchmark_takes_a_threshold_just_inside_the_bound_D069` in `tests/plot/test_plot_benchmark.py`.
+
+## D-070: report_html labels the windows from the guide, and gives no fixed element ID
+
+- ID: `D-070`
+- R location: `.make_table` (`R/SeedMatchReport.R:142-196`), called by `SeedMatchReport` (`:135`).
+- R behavior: the spanner labels are fixed texts: `Full Guide Strand (g2:g23)` (`:158`), `18-mer (g2:g19)` (`:162`), and `15-mer (g2:g19)` (`:166`).
+  - The `15mer` window is g2 to g16 (`R/get_seed.R:121-123`), thus the 15-mer label is wrong. For a guide that does not have 23 bases, the `Full` label is wrong.
+  - Evidence: the notes `spanner 15mer` and `spanner Full of a 21-base guide` of `tests/golden/plots/report_table.tsv`.
+- R behavior: `gt::gt(..., id = "mygt")` (`:145`) gives each table the element ID `mygt`, and each CSS rule selects `#mygt`. Thus two tables in one HTML page have the same ID and the same rules.
+  - Evidence: the notes `id` and `css selector` of `tests/golden/plots/report_table.tsv`.
+- New behavior: `seed_window` of `Seed.FULL`, `Seed.MER18`, and `Seed.MER15` for the guide gives the labels. The table has the class `seedmatch-report` and no ID, and each CSS rule selects this class.
+- Reason: a label must give the window of the search, and an ID must be unique in a page.
+- Test: `test_report_html_labels_the_windows_from_the_guide_D070` and `test_report_html_has_no_fixed_id_D070` in `tests/report/test_report_html.py`.

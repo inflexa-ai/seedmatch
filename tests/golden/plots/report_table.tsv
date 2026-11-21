@@ -23,6 +23,24 @@
 # spanner Full of a 21-base guide: Full Guide Strand (g2:g23)
 # fmt_number 12345: 12,345
 # fmt_percent 0.125: 0.12%
+# fmt_number Inf: Inf
+# fmt_number -Inf: U+2212Inf
+# fmt_number -0.4: 0
+# fmt_number -5: U+22125
+# fmt_number -1234.4: U+22121,234
+# fmt_number -0: 0
+# fmt_number NaN: NaN
+# fmt_number NA: NA
+# fmt_percent Inf: Inf%
+# fmt_percent -Inf: U+2212Inf%
+# fmt_percent -0.4: U+22120.40%
+# fmt_percent -5: U+22125.00%
+# fmt_percent -0.004: U+22120.00%
+# fmt_percent 1e-9: 0.00%
+# fmt_percent 12345.678: 12,345.68%
+# fmt_percent -0: 0.00%
+# fmt_percent NaN: NaN
+# fmt_percent NA: NA
 row	column	text	background	color
 In silico predictions	Full-D0	0	NA	NA
 In silico predictions	Full-D1	1	NA	NA

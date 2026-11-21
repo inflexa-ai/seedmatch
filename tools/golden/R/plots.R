@@ -612,6 +612,35 @@ number_cell <- one_cell_table(
 percent_cell <- one_cell_table(
   gt::fmt_percent(gt::gt(data.frame(b = 0.125)), columns = "b", decimals = 2, scale_values = FALSE)
 )
+# The minus sign of gt is U+2212. A note writes it as the text U+2212, thus the file stays ASCII.
+ascii_minus <- function(text) gsub(intToUtf8(0x2212), "U+2212", text, fixed = TRUE)
+special_number_cell <- function(value) {
+  ascii_minus(one_cell_table(
+    gt::fmt_number(gt::gt(data.frame(a = value)), columns = "a", decimals = 0)
+  ))
+}
+special_percent_cell <- function(value) {
+  ascii_minus(one_cell_table(
+    gt::fmt_percent(gt::gt(data.frame(b = value)), columns = "b", decimals = 2, scale_values = FALSE)
+  ))
+}
+special_numbers <- c(`Inf` = Inf, `-Inf` = -Inf, `-0.4` = -0.4, `-5` = -5, `-1234.4` = -1234.4, `-0` = -0, `NaN` = NaN, `NA` = NA_real_)
+special_percents <- c(
+  `Inf` = Inf, `-Inf` = -Inf, `-0.4` = -0.4, `-5` = -5, `-0.004` = -0.004, `1e-9` = 1e-9,
+  `12345.678` = 12345.678, `-0` = -0, `NaN` = NaN, `NA` = NA_real_
+)
+special_notes <- c(
+  vapply(
+    names(special_numbers),
+    function(label) note(paste("fmt_number", label), special_number_cell(special_numbers[[label]])),
+    character(1), USE.NAMES = FALSE
+  ),
+  vapply(
+    names(special_percents),
+    function(label) note(paste("fmt_percent", label), special_percent_cell(special_percents[[label]])),
+    character(1), USE.NAMES = FALSE
+  )
+)
 short_guide_tab <- report_table(substr(data$guide, 1, 21))
 
 write_plot(
@@ -633,6 +662,7 @@ write_plot(
     note("striped rows", list_of(sort(unique(row_numbers[grepl("gt_striped", body[2, ])])))),
     note("spanner Full of a 21-base guide", spanner_label(short_guide_tab, "Full")$label),
     note("fmt_number 12345", number_cell),
-    note("fmt_percent 0.125", percent_cell)
+    note("fmt_percent 0.125", percent_cell),
+    special_notes
   )
 )

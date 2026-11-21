@@ -1,6 +1,6 @@
 """`SeedMatchReport` of R: the seed matches of a guide and their effect on a DE table.
 
-R also returns a `gt` table of the report. The port returns no table object.
+R also returns a `gt` table of the report. `report_html` gives its HTML.
 """
 
 from dataclasses import dataclass

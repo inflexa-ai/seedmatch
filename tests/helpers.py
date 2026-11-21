@@ -30,6 +30,7 @@ from seedmatch import (
     match_distances,
     read_string_links,
     read_trrust,
+    report_html,
     seed_match_report,
     string_gene_network,
     string_scores,
@@ -192,7 +193,7 @@ def run_core_pipeline() -> None:
     kmer_histogram(kmer_gene_counts(kmer_counts(seqs, k=3)))
     alignment_text(find_matches(Guide(GUIDE).target(Seed.MER7M8), seqs).iloc[0], Guide(GUIDE), seqs)
     match_distances(find_matches(Guide(GUIDE).target(Seed.MER6), seqs))
-    seed_match_report(de, seqs, Guide(GUIDE))
+    report_html(seed_match_report(de, seqs, Guide(GUIDE)), Guide(GUIDE))
     e_value_null(Guide(GUIDE), seqs, rng=0, n_random=2)
     annotation = DATA / "annotation"
     with Reference.from_paths(
