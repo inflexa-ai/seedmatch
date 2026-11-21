@@ -316,6 +316,47 @@ def test_read_mirdb_numbers_a_bad_line_across_chunks(tmp_path, monkeypatch, chun
         read_mirdb(path)
 
 
+SCORE_ABC = "line 3: score 'abc' is not a finite number; expected a decimal number"
+NUL_3 = "line 3: the line has a NUL character (U+0000); expected text without NUL characters"
+FIELDS_3 = "line 3 has 2 fields; expected 3: the miRDB ID, the RefSeq ID, and the score"
+LONG_3 = "line 3: the line has more than 25 characters; expected at most 25, with the line end"
+
+
+@pytest.mark.parametrize("chunk", [None, 1, 2], ids=["default", "1", "2"])
+@pytest.mark.parametrize(
+    ("bad_lines", "message"),
+    [
+        (["hsa-c\tNM_3\tabc", "hsa-d\tNM_4"], SCORE_ABC),
+        (["hsa-c\tNM_3\tabc", "hsa-d\tNM_4\t4\x000"], SCORE_ABC),
+        (["hsa-c\tNM_3\tabc", "hsa-d\tNM_4\t" + "4" * 30], SCORE_ABC),
+        (["hsa-c\tNM_3\t3\x000", "hsa-d\tNM_4"], NUL_3),
+        (["hsa-c\tNM_3\t3\x000", "hsa-d\tNM_4\t" + "4" * 30], NUL_3),
+        (["hsa-c\tNM_3", "hsa-d\tNM_4\tabc"], FIELDS_3),
+        (["hsa-c\tNM_3\t3\x000", "hsa-d\tNM_4\tabc"], NUL_3),
+        (["hsa-c\tNM_3\t" + "3" * 30, "hsa-d\tNM_4\tabc"], LONG_3),
+    ],
+    ids=[
+        "value, fields",
+        "value, NUL",
+        "value, long",
+        "NUL, fields",
+        "NUL, long",
+        "fields, value",
+        "NUL, value",
+        "long, value",
+    ],
+)
+def test_read_mirdb_names_the_first_bad_line_for_each_chunk_size(
+    tmp_path, monkeypatch, chunk, bad_lines, message
+):
+    if chunk is not None:
+        monkeypatch.setattr("seedmatch.mirdb._CHUNK_LINES", chunk)
+    monkeypatch.setattr("seedmatch._lines.LINE_LIMIT", 25)
+    path = write_lines(tmp_path, ["hsa-a\tNM_1\t50", "hsa-b\tNM_2\t60", *bad_lines])
+    with pytest.raises(InputError, match=failure(path, message)):
+        read_mirdb(path)
+
+
 @pytest.mark.parametrize("chunk", [None, 1])
 def test_equal_text_values_share_one_object(tmp_path, monkeypatch, chunk):
     lines = [

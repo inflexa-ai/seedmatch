@@ -233,19 +233,19 @@ def test_read_string_links_reject_a_nul_character_D059(tmp_path):
         read_string_links(path)
 
 
-def test_read_string_links_read_a_chunk_with_a_nul_character_one_time(tmp_path, monkeypatch):
+def test_read_string_links_parse_no_line_from_a_nul_line_on(tmp_path, monkeypatch):
     reads = []
     read_text = stringdb.parse_data_lines
 
-    def parse_data_lines(*args, **kwargs):
-        reads.append(kwargs.get("dtype", str))
-        return read_text(*args, **kwargs)
+    def parse_data_lines(chunk, is_data, **kwargs):
+        reads.append(is_data.tolist())
+        return read_text(chunk, is_data, **kwargs)
 
     monkeypatch.setattr(stringdb, "parse_data_lines", parse_data_lines)
-    path = write_lines(tmp_path, [*PREFIX, "9.C 9.\x00D 700"])
+    path = write_lines(tmp_path, [*PREFIX, "9.C 9.\x00D 700", "9.G 9.H 600"])
     with pytest.raises(InputError, match="line 3: the line has a NUL character"):
         read_string_links(path)
-    assert len(reads) == 1
+    assert reads == [[False, True, False, False]]
 
 
 def test_read_string_links_reject_a_url():
@@ -348,6 +348,58 @@ def test_read_string_links_read_more_than_one_chunk(tmp_path, monkeypatch, chunk
     lines[12] = "32630.ENSSYNP00000000008 32630.ENSSYNP00000000009 abc"
     path = write_lines(tmp_path, lines)
     with pytest.raises(InputError, match=failure(path, f"line 13: score 'abc' {NOT_A_SCORE}")):
+        read_string_links(path)
+
+
+SCORE_3 = f"line 3: score 'abc' {NOT_A_SCORE}"
+NUL_3 = "line 3: the line has a NUL character (U+0000); expected text without NUL characters"
+FIELDS_3 = "line 3 has 2 fields; expected 3: protein1, protein2, and combined_score"
+LONG_3 = "line 3: the line has more than 40 characters; expected at most 40, with the line end"
+
+
+@pytest.mark.parametrize("chunk", [None, 1, 2], ids=["default", "1", "2"])
+@pytest.mark.parametrize(
+    ("bad_lines", "message"),
+    [
+        (["9.C 9.D abc", "9.E 9.F"], SCORE_3),
+        (["9.C 9.D abc", "9.E 9.F 7\x0000"], SCORE_3),
+        (["9.C 9.D abc", "9.E 9.F " + "7" * 40], SCORE_3),
+        (["9.C 9.D 6\x0000", "9.E 9.F"], NUL_3),
+        (["9.C 9.D 6\x0000", "9.E 9.F " + "7" * 40], NUL_3),
+        (["9.C 9.D", "9.E 9.F abc"], FIELDS_3),
+        (["9.C 9.D 6\x0000", "9.E 9.F abc"], NUL_3),
+        (["9.C 9.D " + "6" * 40, "9.E 9.F abc"], LONG_3),
+    ],
+    ids=[
+        "value, fields",
+        "value, NUL",
+        "value, long",
+        "NUL, fields",
+        "NUL, long",
+        "fields, value",
+        "NUL, value",
+        "long, value",
+    ],
+)
+def test_read_string_links_name_the_first_bad_line_for_each_chunk_size(
+    tmp_path, monkeypatch, chunk, bad_lines, message
+):
+    if chunk is not None:
+        monkeypatch.setattr("seedmatch.network.stringdb._CHUNK_LINES", chunk)
+    # The header has 33 characters with its line end.
+    monkeypatch.setattr("seedmatch._lines.LINE_LIMIT", 40)
+    path = write_lines(tmp_path, [*PREFIX, *bad_lines])
+    with pytest.raises(InputError, match=failure(path, message)):
+        read_string_links(path)
+
+
+@pytest.mark.parametrize("chunk", [None, 1, 2], ids=["default", "1", "2"])
+def test_read_string_links_name_a_bad_header_before_a_later_bad_line(tmp_path, monkeypatch, chunk):
+    if chunk is not None:
+        monkeypatch.setattr("seedmatch.network.stringdb._CHUNK_LINES", chunk)
+    path = write_lines(tmp_path, ["protein1 protein2 score", "9.A 9.B 500", "9.C 9.D"])
+    message = f"line 1 is 'protein1 protein2 score'; expected the header '{HEADER}'"
+    with pytest.raises(InputError, match=failure(path, message)):
         read_string_links(path)
 
 

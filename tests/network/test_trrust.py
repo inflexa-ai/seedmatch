@@ -269,6 +269,49 @@ def test_read_trrust_reads_more_than_one_chunk(tmp_path, monkeypatch):
         read_trrust(path)
 
 
+MODE_3 = f"line 3: mode 'activation' is not valid; expected {MODES}"
+NUL_3 = "line 3: the line has a NUL character (U+0000); expected text without NUL characters"
+FIELDS_3 = (
+    "line 3 has 3 fields; expected 4: the regulator, the target, the mode, and the PubMed IDs"
+)
+LONG_3 = "line 3: the line has more than 25 characters; expected at most 25, with the line end"
+
+
+@pytest.mark.parametrize("chunk", [None, 1, 2], ids=["default", "1", "2"])
+@pytest.mark.parametrize(
+    ("bad_lines", "message"),
+    [
+        (["TFC\tGC\tactivation\t3", "TFD\tGD\tRepression"], MODE_3),
+        (["TFC\tGC\tactivation\t3", "TFD\tGD\tRepression\t4\x00"], MODE_3),
+        (["TFC\tGC\tactivation\t3", "TFD\tGD\tRepression\t" + "4" * 20], MODE_3),
+        (["TFC\tGC\tUnknown\t3\x00", "TFD\tGD\tRepression"], NUL_3),
+        (["TFC\tGC\tUnknown\t3\x00", "TFD\tGD\tRepression\t" + "4" * 20], NUL_3),
+        (["TFC\tGC\tRepression", "TFD\tGD\tactivation\t4"], FIELDS_3),
+        (["TFC\tGC\tUnknown\t3\x00", "TFD\tGD\tactivation\t4"], NUL_3),
+        (["TFC\tGC\tRepression\t" + "3" * 20, "TFD\tGD\tactivation\t4"], LONG_3),
+    ],
+    ids=[
+        "value, fields",
+        "value, NUL",
+        "value, long",
+        "NUL, fields",
+        "NUL, long",
+        "fields, value",
+        "NUL, value",
+        "long, value",
+    ],
+)
+def test_read_trrust_names_the_first_bad_line_for_each_chunk_size(
+    tmp_path, monkeypatch, chunk, bad_lines, message
+):
+    if chunk is not None:
+        monkeypatch.setattr("seedmatch.network.trrust._CHUNK_LINES", chunk)
+    monkeypatch.setattr("seedmatch._lines.LINE_LIMIT", 25)
+    path = write_lines(tmp_path, ["TFA\tGA\tRepression\t1", "TFB\tGB\tActivation\t2", *bad_lines])
+    with pytest.raises(InputError, match=failure(path, message)):
+        read_trrust(path)
+
+
 def test_trrust_scores_use_the_regulators_D007():
     got = trrust_scores(read_trrust(SAMPLE), SEEDS)
     pd.testing.assert_frame_equal(got, MEAN_SCORES, check_exact=True)

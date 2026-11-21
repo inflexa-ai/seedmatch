@@ -97,7 +97,7 @@ def read_string_links(
       cutoff. R stops with `non-character argument` for the last input.
 
     R skips a byte order mark at the start of the file, and so does the reader. The line number
-    in a message counts the blank lines.
+    in a message counts the blank lines. The message names the first bad line of the file.
 
     The reader reads 2^16 lines at a time, and the time is linear in the number of lines. The work
     memory is one chunk, 10 bytes for each kept row, and the distinct protein IDs. The 10 bytes
@@ -164,12 +164,12 @@ class _Rows:
         """Parse the data lines of the chunk, and keep the links with a score of the threshold.
 
         `first` is the number of the first line. A chunk that starts at line 1 starts with the
-        header.
+        header. The first bad line of the chunk raises `InputError` after the data lines before it.
         """
         if first == 1:
             _check_header(chunk[0], source)
             self.has_header = True
-        is_data = field_lines(
+        lines = field_lines(
             chunk,
             first,
             source,
@@ -178,11 +178,17 @@ class _Rows:
             described="protein1, protein2, and combined_score",
         )
         if first == 1:
-            is_data[0] = False
+            lines.is_data[0] = False
+        self._keep(chunk, lines.is_data, first, source)
+        if lines.error is not None:
+            raise lines.error
+
+    def _keep(self, chunk: list[str], is_data: NDArray[np.bool_], first: int, source: str) -> None:
+        """Parse the data lines of the chunk, and keep the links with a score of the threshold."""
         numbers = first + np.flatnonzero(is_data)
         if not numbers.size:
             return
-        frame, scores = _read_chunk(chunk, is_data, first, source, numbers)
+        frame, scores = _read_chunk(chunk, is_data, source, numbers)
         self.data_lines += len(frame)
         keep = scores >= self.threshold
         if not keep.any():
@@ -238,7 +244,6 @@ def _check_header(line: str, source: str) -> None:
 def _read_chunk(
     chunk: list[str],
     is_data: NDArray[np.bool_],
-    first: int,
     source: str,
     numbers: NDArray[np.int64],
 ) -> tuple[pd.DataFrame, NDArray[np.int64]]:
@@ -254,14 +259,10 @@ def _read_chunk(
             frame = parse_data_lines(
                 chunk,
                 is_data,
-                first,
-                source,
                 separator=" ",
                 names=_COLUMNS,
                 dtype={"protein1": str, "protein2": str, "combined_score": np.dtype(np.int64)},
             )
-    except InputError:
-        raise
     except (ValueError, OverflowError):
         pass
     else:
@@ -269,7 +270,7 @@ def _read_chunk(
         if scores.min() >= 0 and scores.max() <= STRING_SCORE_MAX:
             _check_rows(frame, np.zeros(len(frame), dtype=np.bool_), numbers, source)
             return frame, scores
-    frame = parse_data_lines(chunk, is_data, first, source, separator=" ", names=_COLUMNS)
+    frame = parse_data_lines(chunk, is_data, separator=" ", names=_COLUMNS)
     values = pd.to_numeric(frame["combined_score"], errors="coerce").to_numpy(dtype=np.float64)
     is_score = (values == np.floor(values)) & (values >= 0) & (values <= STRING_SCORE_MAX)
     _check_rows(frame, ~is_score, numbers, source)

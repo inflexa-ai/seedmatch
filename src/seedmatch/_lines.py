@@ -5,7 +5,8 @@ import io
 from collections.abc import Hashable, Iterable, Iterator, Mapping, Sequence
 from functools import partial
 from itertools import chain, compress, islice, repeat
-from typing import Any, Final, TextIO
+from operator import contains
+from typing import Any, Final, NamedTuple, TextIO
 
 import numpy as np
 import pandas as pd
@@ -43,14 +44,28 @@ def read_chunks(handle: TextIO, chunk_lines: int) -> Iterator[tuple[int, list[st
         first += len(chunk)
 
 
+class DataLines(NamedTuple):
+    """The data lines of a chunk before its first bad line, and the error of that line.
+
+    The error is `None` if the chunk has no bad line.
+    """
+
+    is_data: NDArray[np.bool_]
+    error: InputError | None
+
+
 def field_lines(  # noqa: PLR0913
     chunk: list[str], first: int, source: str, *, separator: str, fields: int, described: str
-) -> NDArray[np.bool_]:
-    """Return which lines of the chunk are data lines. A bad line raises `InputError`.
+) -> DataLines:
+    """Return the data lines of the chunk and the error of its first bad line.
 
-    A data line has `fields - 1` separators. A blank line is no data line, thus `fields` is 2 or
-    more, and a smaller value raises `ValueError`. `first` is the number of the first line of the
-    chunk, and `described` names the fields in the message.
+    A bad line has more than `LINE_LIMIT` characters, another field count, or a NUL character.
+    The caller parses the data lines first, and then raises the error. Thus a bad value on an
+    earlier line raises first.
+
+    A data line has `fields - 1` separators. A blank line is no data line, and no bad line, thus
+    `fields` is 2 or more, and a smaller value raises `ValueError`. `first` is the number of the
+    first line of the chunk, and `described` names the fields in the message.
     """
     if fields < _MIN_FIELDS:
         message = f"fields is {fields}; expected {_MIN_FIELDS} or more"
@@ -58,52 +73,43 @@ def field_lines(  # noqa: PLR0913
     count = len(chunk)
     separators = np.fromiter(map(str.count, chunk, repeat(separator)), dtype=np.int64, count=count)
     lengths = np.fromiter(map(len, chunk), dtype=np.int64, count=count)
+    has_nul = np.fromiter(map(contains, chunk, repeat("\0")), dtype=np.bool_, count=count)
     is_data: NDArray[np.bool_] = separators == fields - 1
-    for offset in np.flatnonzero(~is_data | (lengths > LINE_LIMIT)):
+    for offset in np.flatnonzero(~is_data | has_nul | (lengths > LINE_LIMIT)):
         line, number = chunk[offset], first + int(offset)
         if len(line) > LINE_LIMIT:
             message = (
                 f"{source!r}: line {number}: the line has more than {LINE_LIMIT} characters; "
                 f"expected at most {LINE_LIMIT}, with the line end"
             )
-            raise InputError(message)
-        text = line.rstrip("\r\n")
-        if text:
-            found = text.count(separator) + 1
+        elif line.rstrip("\r\n") and separators[offset] != fields - 1:
+            found = int(separators[offset]) + 1
             noun = "field" if found == 1 else "fields"
             message = (
                 f"{source!r}: line {number} has {found} {noun}; expected {fields}: {described}"
             )
-            raise InputError(message)
-    return is_data
+        elif "\0" in line:
+            message = (
+                f"{source!r}: line {number}: the line has a NUL character (U+0000); "
+                "expected text without NUL characters"
+            )
+        else:
+            continue
+        is_data[offset:] = False
+        return DataLines(is_data, InputError(message))
+    return DataLines(is_data, None)
 
 
-def data_bytes(chunk: list[str], is_data: NDArray[np.bool_], first: int, source: str) -> bytes:
-    """Return the data lines of the chunk as UTF-8 bytes. A NUL character raises `InputError`.
-
-    `first` is the number of the first line of the chunk. The message names the line of the NUL
-    character.
-    """
-    flags = is_data.tolist()
-    text = "".join(compress(chunk, flags))
-    if "\0" in text:
-        bad = next(i for i, line in enumerate(compress(chunk, flags)) if "\0" in line)
-        number = first + int(np.flatnonzero(is_data)[bad])
-        message = (
-            f"{source!r}: line {number}: the line has a NUL character (U+0000); "
-            "expected text without NUL characters"
-        )
-        raise InputError(message)
+def data_bytes(chunk: list[str], is_data: NDArray[np.bool_]) -> bytes:
+    """Return the data lines of the chunk as UTF-8 bytes."""
     # Bytes, not a StringIO: pandas holds a text buffer in 4-byte characters, and the peak
     # memory of a chunk is then twice as large.
-    return text.encode()
+    return "".join(compress(chunk, is_data.tolist())).encode()
 
 
-def parse_data_lines(  # noqa: PLR0913
+def parse_data_lines(
     chunk: list[str],
     is_data: NDArray[np.bool_],
-    first: int,
-    source: str,
     *,
     separator: str,
     names: Sequence[str],
@@ -115,12 +121,11 @@ def parse_data_lines(  # noqa: PLR0913
     """Return the data lines of the chunk as a table with the columns `names`.
 
     A quote character, `#`, and the text `NA` are text, and a field keeps its spaces. `dtype`
-    goes to `pandas.read_csv` as it is. A NUL character raises `InputError` (see `data_bytes`).
-    `first` is the number of the first line of the chunk, and `field_lines` must have made
-    `is_data` for the same `separator` and the number of `names`.
+    goes to `pandas.read_csv` as it is. `field_lines` must have made `is_data` for the same
+    `separator` and the number of `names`.
     """
     return pd.read_csv(
-        io.BytesIO(data_bytes(chunk, is_data, first, source)),
+        io.BytesIO(data_bytes(chunk, is_data)),
         sep=separator,
         header=None,
         names=list(names),

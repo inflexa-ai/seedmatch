@@ -44,46 +44,82 @@ class Pipe(io.StringIO):
 
 
 def test_field_lines_count_the_fields_of_the_separator():
-    assert data_flags(["a b 1\n", "\n", "c d 2\r\n"]).tolist() == [True, False, True]
+    lines = data_flags(["a b 1\n", "\n", "c d 2\r\n"])
+    assert lines.is_data.tolist() == [True, False, True]
+    assert lines.error is None
 
 
 def test_field_lines_accept_2_fields():
     got = field_lines(["a b\n", "\n"], 1, "f", separator=" ", fields=2, described=DESCRIBED)
-    assert got.tolist() == [True, False]
+    assert got.is_data.tolist() == [True, False]
+    assert got.error is None
 
 
 def test_field_lines_name_the_line_of_a_bad_count():
-    message = f"'f': line 8 has 2 fields; expected 3: {DESCRIBED}"
-    with pytest.raises(InputError, match=failure(message)):
-        data_flags(["a b 1\n", "a b\n"], first=7)
+    lines = data_flags(["a b 1\n", "a b\n"], first=7)
+    assert lines.is_data.tolist() == [True, False]
+    assert type(lines.error) is InputError
+    assert str(lines.error) == f"'f': line 8 has 2 fields; expected 3: {DESCRIBED}"
 
 
 def test_field_lines_write_one_field_in_the_singular():
-    message = f"'f': line 3 has 1 field; expected 3: {DESCRIBED}"
-    with pytest.raises(InputError, match=failure(message)):
-        data_flags(["a b 1\n", "\n", "a\n"])
+    lines = data_flags(["a b 1\n", "\n", "a\n"])
+    assert lines.is_data.tolist() == [True, False, False]
+    assert str(lines.error) == f"'f': line 3 has 1 field; expected 3: {DESCRIBED}"
+
+
+def test_field_lines_mark_no_data_line_from_the_first_bad_line_on():
+    lines = data_flags(["a b 1\n", "a b\n", "c d 2\n", "\n"])
+    assert lines.is_data.tolist() == [True, False, False, False]
+    assert str(lines.error) == f"'f': line 2 has 2 fields; expected 3: {DESCRIBED}"
 
 
 def test_field_lines_reject_a_long_line():
     line = data_line(LINE_LIMIT + 1)
     assert len(line) == LINE_LIMIT + 1
-    message = LONG_LINE.replace("line 1", "line 2")
-    with pytest.raises(InputError, match=failure(message)):
-        data_flags(["a b 1\n", line])
+    lines = data_flags(["a b 1\n", line])
+    assert lines.is_data.tolist() == [True, False]
+    assert str(lines.error) == LONG_LINE.replace("line 1", "line 2")
 
 
 def test_field_lines_accept_a_line_of_the_limit_length():
     line = data_line(LINE_LIMIT)
     assert len(line) == LINE_LIMIT
-    assert data_flags([line]).tolist() == [True]
+    lines = data_flags([line])
+    assert lines.is_data.tolist() == [True]
+    assert lines.error is None
 
 
 def test_field_lines_name_the_bad_count_of_a_line_of_the_limit_length():
     line = "a" * (LINE_LIMIT - 1) + "\n"
     assert len(line) == LINE_LIMIT
-    message = f"'f': line 1 has 1 field; expected 3: {DESCRIBED}"
-    with pytest.raises(InputError, match=failure(message)):
-        data_flags([line])
+    lines = data_flags([line])
+    assert lines.is_data.tolist() == [False]
+    assert str(lines.error) == f"'f': line 1 has 1 field; expected 3: {DESCRIBED}"
+
+
+@pytest.mark.parametrize(
+    ("limit", "line", "message"),
+    [
+        (
+            10,
+            "a\0" + "b" * 10 + "\n",
+            (
+                "'f': line 1: the line has more than 10 characters; expected at most 10, "
+                "with the line end"
+            ),
+        ),
+        (LINE_LIMIT, "a\0 b\n", f"'f': line 1 has 2 fields; expected 3: {DESCRIBED}"),
+    ],
+    ids=["the length first", "the fields before the NUL"],
+)
+def test_field_lines_check_the_length_then_the_fields_then_the_nul_of_a_line(
+    monkeypatch, limit, line, message
+):
+    monkeypatch.setattr("seedmatch._lines.LINE_LIMIT", limit)
+    lines = data_flags([line])
+    assert lines.is_data.tolist() == [False]
+    assert str(lines.error) == message
 
 
 @pytest.mark.parametrize("fields", [1, 0, -1])
@@ -96,25 +132,26 @@ def test_field_lines_reject_fewer_than_two_fields(fields):
 
 def test_data_bytes_join_the_data_lines_in_utf8():
     chunk = ["a b 1\n", "\n", "é b 2\n"]
-    is_data = data_flags(chunk)
-    assert data_bytes(chunk, is_data, 1, "f") == "a b 1\né b 2\n".encode()
+    is_data = data_flags(chunk).is_data
+    assert data_bytes(chunk, is_data) == "a b 1\né b 2\n".encode()
 
 
 @pytest.mark.parametrize(
-    ("chunk", "number"),
+    ("chunk", "flags", "number"),
     [
-        (["a b 1\n", "a b 2\n", "a\0 b 3\n"], 12),
-        (["a b 1\n", "\n", "a b 2\n", "a\0 b 3\n"], 13),
+        (["a b 1\n", "a b 2\n", "a\0 b 3\n"], [True, True, False], 12),
+        (["a b 1\n", "\n", "a b 2\n", "a\0 b 3\n"], [True, False, True, False], 13),
     ],
     ids=["third line", "after a blank line"],
 )
-def test_data_bytes_name_the_line_of_a_nul_character(chunk, number):
+def test_field_lines_name_the_line_of_a_nul_character(chunk, flags, number):
+    lines = data_flags(chunk, first=10)
     message = (
         f"'f': line {number}: the line has a NUL character (U+0000); "
         "expected text without NUL characters"
     )
-    with pytest.raises(InputError, match=failure(message)):
-        data_bytes(chunk, data_flags(chunk, first=10), 10, "f")
+    assert lines.is_data.tolist() == flags
+    assert str(lines.error) == message
 
 
 def test_not_utf8_name_the_source_the_reason_and_the_kind():
@@ -171,8 +208,7 @@ def test_read_chunks_remove_the_byte_order_mark_of_line_1(chunk_lines):
 def test_read_chunks_after_a_byte_order_mark_leave_a_long_first_line_long(length):
     handle = io.StringIO("\ufeff" + data_line(length) + "\nc d 2\n")
     ((_, chunk),) = read_chunks(handle, 10)
-    with pytest.raises(InputError, match=failure(LONG_LINE)):
-        data_flags(chunk)
+    assert str(data_flags(chunk).error) == LONG_LINE
 
 
 @pytest.mark.parametrize("end", ["\n", "\r"])
@@ -180,36 +216,35 @@ def test_read_chunks_after_a_byte_order_mark_keep_a_first_line_of_the_limit_leng
     line = data_line(LINE_LIMIT - 1) + end
     ((_, chunk),) = read_chunks(io.StringIO("\ufeff" + line + "c d 2\n", newline=""), 10)
     assert chunk == [line, "c d 2\n"]
-    assert data_flags(chunk).tolist() == [True, True]
+    assert data_flags(chunk).is_data.tolist() == [True, True]
 
 
 def test_read_chunks_after_a_byte_order_mark_keep_a_last_line_of_the_limit_length():
     line = data_line(LINE_LIMIT)
     ((_, chunk),) = read_chunks(io.StringIO("\ufeff" + line), 10)
     assert chunk == [line]
-    assert data_flags(chunk).tolist() == [True]
+    assert data_flags(chunk).is_data.tolist() == [True]
 
 
 def test_read_chunks_read_a_handle_that_cannot_seek_with_a_byte_order_mark_and_a_long_line():
     handle = Pipe("\ufeff" + data_line(LINE_LIMIT) + "\nc d 2\n")
     ((_, chunk),) = read_chunks(handle, 10)
-    with pytest.raises(InputError, match=failure(LONG_LINE)):
-        data_flags(chunk)
+    assert str(data_flags(chunk).error) == LONG_LINE
 
 
 def test_read_chunks_read_a_handle_that_cannot_seek_with_a_byte_order_mark_and_a_valid_line():
     line = data_line(LINE_LIMIT - 1) + "\n"
     ((_, chunk),) = read_chunks(Pipe("\ufeff" + line + "c d 2\n"), 10)
     assert chunk == [line, "c d 2\n"]
-    assert data_flags(chunk).tolist() == [True, True]
+    assert data_flags(chunk).is_data.tolist() == [True, True]
 
 
 def outcome(text):
     ((_, chunk),) = read_chunks(io.StringIO(text, newline=""), 10)
-    try:
-        return "lines", data_flags(chunk).tolist(), chunk
-    except InputError as exc:
-        return "error", str(exc)
+    lines = data_flags(chunk)
+    if lines.error is not None:
+        return "error", str(lines.error)
+    return "lines", lines.is_data.tolist(), chunk
 
 
 @pytest.mark.parametrize("end", ["\n", "\r\n", "\r"])
@@ -236,13 +271,13 @@ def test_read_chunks_cut_a_long_first_line_at_the_limit_plus_two_with_the_mark_i
     assert not chunk[0].endswith("\n")
 
 
-def tab_lines(chunk, first=1):
-    return field_lines(chunk, first, "f", separator="\t", fields=3, described=DESCRIBED)
+def tab_lines(chunk):
+    return field_lines(chunk, 1, "f", separator="\t", fields=3, described=DESCRIBED)
 
 
 def test_parse_data_lines_keep_hash_quote_and_na_as_text():
     chunk = ["a#1\t'b\t\"c\n", "\n", 'NA\t"d\tNA\n', "e\t\t#\r\n", "'f\t\"g\th'\n"]
-    frame = parse_data_lines(chunk, tab_lines(chunk), 1, "f", separator="\t", names=["x", "y", "z"])
+    frame = parse_data_lines(chunk, tab_lines(chunk).is_data, separator="\t", names=["x", "y", "z"])
     assert frame.to_dict("list") == {
         "x": ["a#1", "NA", "e", "'f"],
         "y": ["'b", '"d', "", '"g'],
@@ -255,23 +290,10 @@ def test_parse_data_lines_give_the_dtype_to_the_parser():
     chunk = ["a\t5\t1.5\n", "b\t6\t2\n"]
     frame = parse_data_lines(
         chunk,
-        tab_lines(chunk),
-        1,
-        "f",
+        tab_lines(chunk).is_data,
         separator="\t",
         names=["x", "y", "z"],
         dtype={"x": str, "y": np.int64, "z": np.float64},
     )
     assert [str(dtype) for dtype in frame.dtypes] == ["object", "int64", "float64"]
     assert frame["y"].tolist() == [5, 6]
-
-
-def test_parse_data_lines_name_the_line_of_a_nul_character():
-    chunk = ["a\tb\tc\n", "\n", "d\te\tf\x00\n"]
-    message = (
-        "'f': line 13: the line has a NUL character (U+0000); expected text without NUL characters"
-    )
-    with pytest.raises(InputError, match=failure(message)):
-        parse_data_lines(
-            chunk, tab_lines(chunk, 11), 11, "f", separator="\t", names=["x", "y", "z"]
-        )

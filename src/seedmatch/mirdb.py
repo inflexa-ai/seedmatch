@@ -60,7 +60,7 @@ def read_mirdb(path: str | os.PathLike[str], *, species: str | None = None) -> p
     The limit of 1024 characters bounds the memory of a chunk in bytes. R reads a longer line.
     The longest line of the miRDB 6.0 file of `seedmatch-fetch mirdb` has 51 characters with its
     line end. R skips a byte order mark at the start of the file, and so does the reader. The line
-    number in a message counts the blank lines.
+    number in a message counts the blank lines. The message names the first bad line of the file.
 
     The reader reads 2^18 lines at a time, and the time is linear in the number of lines. Equal
     texts in the result are one object, thus the result holds about 40 bytes for each row and the
@@ -75,7 +75,7 @@ def read_mirdb(path: str | os.PathLike[str], *, species: str | None = None) -> p
     try:
         with open_text(file) as handle:
             for first, chunk in read_chunks(handle, _CHUNK_LINES):
-                is_data = field_lines(
+                lines = field_lines(
                     chunk,
                     first,
                     source,
@@ -83,7 +83,9 @@ def read_mirdb(path: str | os.PathLike[str], *, species: str | None = None) -> p
                     fields=len(_FIELDS),
                     described="the miRDB ID, the RefSeq ID, and the score",
                 )
-                rows.add(chunk, is_data, first, source, wanted)
+                rows.add(chunk, lines.is_data, first, source, wanted)
+                if lines.error is not None:
+                    raise lines.error
     except UnicodeDecodeError as exc:
         raise not_utf8(source, exc, "miRDB") from exc
     return rows.table(source, wanted)
@@ -128,7 +130,7 @@ class _Rows:
         numbers = first + np.flatnonzero(is_data)
         if not numbers.size:
             return
-        frame = parse_data_lines(chunk, is_data, first, source, separator="\t", names=_FIELDS)
+        frame = parse_data_lines(chunk, is_data, separator="\t", names=_FIELDS)
         scores = _parse_scores(frame["target_score"].tolist(), numbers, source)
         self.data_lines += len(frame)
         if wanted is not None:

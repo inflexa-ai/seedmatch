@@ -65,11 +65,12 @@ def read_trrust(path: str | os.PathLike[str]) -> pd.DataFrame:
     - a file without a data line
 
     R skips a byte order mark at the start of the file, and so does the reader. The line number in
-    a message counts the blank lines. The reader reads 2^16 lines at a time, and the time is
-    linear in the number of lines. The result holds four pointers (32 bytes) for each row, and
-    the distinct strings. The TRRUST human file of `seedmatch-fetch trrust` has 9,396 lines. The
-    longest line has 273 characters with its line end. The read takes 0.008 seconds, and the peak
-    memory above the start is about 8 MB.
+    a message counts the blank lines. The message names the first bad line of the file.
+
+    The reader reads 2^16 lines at a time, and the time is linear in the number of lines. The
+    result holds four pointers (32 bytes) for each row, and the distinct strings. The TRRUST human
+    file of `seedmatch-fetch trrust` has 9,396 lines. The longest line has 273 characters with its
+    line end. The read takes 0.008 seconds, and the peak memory above the start is about 8 MB.
     """
     source = os.fspath(path)
     file = local_path(source)
@@ -77,7 +78,7 @@ def read_trrust(path: str | os.PathLike[str]) -> pd.DataFrame:
     try:
         with open_text(file) as handle:
             for first, chunk in read_chunks(handle, _CHUNK_LINES):
-                is_data = field_lines(
+                lines = field_lines(
                     chunk,
                     first,
                     source,
@@ -85,7 +86,9 @@ def read_trrust(path: str | os.PathLike[str]) -> pd.DataFrame:
                     fields=len(_COLUMNS),
                     described="the regulator, the target, the mode, and the PubMed IDs",
                 )
-                rows.add(chunk, is_data, first, source)
+                rows.add(chunk, lines.is_data, first, source)
+                if lines.error is not None:
+                    raise lines.error
     except UnicodeDecodeError as exc:
         raise not_utf8(source, exc, "TRRUST") from exc
     return rows.table(source)
@@ -110,7 +113,7 @@ class _Rows:
         numbers = first + np.flatnonzero(is_data)
         if not numbers.size:
             return
-        frame = parse_data_lines(chunk, is_data, first, source, separator="\t", names=_COLUMNS)
+        frame = parse_data_lines(chunk, is_data, separator="\t", names=_COLUMNS)
         _check_rows(frame, numbers, source)
         self.data_lines += len(frame)
         for name in _COLUMNS:
