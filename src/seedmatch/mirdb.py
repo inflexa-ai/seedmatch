@@ -14,7 +14,6 @@ from seedmatch._io import local_path, open_text
 from seedmatch._lines import (
     field_lines,
     frame_of,
-    not_utf8,
     parse_data_lines,
     read_chunks,
     shared_texts,
@@ -74,22 +73,19 @@ def read_mirdb(path: str | os.PathLike[str], *, species: str | None = None) -> p
     file = local_path(source)
     wanted = _as_species(species)
     rows = _Rows()
-    try:
-        with open_text(file) as handle:
-            for first, chunk in read_chunks(handle, _CHUNK_LINES):
-                lines = field_lines(
-                    chunk,
-                    first,
-                    source,
-                    separator="\t",
-                    fields=len(_FIELDS),
-                    described="the miRDB ID, the RefSeq ID, and the score",
-                )
-                rows.add(chunk, lines.is_data, first, source, wanted)
-                if lines.error is not None:
-                    raise lines.error
-    except UnicodeDecodeError as exc:
-        raise not_utf8(source, exc, "miRDB") from exc
+    with open_text(file, errors="surrogateescape") as handle:
+        for first, chunk in read_chunks(handle, _CHUNK_LINES):
+            lines = field_lines(
+                chunk,
+                first,
+                source,
+                separator="\t",
+                fields=len(_FIELDS),
+                described="the miRDB ID, the RefSeq ID, and the score",
+            )
+            rows.add(chunk, lines.is_data, first, source, wanted)
+            if lines.error is not None:
+                raise lines.error
     return rows.table(source, wanted)
 
 

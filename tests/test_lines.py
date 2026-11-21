@@ -3,13 +3,13 @@ import re
 
 import numpy as np
 import pytest
+from helpers import NOT_UTF8
 
 from seedmatch._lines import (
     LINE_LIMIT,
     data_bytes,
     field_lines,
     frame_of,
-    not_utf8,
     parse_data_lines,
     read_chunks,
 )
@@ -109,11 +109,27 @@ def test_field_lines_name_the_bad_count_of_a_line_of_the_limit_length():
                 "with the line end"
             ),
         ),
+        (
+            10,
+            "a\udcff" + "b" * 10 + "\n",
+            (
+                "'f': line 1: the line has more than 10 characters; expected at most 10, "
+                "with the line end"
+            ),
+        ),
+        (LINE_LIMIT, "a\udcff b\n", f"'f': line 1: {NOT_UTF8.format('invalid start byte')}"),
+        (LINE_LIMIT, "a\udcff\0 b c\n", f"'f': line 1: {NOT_UTF8.format('invalid start byte')}"),
         (LINE_LIMIT, "a\0 b\n", f"'f': line 1 has 2 fields; expected 3: {DESCRIBED}"),
     ],
-    ids=["the length first", "the fields before the NUL"],
+    ids=[
+        "the length first",
+        "the length before the text",
+        "the text before the fields",
+        "the text before the NUL",
+        "the fields before the NUL",
+    ],
 )
-def test_field_lines_check_the_length_then_the_fields_then_the_nul_of_a_line(
+def test_field_lines_check_the_length_the_text_the_fields_and_the_nul_of_a_line(
     monkeypatch, limit, line, message
 ):
     monkeypatch.setattr("seedmatch._lines.LINE_LIMIT", limit)
@@ -171,14 +187,21 @@ def test_field_lines_name_the_line_of_a_nul_character(chunk, flags, number):
     assert str(lines.error) == message
 
 
-def test_not_utf8_name_the_source_the_reason_and_the_kind():
-    error = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
-    got = not_utf8("f", error, "TRRUST")
-    assert type(got) is InputError
-    assert str(got) == (
-        "'f': the file is not valid UTF-8 text (invalid start byte); "
-        "expected a text or gzip TRRUST file"
-    )
+@pytest.mark.parametrize(
+    ("line", "reason"),
+    [
+        ("a\udcff b 3\n", "invalid start byte"),
+        ("a\udce2\udc82 b 3\n", "invalid continuation byte"),
+        ("a b 3\udcc3", "unexpected end of data"),
+    ],
+    ids=["start byte", "continuation byte", "end of the data"],
+)
+def test_field_lines_name_the_line_and_the_reason_of_text_that_is_not_utf8(line, reason):
+    """The reader decodes with surrogateescape, thus each byte that is not UTF-8 is a surrogate."""
+    lines = data_flags(["a b 1\n", "é b 2\n", "\n", line, "a b 4\n"], first=10)
+    assert lines.is_data.tolist() == [True, True, False, False, False]
+    assert type(lines.error) is InputError
+    assert str(lines.error) == f"'f': line 13: {NOT_UTF8.format(reason)}"
 
 
 def test_frame_of_keeps_the_memory_and_the_dtype_of_each_array():

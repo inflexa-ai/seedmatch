@@ -25,9 +25,12 @@ def read_chunks(handle: TextIO, chunk_lines: int) -> Iterator[tuple[int, list[st
     `LINE_LIMIT + 1` characters and no line end, thus a chunk holds a bounded number of
     characters. Line 1 is the exception: its first part has `LINE_LIMIT + 2` characters, or
     `LINE_LIMIT + 1` after the byte order mark, which line 1 loses. The handle does not need to
-    seek. A `chunk_lines` below 1 raises `ValueError` at the first step of the iteration. The
-    iteration decodes the file, thus a `UnicodeDecodeError` comes from the loop, and the loop must
-    be inside the `try` that calls `not_utf8`.
+    seek. A `chunk_lines` below 1 raises `ValueError` at the first step of the iteration.
+
+    The handle must decode with `errors="surrogateescape"`. The decoder of Python reads about
+    8 KiB ahead of the line that it gives. Thus a strict decoder raises for a bad byte before
+    `field_lines` reads the lines in front of it. With `surrogateescape`, `field_lines` names the
+    line of the bad byte.
     """
     if chunk_lines < 1:
         message = f"chunk_lines is {chunk_lines}; expected 1 or more"
@@ -42,6 +45,20 @@ def read_chunks(handle: TextIO, chunk_lines: int) -> Iterator[tuple[int, list[st
     while chunk := list(islice(parts, chunk_lines)):
         yield first, chunk
         first += len(chunk)
+
+
+def _not_utf8_reason(line: str) -> str | None:
+    """Return the reason of the decoder for the first byte of the line that is not UTF-8.
+
+    The reader decodes with `surrogateescape`, which keeps each such byte as a character.
+    """
+    if line.isascii():
+        return None
+    try:
+        line.encode("utf-8", "surrogateescape").decode("utf-8")
+    except UnicodeDecodeError as exc:
+        return exc.reason
+    return None
 
 
 class DataLines(NamedTuple):
@@ -59,9 +76,10 @@ def field_lines(  # noqa: PLR0913
 ) -> DataLines:
     """Return the data lines of the chunk and the error of its first bad line.
 
-    A bad line has more than `LINE_LIMIT` characters, another field count, or a NUL character.
-    The caller parses the data lines first, and then raises the error. Thus a bad value on an
-    earlier line raises first.
+    A bad line has more than `LINE_LIMIT` characters, a byte that is not UTF-8, another field
+    count, or a NUL character. The error of a line is the first of these, in this order. The
+    caller parses the data lines first, and then raises the error. Thus a bad value on an earlier
+    line raises first.
 
     A data line has `fields - 1` separators. A blank line is no data line, and no bad line, thus
     `fields` is 2 or more, and a smaller value raises `ValueError`. `first` is the number of the
@@ -74,13 +92,20 @@ def field_lines(  # noqa: PLR0913
     separators = np.fromiter(map(str.count, chunk, repeat(separator)), dtype=np.int64, count=count)
     lengths = np.fromiter(map(len, chunk), dtype=np.int64, count=count)
     has_nul = np.fromiter(map(contains, chunk, repeat("\0")), dtype=np.bool_, count=count)
+    # str.isascii takes constant time, and a line of ASCII is valid UTF-8.
+    is_ascii = np.fromiter(map(str.isascii, chunk), dtype=np.bool_, count=count)
     is_data: NDArray[np.bool_] = separators == fields - 1
-    for offset in np.flatnonzero(~is_data | has_nul | (lengths > LINE_LIMIT)):
+    for offset in np.flatnonzero(~is_data | has_nul | ~is_ascii | (lengths > LINE_LIMIT)):
         line, number = chunk[offset], first + int(offset)
         if len(line) > LINE_LIMIT:
             message = (
                 f"{source!r}: line {number}: the line has more than {LINE_LIMIT} characters; "
                 f"expected at most {LINE_LIMIT}, with the line end"
+            )
+        elif (reason := _not_utf8_reason(line)) is not None:
+            message = (
+                f"{source!r}: line {number}: the line is not valid UTF-8 text ({reason}); "
+                "expected UTF-8 text, or gzip, bzip2, or xz of UTF-8 text"
             )
         elif line.rstrip("\r\n") and separators[offset] != fields - 1:
             found = int(separators[offset]) + 1
@@ -149,15 +174,6 @@ def parse_data_lines(
         skip_blank_lines=False,
         skiprows=1,
     )
-
-
-def not_utf8(source: str, error: UnicodeDecodeError, kind: str) -> InputError:
-    """Return the `InputError` for a file that is not valid UTF-8. `kind` names the file."""
-    message = (
-        f"{source!r}: the file is not valid UTF-8 text ({error.reason}); "
-        f"expected a text or gzip {kind} file"
-    )
-    return InputError(message)
 
 
 def vocabulary_codes(column: pd.Series, vocabulary: dict[str, int]) -> NDArray[np.int32]:

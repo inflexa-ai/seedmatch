@@ -4,7 +4,7 @@ import re
 
 import pandas as pd
 import pytest
-from helpers import DATA, assert_frame_matches_golden, golden_note
+from helpers import DATA, NOT_UTF8, assert_frame_matches_golden, golden_note
 
 import seedmatch
 from seedmatch.errors import InputError
@@ -22,7 +22,10 @@ R_NAMES = {
 
 def write_lines(tmp_path, lines, name="x.txt", ending="\n"):
     path = tmp_path / name
-    path.write_bytes("".join(f"{line}{ending}" for line in lines).encode())
+    # surrogateescape writes a "\udcff" in a line as the byte 0xFF, which is not UTF-8.
+    path.write_bytes(
+        "".join(f"{line}{ending}" for line in lines).encode("utf-8", "surrogateescape")
+    )
     return path
 
 
@@ -217,10 +220,36 @@ def test_read_mirdb_rejects_an_empty_file(tmp_path, text):
         read_mirdb(path)
 
 
-def test_read_mirdb_rejects_text_that_is_not_utf8(tmp_path):
+@pytest.mark.parametrize(
+    ("data", "number", "reason"),
+    [
+        (b"hsa-a\tNM_1\t50\nhsa-\xff\tNM_2\t60\n", 2, "invalid start byte"),
+        (b"hsa-a\tNM_1\t50\nhsa-b\tNM_2\t6\xc3", 2, "unexpected end of data"),
+        (b"\xef\xbbhsa-a\tNM_1\t50\n", 1, "invalid continuation byte"),
+        (gzip.compress(b"hsa-a\tNM_1\t50\n\nhsa-\xff\tNM_2\t60\n"), 3, "invalid start byte"),
+    ],
+    ids=["a bad byte", "the end of the file", "an incomplete byte order mark", "gzip"],
+)
+def test_read_mirdb_names_the_line_of_text_that_is_not_utf8(tmp_path, data, number, reason):
     path = tmp_path / "x.txt"
-    path.write_bytes(b"hsa-a\tNM_1\t50\nhsa-\xff\tNM_2\t60\n")
-    with pytest.raises(InputError, match=r"x\.txt': the file is not valid UTF-8 text .*; expected"):
+    path.write_bytes(data)
+    message = f"line {number}: {NOT_UTF8.format(reason)}"
+    with pytest.raises(InputError, match=failure(path, message)):
+        read_mirdb(path)
+
+
+@pytest.mark.parametrize("chunk", [None, 1], ids=["default", "1"])
+def test_read_mirdb_names_a_bad_line_before_text_that_is_not_utf8_after_many_lines(
+    tmp_path, monkeypatch, chunk
+):
+    """The text reader of Python decodes about 8 KiB ahead of the line that it gives."""
+    if chunk is not None:
+        monkeypatch.setattr("seedmatch.mirdb._CHUNK_LINES", chunk)
+    lines = ["hsa-a\tNM_1\t50", "hsa-b\tNM_2", *["hsa-c\tNM_3\t60"] * 1000, "hsa-\udcff\tNM_4\t70"]
+    path = write_lines(tmp_path, lines)
+    with pytest.raises(
+        InputError, match=failure(path, f"line 2 has 2 fields; expected 3: {LINE_FORMAT}")
+    ):
         read_mirdb(path)
 
 
@@ -357,6 +386,7 @@ SCORE_ABC = "line 3: score 'abc' is not a finite number; expected a decimal numb
 NUL_3 = "line 3: the line has a NUL character (U+0000); expected text without NUL characters"
 FIELDS_3 = "line 3 has 2 fields; expected 3: the miRDB ID, the RefSeq ID, and the score"
 LONG_3 = "line 3: the line has more than 25 characters; expected at most 25, with the line end"
+UTF8_3 = f"line 3: {NOT_UTF8.format('invalid start byte')}"
 
 
 @pytest.mark.parametrize("chunk", [None, 1, 2], ids=["default", "1", "2"])
@@ -371,6 +401,10 @@ LONG_3 = "line 3: the line has more than 25 characters; expected at most 25, wit
         (["hsa-c\tNM_3", "hsa-d\tNM_4\tabc"], FIELDS_3),
         (["hsa-c\tNM_3\t3\x000", "hsa-d\tNM_4\tabc"], NUL_3),
         (["hsa-c\tNM_3\t" + "3" * 30, "hsa-d\tNM_4\tabc"], LONG_3),
+        (["hsa-c\tNM_3\tabc", "hsa-\udcffd\tNM_4\t40"], SCORE_ABC),
+        (["hsa-c\tNM_3", "hsa-\udcffd\tNM_4\t40"], FIELDS_3),
+        (["hsa-\udcffc\tNM_3\t30", "hsa-d\tNM_4\tabc"], UTF8_3),
+        (["hsa-\udcffc\tNM_3", "hsa-d\tNM_4\tabc"], UTF8_3),
     ],
     ids=[
         "value, fields",
@@ -381,6 +415,10 @@ LONG_3 = "line 3: the line has more than 25 characters; expected at most 25, wit
         "fields, value",
         "NUL, value",
         "long, value",
+        "value, UTF-8",
+        "fields, UTF-8",
+        "UTF-8, value",
+        "UTF-8 and fields, value",
     ],
 )
 def test_read_mirdb_names_the_first_bad_line_for_each_chunk_size(

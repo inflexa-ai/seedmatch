@@ -43,6 +43,11 @@ from seedmatch.sequence import SequenceSet, read_fasta
 DATA = Path(__file__).parent / "data"
 GOLDEN = Path(__file__).parent / "golden"
 GUIDE = "UUAUAGAGCAAGAACACUGUUUU"
+# The message of a table line that is not UTF-8, without the source and the line. {} is the reason.
+NOT_UTF8 = (
+    "the line is not valid UTF-8 text ({}); "
+    "expected UTF-8 text, or gzip, bzip2, or xz of UTF-8 text"
+)
 
 
 COMMENT_LINES = "".join(f"# comment {i}\n" for i in range(5000)).encode()

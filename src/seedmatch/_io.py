@@ -10,7 +10,7 @@ import zlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Final, TextIO
+from typing import Final, Literal, TextIO
 
 from seedmatch.errors import InputError
 
@@ -93,18 +93,22 @@ def _decompressed(
 
 
 @contextmanager
-def open_text(path: Path) -> Iterator[TextIO]:
+def open_text(
+    path: Path, *, errors: Literal["strict", "surrogateescape"] = "strict"
+) -> Iterator[TextIO]:
     """Open the file as UTF-8 text. The first bytes, not the suffix, show a compressed file.
 
     A directory, and compressed data that is damaged or truncated, raise `InputError`. The error
-    for damaged data comes when the reader of the text reaches the damage.
+    for damaged data comes when the reader of the text reaches the damage. `errors` goes to the
+    UTF-8 decoder. With `surrogateescape`, each byte that is not UTF-8 becomes a character from
+    U+DC80 to U+DCFF, and no `UnicodeDecodeError` occurs.
     """
     shown = os.fspath(path)
     raw = open_binary(path)
     with raw:
         binary = _decompressed(raw)
         # pandas also opens a path with newline="", so its parser gets each line end unchanged.
-        with io.TextIOWrapper(binary, encoding="utf-8", newline="") as text:
+        with io.TextIOWrapper(binary, encoding="utf-8", errors=errors, newline="") as text:
             try:
                 yield text
             except _DAMAGED_DATA as exc:

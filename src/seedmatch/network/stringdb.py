@@ -27,7 +27,6 @@ from seedmatch._io import local_path, open_text
 from seedmatch._lines import (
     field_lines,
     frame_of,
-    not_utf8,
     parse_data_lines,
     read_chunks,
     vocabulary_codes,
@@ -117,12 +116,9 @@ def read_string_links(
     threshold = _as_threshold(score_threshold)
     probability = _as_percentile(percentile)
     rows = _Rows(threshold)
-    try:
-        with open_text(file) as handle:
-            for first, chunk in read_chunks(handle, _CHUNK_LINES):
-                rows.add(chunk, first, source)
-    except UnicodeDecodeError as exc:
-        raise not_utf8(source, exc, "STRING links") from exc
+    with open_text(file, errors="surrogateescape") as handle:
+        for first, chunk in read_chunks(handle, _CHUNK_LINES):
+            rows.add(chunk, first, source)
     return rows.result(source, probability)
 
 

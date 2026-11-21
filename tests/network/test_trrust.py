@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import DATA, assert_frame_matches_golden, exactly, golden, golden_note
+from helpers import DATA, NOT_UTF8, assert_frame_matches_golden, exactly, golden, golden_note
 
 import seedmatch
 from seedmatch.errors import InputError, SeedMatchWarning
@@ -27,7 +27,10 @@ PREFIX = ["TFA\tGA\tRepression\t1", "TFB\tGB\tActivation\t2", "TFC\tGC\tUnknown\
 
 def write_lines(tmp_path, lines, name="x.tsv", ending="\n"):
     path = tmp_path / name
-    path.write_bytes("".join(f"{line}{ending}" for line in lines).encode())
+    # surrogateescape writes a "\udcff" in a line as the byte 0xFF, which is not UTF-8.
+    path.write_bytes(
+        "".join(f"{line}{ending}" for line in lines).encode("utf-8", "surrogateescape")
+    )
     return path
 
 
@@ -205,11 +208,11 @@ def test_read_trrust_rejects_an_empty_file(tmp_path, text):
         read_trrust(path)
 
 
-def test_read_trrust_rejects_text_that_is_not_utf8(tmp_path):
+def test_read_trrust_names_the_line_of_text_that_is_not_utf8(tmp_path):
     path = tmp_path / "x.tsv"
     path.write_bytes(b"TFA\tGA\tRepression\t1\nTF\xff\tGB\tActivation\t2\n")
-    message = r"x\.tsv': the file is not valid UTF-8 text .*; expected a text or gzip TRRUST file$"
-    with pytest.raises(InputError, match=message):
+    message = f"line 2: {NOT_UTF8.format('invalid start byte')}"
+    with pytest.raises(InputError, match=failure(path, message)):
         read_trrust(path)
 
 
@@ -316,6 +319,7 @@ FIELDS_3 = (
     "line 3 has 3 fields; expected 4: the regulator, the target, the mode, and the PubMed IDs"
 )
 LONG_3 = "line 3: the line has more than 25 characters; expected at most 25, with the line end"
+UTF8_3 = f"line 3: {NOT_UTF8.format('invalid start byte')}"
 
 
 @pytest.mark.parametrize("chunk", [None, 1, 2], ids=["default", "1", "2"])
@@ -330,6 +334,8 @@ LONG_3 = "line 3: the line has more than 25 characters; expected at most 25, wit
         (["TFC\tGC\tRepression", "TFD\tGD\tactivation\t4"], FIELDS_3),
         (["TFC\tGC\tUnknown\t3\x00", "TFD\tGD\tactivation\t4"], NUL_3),
         (["TFC\tGC\tRepression\t" + "3" * 20, "TFD\tGD\tactivation\t4"], LONG_3),
+        (["TFC\tGC\tactivation\t3", "TF\udcffD\tGD\tRepression\t4"], MODE_3),
+        (["TF\udcffC\tGC\tUnknown\t3", "TFD\tGD\tactivation\t4"], UTF8_3),
     ],
     ids=[
         "value, fields",
@@ -340,6 +346,8 @@ LONG_3 = "line 3: the line has more than 25 characters; expected at most 25, wit
         "fields, value",
         "NUL, value",
         "long, value",
+        "value, UTF-8",
+        "UTF-8, value",
     ],
 )
 def test_read_trrust_names_the_first_bad_line_for_each_chunk_size(

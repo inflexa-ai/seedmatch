@@ -22,7 +22,6 @@ from seedmatch._io import local_path, open_text
 from seedmatch._lines import (
     field_lines,
     frame_of,
-    not_utf8,
     parse_data_lines,
     read_chunks,
     vocabulary_codes,
@@ -76,22 +75,19 @@ def read_trrust(path: str | os.PathLike[str]) -> pd.DataFrame:
     source = os.fspath(path)
     file = local_path(source)
     rows = _Rows()
-    try:
-        with open_text(file) as handle:
-            for first, chunk in read_chunks(handle, _CHUNK_LINES):
-                lines = field_lines(
-                    chunk,
-                    first,
-                    source,
-                    separator="\t",
-                    fields=len(_COLUMNS),
-                    described="the regulator, the target, the mode, and the PubMed IDs",
-                )
-                rows.add(chunk, lines.is_data, first, source)
-                if lines.error is not None:
-                    raise lines.error
-    except UnicodeDecodeError as exc:
-        raise not_utf8(source, exc, "TRRUST") from exc
+    with open_text(file, errors="surrogateescape") as handle:
+        for first, chunk in read_chunks(handle, _CHUNK_LINES):
+            lines = field_lines(
+                chunk,
+                first,
+                source,
+                separator="\t",
+                fields=len(_COLUMNS),
+                described="the regulator, the target, the mode, and the PubMed IDs",
+            )
+            rows.add(chunk, lines.is_data, first, source)
+            if lines.error is not None:
+                raise lines.error
     return rows.table(source)
 
 

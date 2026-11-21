@@ -5,7 +5,7 @@ import warnings
 
 import pandas as pd
 import pytest
-from helpers import DATA, exactly, golden, golden_note, golden_rows
+from helpers import DATA, NOT_UTF8, exactly, golden, golden_note, golden_rows
 
 import seedmatch
 from seedmatch.errors import InputError
@@ -24,7 +24,10 @@ PREFIX = [HEADER, "9.A 9.B 500"]
 
 def write_lines(tmp_path, lines, name="x.txt", ending="\n"):
     path = tmp_path / name
-    path.write_bytes("".join(f"{line}{ending}" for line in lines).encode())
+    # surrogateescape writes a "\udcff" in a line as the byte 0xFF, which is not UTF-8.
+    path.write_bytes(
+        "".join(f"{line}{ending}" for line in lines).encode("utf-8", "surrogateescape")
+    )
     return path
 
 
@@ -254,14 +257,11 @@ def test_read_string_links_reject_a_url():
         read_string_links("https://x")
 
 
-def test_read_string_links_reject_text_that_is_not_utf8(tmp_path):
+def test_read_string_links_name_the_line_of_text_that_is_not_utf8(tmp_path):
     path = tmp_path / "x.txt"
     path.write_bytes(HEADER.encode() + b"\n9.A 9.B 500\n9.C \xff 600\n")
-    message = (
-        r"x\.txt': the file is not valid UTF-8 text .*; "
-        r"expected a text or gzip STRING links file$"
-    )
-    with pytest.raises(InputError, match=message):
+    message = f"line 3: {NOT_UTF8.format('invalid start byte')}"
+    with pytest.raises(InputError, match=failure(path, message)):
         read_string_links(path)
 
 
@@ -392,6 +392,7 @@ SCORE_3 = f"line 3: score 'abc' {NOT_A_SCORE}"
 NUL_3 = "line 3: the line has a NUL character (U+0000); expected text without NUL characters"
 FIELDS_3 = "line 3 has 2 fields; expected 3: protein1, protein2, and combined_score"
 LONG_3 = "line 3: the line has more than 40 characters; expected at most 40, with the line end"
+UTF8_3 = f"line 3: {NOT_UTF8.format('invalid start byte')}"
 
 
 @pytest.mark.parametrize("chunk", [None, 1, 2], ids=["default", "1", "2"])
@@ -406,6 +407,8 @@ LONG_3 = "line 3: the line has more than 40 characters; expected at most 40, wit
         (["9.C 9.D", "9.E 9.F abc"], FIELDS_3),
         (["9.C 9.D 6\x0000", "9.E 9.F abc"], NUL_3),
         (["9.C 9.D " + "6" * 40, "9.E 9.F abc"], LONG_3),
+        (["9.C 9.D abc", "9.\udcffE 9.F 700"], SCORE_3),
+        (["9.\udcffC 9.D 600", "9.E 9.F abc"], UTF8_3),
     ],
     ids=[
         "value, fields",
@@ -416,6 +419,8 @@ LONG_3 = "line 3: the line has more than 40 characters; expected at most 40, wit
         "fields, value",
         "NUL, value",
         "long, value",
+        "value, UTF-8",
+        "UTF-8, value",
     ],
 )
 def test_read_string_links_name_the_first_bad_line_for_each_chunk_size(
