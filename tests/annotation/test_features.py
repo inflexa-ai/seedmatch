@@ -721,13 +721,19 @@ def test_reference_features_defaults_are_the_defaults_of_load_annotations():
 
 
 def test_features_reject_a_feature_of_another_type():
-    message = "feature '3UTR' has type str; expected a FeatureType"
+    message = (
+        "feature '3UTR' is not valid; expected one of "
+        "FeatureType.UTR3, FeatureType.UTR5, FeatureType.EXONS, FeatureType.CDS"
+    )
     with fixture_reference() as ref, pytest.raises(InputError, match=re.escape(message)):
         ref.features("3UTR")
 
 
 def test_features_reject_a_per_gene_of_another_type():
-    message = "per_gene 'union' has type str; expected a PerGene"
+    message = (
+        "per_gene 'union' is not valid; expected one of "
+        "PerGene.EACH_TRANSCRIPT, PerGene.LONGEST, PerGene.UNION"
+    )
     with fixture_reference() as ref, pytest.raises(InputError, match=re.escape(message)):
         ref.features(FeatureType.UTR3, per_gene="union")
 

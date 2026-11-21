@@ -8,7 +8,7 @@ from typing import Final, Self
 
 import pandas as pd
 
-from seedmatch._checks import as_limit, check_not_negative, shown
+from seedmatch._checks import as_limit, as_member, check_not_negative, check_type
 from seedmatch._io import local_path
 from seedmatch.annotation.ensdb import AnnotationDb
 from seedmatch.annotation.extract import extract_sequences
@@ -104,7 +104,7 @@ class Reference:
 
         The default filter is the default of `load_annotations`.
         """
-        _check_types(("transcript_filter", transcript_filter, TranscriptFilter))
+        check_type("transcript_filter", transcript_filter, TranscriptFilter)
         return self.annotation.transcripts(transcript_filter)
 
     def features(
@@ -119,11 +119,9 @@ class Reference:
         `per_gene` selects the transcripts of each gene. The default filter is the default of
         `load_annotations`.
         """
-        _check_types(
-            ("feature", feature, FeatureType),
-            ("transcript_filter", transcript_filter, TranscriptFilter),
-            ("per_gene", per_gene, PerGene),
-        )
+        as_member("feature", feature, FeatureType)
+        check_type("transcript_filter", transcript_filter, TranscriptFilter)
+        as_member("per_gene", per_gene, PerGene)
         rows = self.annotation.exon_rows(
             transcript_filter, coding_only=feature is not FeatureType.EXONS
         )
@@ -164,16 +162,6 @@ class Reference:
     def __exit__(self, *_exc_info: object) -> None:
         """Close the reference."""
         self.close()
-
-
-def _check_types(*checks: tuple[str, object, type]) -> None:
-    """Raise `InputError` for the first value of the (name, value, type) checks of another type."""
-    for name, value, kind in checks:
-        if not isinstance(value, kind):
-            message = (
-                f"{name} {shown(value)} has type {type(value).__name__}; expected a {kind.__name__}"
-            )
-            raise InputError(message)
 
 
 def _check_agreement(annotation: AnnotationDb, genome: Genome) -> None:

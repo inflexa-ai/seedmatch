@@ -223,7 +223,10 @@ def test_min_width_rejects_a_value_that_is_not_a_width(min_width, message):
 
 
 def test_sequences_reject_a_feature_of_another_type():
-    message = "feature '3UTR' has type str; expected a FeatureType"
+    message = (
+        "feature '3UTR' is not valid; expected one of "
+        "FeatureType.UTR3, FeatureType.UTR5, FeatureType.EXONS, FeatureType.CDS"
+    )
     with fixture_reference() as ref, pytest.raises(InputError, match=re.escape(message)):
         ref.sequences("3UTR")
 
@@ -231,9 +234,7 @@ def test_sequences_reject_a_feature_of_another_type():
 @pytest.mark.parametrize("value", [None, {"canonical": False}, "default"])
 @pytest.mark.parametrize("method", ["transcripts", "features", "sequences"])
 def test_a_filter_that_is_not_a_transcript_filter_raises(method, value):
-    message = (
-        f"transcript_filter {value!r} has type {type(value).__name__}; expected a TranscriptFilter"
-    )
+    message = f"transcript_filter has type {type(value).__name__}; expected a TranscriptFilter"
     feature = () if method == "transcripts" else (FeatureType.UTR3,)
     with fixture_reference() as ref, pytest.raises(InputError, match=re.escape(message)):
         getattr(ref, method)(*feature, value)
