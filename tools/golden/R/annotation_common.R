@@ -124,3 +124,34 @@ sequences_table <- function(result) {
     sequence = unname(as.character(seqs))
   )
 }
+
+# Write tests/golden/annotation/<build>/<config>.tsv.gz for each config. The EnsDb and the 2bit file
+# are in file.path(SEEDMATCH_TEST_REFS, build). The feature sequences of a real reference are too
+# large for a golden file. tests/annotation/test_refs.py computes the same digest from the
+# uppercase text of each sequence.
+write_reference_goldens <- function(build, ensdb, twobit, configs, script) {
+  stopifnot(configs %in% names(ANNOTATION_CONFIGS))
+  if (!requireNamespace("openssl", quietly = TRUE)) {
+    stop("the R package openssl is not installed; ", script, " needs it for the digests")
+  }
+  refs <- Sys.getenv("SEEDMATCH_TEST_REFS")
+  if (!nzchar(refs)) {
+    stop("SEEDMATCH_TEST_REFS is not set; set it to the directory that holds ", build, "/")
+  }
+  directory <- file.path(refs, build)
+  txdb <- ensembldb::EnsDb(file.path(directory, ensdb))
+  dna <- rtracklayer::TwoBitFile(file.path(directory, twobit))
+  utils::assignInNamespace("load_species_anno_db", local_anno_db(txdb, dna), ns = "SeedMatchR")
+  reference <- paste0("reference: ", build, "/", ensdb, ", ", build, "/", twobit)
+  for (name in configs) {
+    started <- Sys.time()
+    run <- run_config(name, ANNOTATION_CONFIGS[[name]])
+    digests <- sequences_table(run$result)
+    digests$digest <- substr(as.character(openssl::sha256(digests$sequence)), 1, 16)
+    digests$sequence <- NULL
+    path <- paste0("annotation/", build, "/", name, ".tsv.gz")
+    write_golden(digests, path, script, c(run$notes, reference))
+    seconds <- as.numeric(difftime(Sys.time(), started, units = "secs"))
+    cat(name, ": ", nrow(digests), " rows, ", round(seconds), " s\n", sep = "")
+  }
+}

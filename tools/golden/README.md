@@ -54,29 +54,47 @@ For each config of `ANNOTATION_CONFIGS`, `annotation.R` writes the feature range
 
 The Python tests do not compare the configs whose names end with `_r`. These golden files show the R behavior that a divergence changes.
 
-## Golden files of rnor7
+## Golden files of the real references
 
-The script `annotation_rnor7.R` writes the golden files of the rat reference `rnor7`, Ensembl release 109 of mRatBN7.2. The script reads the directory `rnor7` in the directory of the variable `SEEDMATCH_TEST_REFS`. If the variable is not set, the script stops:
+The scripts `annotation_rnor7.R` and `annotation_hg38.R` write the golden files of the real references. `rnor7` is the rat reference, Ensembl release 109 of mRatBN7.2. `hg38` is the human reference, Ensembl release 109 of GRCh38. Each script reads the directory of its build in the directory of the variable `SEEDMATCH_TEST_REFS`. If the variable is not set, the script stops:
 
 ```bash
 SEEDMATCH_TEST_REFS=~/Development/refs/seedmatch tools/golden/run.sh tools/golden/R/annotation_rnor7.R
+SEEDMATCH_TEST_REFS=~/Development/refs/seedmatch tools/golden/run.sh tools/golden/R/annotation_hg38.R
 ```
 
 The directory of the variable has this layout:
 
 ```text
 $SEEDMATCH_TEST_REFS/
-└── rnor7/
-    ├── EnsDb.Rnorvegicus.v109.sqlite
-    ├── Rattus_norvegicus.mRatBN7.2.109.gtf.gz
-    └── Rattus_norvegicus.mRatBN7.2.dna_sm.toplevel.2bit
+├── rnor7/
+│   ├── EnsDb.Rnorvegicus.v109.sqlite
+│   ├── Rattus_norvegicus.mRatBN7.2.109.gtf.gz
+│   └── Rattus_norvegicus.mRatBN7.2.dna_sm.toplevel.2bit
+└── hg38/
+    ├── EnsDb.Hsapiens.v109.sqlite
+    ├── Homo_sapiens.GRCh38.109.gtf.gz
+    └── Homo_sapiens.GRCh38.dna.primary_assembly.2bit
 ```
 
-- The EnsDb file is the AnnotationHub resource `AH109732`, and the 2bit file is the AnnotationHub resource `AH106786`. SeedMatchR uses these resources for `rnor7`.
-- The GTF file is `https://ftp.ensembl.org/pub/release-109/gtf/rattus_norvegicus/Rattus_norvegicus.mRatBN7.2.109.gtf.gz`. The script does not read it, but the Python tests compare the GTF with the EnsDb.
+- The `rnor7` EnsDb file is the AnnotationHub resource `AH109732`, and the 2bit file is `AH106786`. The `hg38` EnsDb file is `AH109606`, and the 2bit file is `AH106283`. SeedMatchR uses these resources for `rnor7` and `hg38`.
+- The 2bit files of `rnor7` and `hg38` are from Ensembl release 107. The `hg38` 2bit file is the primary assembly.
+- The `rnor7` GTF file is `https://ftp.ensembl.org/pub/release-109/gtf/rattus_norvegicus/Rattus_norvegicus.mRatBN7.2.109.gtf.gz`. The `hg38` GTF file is `https://ftp.ensembl.org/pub/release-109/gtf/homo_sapiens/Homo_sapiens.GRCh38.109.gtf.gz`. The scripts do not read the GTF files, but the Python tests compare each GTF with its EnsDb.
 - `tests/annotation/test_refs.py` gives the size and the SHA-256 digest of each file.
 
-The script uses the configs `utr3`, `utr5`, `exons`, `cds`, `utr3_longest`, and `utr3_union` of `ANNOTATION_CONFIGS`. For each config, it writes `tests/golden/annotation/rnor7/<config>.tsv.gz` with the columns `name_tx`, `name_gene`, `width`, and `digest`. The sequences of the features of `rnor7` are too large for a golden file. Thus the column `digest` holds the first 16 hexadecimal digits of the SHA-256 digest of each sequence, from `openssl::sha256`.
+`write_reference_goldens` of `annotation_common.R` writes the golden files of each script. For each config, it writes `tests/golden/annotation/<build>/<config>.tsv.gz` with the columns `name_tx`, `name_gene`, `width`, and `digest`. The sequences of the features of a real reference are too large for a golden file. Thus the column `digest` holds the first 16 hexadecimal digits of the SHA-256 digest of each sequence, from `openssl::sha256`.
+
+The configs come from `ANNOTATION_CONFIGS`:
+
+- `annotation_rnor7.R` uses `utr3`, `utr5`, `exons`, `cds`, `utr3_longest`, and `utr3_union`.
+- `annotation_hg38.R` uses the same configs, and it adds `entrez` and `tsl1`.
+- `entrez` selects the Entrez IDs 1001, 1006, and 1007. In the `hg38` EnsDb, these IDs are the genes `CDH3`, `CDH8`, and `CDH9`. Thus the config does a test of the `entrezgene` table of a real EnsDb.
+- `tsl1` selects the transcripts with the support level 1. Each `tx_support_level` of the `rnor7` EnsDb is NULL, thus `hg38` is the first real data for this filter.
+
+The times and the peak memory come from an Apple M2 Max with 12 CPUs and 32 GB. Other processes used the CPUs at the same time. Thus a time can be shorter on a quiet machine:
+
+- `annotation_rnor7.R` takes about 57 seconds. Its peak memory is about 1.9 GiB.
+- `annotation_hg38.R` takes about 85 seconds. Its peak memory is 2.1 to 2.3 GiB. The config `utr3_longest` takes about 32 seconds, and each other config takes 15 seconds or less.
 
 The script uses the R package `openssl`. SeedMatchR does not import it directly. If the package is not installed, the script stops at the start and names the package.
 
@@ -555,6 +573,7 @@ An annotation script also sources `tools/golden/R/annotation_common.R`, which ha
 - `ANNOTATION_CONFIGS` holds the configs of `load_annotations`. A config gives the feature, the arguments, and the optional patch.
 - `run_config(name, config)` runs `load_annotations` for the config, with the patch of the config. It returns a list. The element `result` holds the result of `load_annotations` for each value of `return_gene_name`. The element `notes` holds the notes for the golden files.
 - `sequences_table(result)` returns the names, the widths, and the sequences of the element `result` of the `run_config` list.
+- `write_reference_goldens(build, ensdb, twobit, configs, script)` writes `tests/golden/annotation/<build>/<config>.tsv.gz` for each config. The section on the real references gives the details.
 
 A golden file is a TSV file. Its first lines are comments that give the script, the R version, the Biostrings version, and the SeedMatchR version. A test reads the rows with `golden` and the notes with `golden_note`, both from `tests/helpers.py`. A line that starts with `#` is a note, and a `#` inside a data line is data.
 
