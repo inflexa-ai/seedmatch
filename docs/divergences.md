@@ -95,7 +95,7 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: A cutoff without an effect gives a wrong gold standard. The ROC area of R does not measure the predictions.
 - Test: `test_the_padj_cutoff_applies_D006` and `test_the_roc_curve_uses_the_labels_D006` in `tests/stats/test_benchmark.py`. `test_benchmark_matches_r` in the same file compares the areas and the curves with the golden files of the patched R function (`tools/golden/patches/benchmark_preds.R`).
 
-## D-007: trrust_scores and string_scores take the messages from the regulators
+## D-007: trrust_scores takes the messages from the regulators
 
 - ID: `D-007`
 - R location: `message_passing` (`R/get_network_matches.R:51-122`), called by `get_network_matches` (`:35-39`).
@@ -109,7 +109,6 @@ The IDs of the known divergences have the same order as the rows of the table in
   - The score of a gene in a channel is the sum of two terms, divided by 2. The terms are the mean of the weighted seed flags of its regulators in the channel, and its own seed flag.
   - The mode of an edge selects its channel. An `Unknown` edge is in no channel. A gene without a regulator in a channel has the score NaN.
   - With `Aggregator.DEGREE_IMPORTANCE`, the weight of a regulator is 1 divided by the number of its distinct targets, over each mode.
-  - `string_scores` takes the messages from the neighbors of the gene.
 - Reason: A TRRUST edge goes from a regulator to its target. A seed match in a regulator can change the expression of its targets, not of its regulators.
 - Test: `test_trrust_scores_use_the_regulators_D007`, `test_trrust_scores_give_the_degree_importance_D007`, and `test_trrust_scores_count_an_unknown_edge_in_the_out_degree_D007` in `tests/network/test_trrust.py`.
 
@@ -761,3 +760,16 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: The network has only gene pairs, and `GeneNetwork.unmapped_proteins` lists each protein without a gene. The protein ID is the text after the first `.`, also if the ID has a second `.`. An ID without `.`, with no text before it, or with no text after it raises `InputError`. Links that join no two genes also raise `InputError`.
 - Reason: A protein ID is not a gene ID, thus no row of `de` can match it.
 - Test: `test_string_gene_network_drops_the_unmapped_proteins_D061`, `test_string_gene_network_gives_no_pair_for_a_link_of_an_unmapped_protein_D061`, `test_string_gene_network_keeps_the_text_after_the_first_dot_of_a_protein_ID_D061`, `test_string_gene_network_rejects_links_without_a_gene_pair_D061`, and `test_string_gene_network_rejects_a_protein_id_without_a_taxon_prefix_D061` in `tests/network/test_string_network.py`.
+
+## D-062: string_scores takes the highest count of a gene, and rejects a bad count
+
+- ID: `D-062`
+- R location: `create_graph` (`R/create_graph.R:13-23`).
+- R behavior: `f[gene] = res$overall_matches[which(res$gene_id == gene)]` assigns the counts of all rows of a gene to one value. `tests/golden/network/string_features.tsv` gives the evidence.
+  - For a gene with more than one row in `res`, R keeps the first count and warns `number of items to replace is not a multiple of replacement length`. The case `repeated` gives the gene with the counts 1 and 3 the feature 1.
+  - A count of `NA` stays `NA`, and R accepts a negative count and `Inf`. The cases `na_count` and `bad_counts` give the evidence.
+  - If no gene of `res` is in the network, each feature is 0, and R gives no message. The case `none_in_network` gives the evidence.
+- New behavior: The seed count of a gene is the highest count of its rows in `de`. A count that is NaN, infinite, or negative raises `InputError`, also in a row of a gene outside the network.
+  - If no gene of `de` is in the network, `string_scores` warns with `SeedMatchWarning`. The message names the first gene of the network as an example.
+- Reason: A gene-level result uses the maximum count (`D-003`). A count of NaN, below 0, or infinite is not a count of matches. IDs of another type give scores that look valid, thus the function warns (`D-058`).
+- Test: `test_string_scores_take_the_highest_count_of_a_gene_D062`, `test_string_scores_reject_a_bad_count_D062`, and `test_string_scores_warn_without_a_de_gene_in_the_network_D062` in `tests/network/test_string_scores.py`.

@@ -4,10 +4,11 @@ import re
 import shutil
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from helpers import DATA, STATISTIC_TOLERANCE, ecdf_golden_row, golden, sirna_de
 
-from seedmatch import Alternative, Benchmark, EcdfTest
+from seedmatch import Alternative, Benchmark, EcdfTest, string_scores
 
 README = Path(__file__).parents[1] / "README.md"
 PYTHON_BLOCK = re.compile(r"^```python\n(.*?)^```$", re.MULTILINE | re.DOTALL)
@@ -30,6 +31,9 @@ def readme_namespace(tmp_path, monkeypatch):
         gzip.compress((DATA / "mirdb_sample.txt").read_bytes())
     )
     shutil.copy(DATA / "trrust_sample.tsv", tmp_path / "trrust_rawdata.human.tsv")
+    (tmp_path / "10116.protein.links.v12.5.txt.gz").write_bytes(
+        gzip.compress((DATA / "string_links_sample.txt").read_bytes())
+    )
     monkeypatch.chdir(tmp_path)
     namespace: dict[str, object] = {}
     for number, code in enumerate(python_examples(), start=1):
@@ -144,3 +148,20 @@ def test_readme_trrust_example_gives_the_scores(readme_namespace):
     scores = readme_namespace["trrust_result"].set_index("gene")
     assert scores.loc["GA", "repression_score"] == 0.5
     assert scores.loc["GA", "activation_score"] == 0.25
+
+
+def test_readme_string_example_gives_the_network(readme_namespace):
+    first, second = "ENSSYNG00000000001", "ENSSYNG00000000004"
+    network = readme_namespace["network"]
+    assert network.edges.to_numpy().tolist() == [[first, second, 900], [second, first, 900]]
+    result = readme_namespace["string_result"]
+    assert result["gene_id"].tolist() == [first, second]
+    counts = readme_namespace["utr3_de"].groupby("gene_id")["mer7m8"].max()
+    seeds = [float(counts.get(first, 0)), float(counts.get(second, 0))]
+    assert result["seed_count"].tolist() == seeds
+    assert result["score"].tolist() == [sum(seeds) / 2] * 2
+    # The counts of the fixture are 0, so a count of 4 for the first gene shows the messages.
+    de = pd.DataFrame({"gene_id": [first], "mer7m8": [4]})
+    seeded = string_scores(network.edges, de, column="mer7m8")
+    assert seeded["seed_count"].tolist() == [4.0, 0.0]
+    assert seeded["score"].tolist() == [2.0, 2.0]

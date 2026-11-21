@@ -6,6 +6,7 @@ from seedmatch.network.stringdb import (
     StringLinks,
     read_string_links,
     string_gene_network,
+    string_scores,
 )
 from seedmatch.network.trrust import read_trrust, trrust_scores
 
@@ -16,5 +17,6 @@ __all__ = [
     "read_string_links",
     "read_trrust",
     "string_gene_network",
+    "string_scores",
     "trrust_scores",
 ]

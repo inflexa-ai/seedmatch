@@ -15,6 +15,7 @@ from seedmatch.network import (
     read_string_links,
     read_trrust,
     string_gene_network,
+    string_scores,
     trrust_scores,
 )
 from seedmatch.noncanonical import (
@@ -126,6 +127,7 @@ __all__ = [
     "roc_curve",
     "seed_match_report",
     "string_gene_network",
+    "string_scores",
     "trrust_scores",
     "wasserstein_areas",
     "wobble_bulge_matches",

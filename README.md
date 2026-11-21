@@ -235,6 +235,36 @@ A gene of `seed_genes` has the flag 1, and each other gene has the flag 0. A gen
 
 `read_trrust` keeps line 1 as an edge, because the file has no header. R loses this edge. The reader keeps `#`, quote characters, and the text `NA` as text (D-057). If no gene of `seed_genes` is a gene of the table, `trrust_scores` warns with `SeedMatchWarning` (D-058).
 
+`read_string_links` reads the STRING protein links. This is the file that `seedmatch-fetch string` downloads. `string_gene_network` maps the proteins to genes with the EnsDb of a `Reference`. `string_scores` gives each gene of the network a score from the seed counts of its neighbors and its own seed count. This example reads the rat file, and it uses the `utr3` and the `utr3_counts` of the annotation example.
+
+```python
+import pandas as pd
+
+from seedmatch import Reference, read_string_links, string_gene_network, string_scores
+
+# The links with a score of 400 or more, and then the links above the 95th percentile of these scores.
+links = read_string_links("10116.protein.links.v12.5.txt.gz")
+
+# The EnsDb of the same species and build gives the gene of each protein.
+with Reference.from_paths(ensdb="ensdb.sqlite", genome="genome.2bit") as ref:
+    network = string_gene_network(links.links, ref)
+
+# The seed count of each 3' UTR, with the gene ID of the UTR. A gene with more than one row keeps the highest count (D-062).
+utr3_de = pd.DataFrame({"gene_id": utr3.gene_ids, "mer7m8": utr3_counts})
+string_result = string_scores(network.edges, utr3_de, column="mer7m8")
+print(string_result.head())
+```
+
+`read_string_links` keeps the links with `combined_score >= score_threshold`. The default 400 is the default of STRINGdb. Then it keeps the links with a score above the `percentile` of these scores. The default 0.95 is the default `p` of R, and `links.cutoff` is the score at this percentile. For the STRING rat file, the defaults give the cutoff 940.
+
+`string_gene_network` takes the gene of a protein from the `protein` table of the EnsDb, not from BioMart (D-013). `GeneNetwork.unmapped_proteins` lists each protein without a gene, and a link of such a protein gives no pair (D-061). A gene with more than one protein gets the links of each protein, and a pair gets the highest score of its links (D-060). `network.edges` has a row for each order of each pair.
+
+The neighbors of a gene are the `gene2` values of its rows. The score of a gene is the sum of two terms, divided by 2. The terms are the mean of the seed counts of its neighbors, and its own seed count. `aggregator=Aggregator.DEGREE_IMPORTANCE` divides the count of a neighbor by the number of its neighbors.
+
+The gene IDs of `de` must be the Ensembl gene IDs of the EnsDb. A gene with more than one row in `de` gets the highest count. R keeps the first count (D-062). A count that is NaN, infinite, or negative raises `InputError`, also in a row of a gene outside the network. If no gene of `de` is a gene of the network, `string_scores` warns with `SeedMatchWarning` (D-062).
+
+`score_threshold=0` and `percentile=0` make a large network. On the STRING rat file, the reader keeps 13,894,314 links. The read takes 10.1 seconds, and the peak memory above the start is about 660 MB. `string_gene_network` takes 3.6 seconds and about 1.5 GB more, and it gives 11,097,016 rows. `string_scores` takes 1.8 seconds and about 540 MB more. In a sandbox with a small memory limit, keep the defaults.
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -265,7 +295,7 @@ seedmatch-fetch list
 
 If `DEST` is absent, the command makes it. For each file, it prints the path, a tab, and `downloaded` or `present` on standard output. Before a download, it prints the file name and the size on standard error. The exit status is 0 for success and 1 for an error. An error prints `seedmatch-fetch: <message>` on standard error. Ctrl-C ends the command with status 130. A usage error exits with status 2. A key that the registry does not have gives a message that lists the valid keys.
 
-Use one `DEST` for each reference build. `Reference.from_directory(DEST)` opens the one `.sqlite` file and the one `.2bit` file of the directory. A directory with the EnsDb files of different builds has more than one `.sqlite` file, and `from_directory` raises `InputError`. `read_deseq2_table` reads each table of `example sirna` from `DEST`, because it accepts the gzip format. `read_mirdb` reads the miRDB file from `DEST`. `read_trrust` reads the TRRUST file.
+Use one `DEST` for each reference build. `Reference.from_directory(DEST)` opens the one `.sqlite` file and the one `.2bit` file of the directory. A directory with the EnsDb files of different builds has more than one `.sqlite` file, and `from_directory` raises `InputError`. `read_deseq2_table` reads each table of `example sirna` from `DEST`, because it accepts the gzip format. `read_mirdb` reads the miRDB file from `DEST`. `read_trrust` reads the TRRUST file. `read_string_links` reads the STRING file.
 
 ## Differences from SeedMatchR
 
@@ -305,12 +335,11 @@ This version has the core path:
 - the reader of the miRDB table of predicted miRNA targets
 - the wobble and bulge search: the sites with G:U pairs or a bulge, their count for each gene, and the null of this count
 - the 3' compensatory search: the sites with a seed match and, before it in the sequence, a match of a 3' region of the guide
-- the TRRUST network scores
+- the TRRUST and STRING network scores
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
 
 These parts of SeedMatchR are not in this version:
 
-- the STRING network scores
 - the plots and the HTML report
 
 ## Installation

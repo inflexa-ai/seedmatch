@@ -25,8 +25,11 @@ from seedmatch import (
     full_search_ranges,
     kmer_counts,
     match_distances,
+    read_string_links,
     read_trrust,
     seed_match_report,
+    string_gene_network,
+    string_scores,
     trrust_scores,
     wobble_bulge_matches,
 )
@@ -169,10 +172,17 @@ def run_core_pipeline() -> None:
         ensdb=annotation / "synthetic.sqlite", genome=annotation / "synthetic.2bit"
     ) as ref:
         utr3 = ref.sequences(FeatureType.UTR3)
+        links = read_string_links(DATA / "string_links_sample.txt", percentile=0.0)
+        network = string_gene_network(links.links, ref)
     count_matches(Guide(GUIDE).target(Seed.MER7M8), utr3)
     wobble_bulge_matches(Guide(GUIDE), seqs)
     compensatory_sites(Guide(GUIDE), seqs)
     trrust_scores(read_trrust(DATA / "trrust_sample.tsv"), ["TFA"])
+    string_scores(
+        network.edges,
+        pd.DataFrame({"gene_id": ["ENSSYNG00000000001"], "count": [1]}),
+        column="count",
+    )
 
 
 # The columns that an R golden file names differently from the Python frames. The column `names` of
