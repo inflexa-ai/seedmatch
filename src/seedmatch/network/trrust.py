@@ -65,7 +65,8 @@ def read_trrust(path: str | os.PathLike[str]) -> pd.DataFrame:
     - a file without a data line
 
     R skips a byte order mark at the start of the file, and so does the reader. The line number in
-    a message counts the blank lines. The message names the first bad line of the file.
+    a message counts the blank lines. The message names the first bad line of the file. A line end
+    is LF, CRLF, or CR. A U+FEFF after the start of the file is text.
 
     The reader reads 2^16 lines at a time, and the time is linear in the number of lines. The
     result holds four pointers (32 bytes) for each row, and the distinct strings. The TRRUST human

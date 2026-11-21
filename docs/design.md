@@ -114,7 +114,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 - A reader reads only the part of a file that the call uses:
   - The 2bit reader uses `mmap` and decodes only the requested ranges.
   - The EnsDb reader puts the filter in the SQL `WHERE` clause.
-- A reader of a table file (`read_mirdb`, `read_trrust`, `read_string_links`) names the first bad line of the file, for each chunk size.
+- A reader of a table file (`read_mirdb`, `read_trrust`, `read_string_links`) names the first bad line of the file, for each chunk size. A line end is LF, CRLF, or CR. The reader removes a byte order mark only at the start of the file, and a U+FEFF at another place is text.
 - Options are frozen dataclasses. Modes are enums. No function takes a string mode flag.
 - Each error class of seedmatch is a subclass of `SeedMatchError`. If a file does not exist, the function raises `FileNotFoundError`. Each message names the bad value and the expected value.
 - A function validates untrusted input at the boundary only: the guide alphabet and length, the seed window, and the DE table columns.

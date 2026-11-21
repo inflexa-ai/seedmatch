@@ -25,9 +25,9 @@ SCORE_COLUMNS = ["repression_score", "activation_score"]
 PREFIX = ["TFA\tGA\tRepression\t1", "TFB\tGB\tActivation\t2", "TFC\tGC\tUnknown\t3"]
 
 
-def write_lines(tmp_path, lines, name="x.tsv"):
+def write_lines(tmp_path, lines, name="x.tsv", ending="\n"):
     path = tmp_path / name
-    path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    path.write_bytes("".join(f"{line}{ending}" for line in lines).encode())
     return path
 
 
@@ -244,6 +244,47 @@ def test_read_trrust_skips_a_blank_line(tmp_path):
     message = f"line 5: mode 'activation' is not valid; expected {MODES}"
     with pytest.raises(InputError, match=failure(bad, message)):
         read_trrust(bad)
+
+
+ENDINGS = pytest.mark.parametrize("ending", ["\n", "\r\n", "\r"], ids=["LF", "CRLF", "CR"])
+SPACE_LINES = ["TFA\tGA\tRepression\t1", " TFB\tGB\tActivation\t2", " TFC\tGC\tUnknown\t3"]
+
+
+@ENDINGS
+def test_read_trrust_reads_each_line_end_before_lines_that_start_with_a_space(tmp_path, ending):
+    got = read_trrust(write_lines(tmp_path, SPACE_LINES, ending=ending))
+    assert got["source"].tolist() == ["TFA", " TFB", " TFC"]
+
+
+@ENDINGS
+def test_read_trrust_names_a_bad_line_after_lines_that_start_with_a_space(tmp_path, ending):
+    path = write_lines(tmp_path, [*SPACE_LINES, "TFD\tGD\tactivation\t4"], ending=ending)
+    message = f"line 4: mode 'activation' is not valid; expected {MODES}"
+    with pytest.raises(InputError, match=failure(path, message)):
+        read_trrust(path)
+
+
+@pytest.mark.parametrize(
+    ("text", "chunk", "sources"),
+    [
+        ("TFA\tGA\tRepression\t1\n\ufeffTFB\tGB\tActivation\t2\n", 1, ["TFA", "\ufeffTFB"]),
+        (
+            "\ufeff\ufeffTFA\tGA\tRepression\t1\nTFB\tGB\tActivation\t2\n",
+            None,
+            ["\ufeffTFA", "TFB"],
+        ),
+        ("\n\ufeffTFA\tGA\tRepression\t1\nTFB\tGB\tActivation\t2\n", None, ["\ufeffTFA", "TFB"]),
+    ],
+    ids=["first line of a chunk", "after the byte order mark", "after a blank line"],
+)
+def test_read_trrust_keeps_a_u_feff_after_the_start_of_the_file(
+    tmp_path, monkeypatch, text, chunk, sources
+):
+    if chunk is not None:
+        monkeypatch.setattr("seedmatch.network.trrust._CHUNK_LINES", chunk)
+    path = tmp_path / "x.tsv"
+    path.write_text(text, encoding="utf-8")
+    assert read_trrust(path)["source"].tolist() == sources
 
 
 @pytest.mark.parametrize("chunk", [None, 1])

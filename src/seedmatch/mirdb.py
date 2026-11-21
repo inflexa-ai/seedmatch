@@ -62,6 +62,8 @@ def read_mirdb(path: str | os.PathLike[str], *, species: str | None = None) -> p
     line end. R skips a byte order mark at the start of the file, and so does the reader. The line
     number in a message counts the blank lines. The message names the first bad line of the file.
 
+    A line end is LF, CRLF, or CR. A U+FEFF after the start of the file is text.
+
     The reader reads 2^18 lines at a time, and the time is linear in the number of lines. Equal
     texts in the result are one object, thus the result holds about 40 bytes for each row and the
     distinct strings. The miRDB 6.0 file of `seedmatch-fetch mirdb` has 6,831,595 lines. A read of

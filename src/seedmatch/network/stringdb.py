@@ -97,7 +97,8 @@ def read_string_links(
       cutoff. R stops with `non-character argument` for the last input.
 
     R skips a byte order mark at the start of the file, and so does the reader. The line number
-    in a message counts the blank lines. The message names the first bad line of the file.
+    in a message counts the blank lines. The message names the first bad line of the file. A line
+    end is LF, CRLF, or CR. A U+FEFF after the start of the file is text.
 
     The reader reads 2^16 lines at a time, and the time is linear in the number of lines. The work
     memory is one chunk, 10 bytes for each kept row, and the distinct protein IDs. The 10 bytes

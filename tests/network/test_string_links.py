@@ -22,9 +22,9 @@ PROTEIN_6 = "32630.ENSSYNP00000000006"
 PREFIX = [HEADER, "9.A 9.B 500"]
 
 
-def write_lines(tmp_path, lines, name="x.txt"):
+def write_lines(tmp_path, lines, name="x.txt", ending="\n"):
     path = tmp_path / name
-    path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    path.write_bytes("".join(f"{line}{ending}" for line in lines).encode())
     return path
 
 
@@ -336,6 +336,43 @@ def test_read_string_links_skip_a_blank_line(tmp_path):
     bad = write_lines(tmp_path, [HEADER, "", "", "9.C 9.D abc"], "bad.txt")
     with pytest.raises(InputError, match=failure(bad, f"line 4: score 'abc' {NOT_A_SCORE}")):
         read_string_links(bad)
+
+
+ENDINGS = pytest.mark.parametrize("ending", ["\n", "\r\n", "\r"], ids=["LF", "CRLF", "CR"])
+TAB_LINES = [HEADER, "9.A 9.B 500", "\t9.C 9.D 600", "\t9.E 9.F 700"]
+
+
+@ENDINGS
+def test_read_string_links_read_each_line_end_before_lines_that_start_with_a_tab(tmp_path, ending):
+    path = write_lines(tmp_path, TAB_LINES, ending=ending)
+    got = read_string_links(path, score_threshold=0, percentile=0)
+    assert got.links["protein1"].tolist() == ["\t9.C", "\t9.E"]
+
+
+@ENDINGS
+def test_read_string_links_name_a_bad_line_after_lines_that_start_with_a_tab(tmp_path, ending):
+    path = write_lines(tmp_path, [*TAB_LINES, "9.G 9.H abc"], ending=ending)
+    with pytest.raises(InputError, match=failure(path, f"line 5: score 'abc' {NOT_A_SCORE}")):
+        read_string_links(path)
+
+
+@pytest.mark.parametrize(
+    ("text", "chunk", "proteins"),
+    [
+        (f"{HEADER}\n9.A 9.B 500\n\ufeff9.C 9.D 600\n", 2, ["\ufeff9.C"]),
+        (f"{HEADER}\n\ufeff9.A 9.B 600\n9.C 9.D 500\n", None, ["\ufeff9.A"]),
+    ],
+    ids=["first line of a chunk", "first line of the first chunk"],
+)
+def test_read_string_links_keep_a_u_feff_after_the_start_of_the_file(
+    tmp_path, monkeypatch, text, chunk, proteins
+):
+    if chunk is not None:
+        monkeypatch.setattr("seedmatch.network.stringdb._CHUNK_LINES", chunk)
+    path = tmp_path / "x.txt"
+    path.write_text(text, encoding="utf-8")
+    got = read_string_links(path, score_threshold=0, percentile=0)
+    assert got.links["protein1"].tolist() == proteins
 
 
 @pytest.mark.parametrize("chunk", [1, 5])

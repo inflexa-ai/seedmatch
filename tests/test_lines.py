@@ -133,7 +133,25 @@ def test_field_lines_reject_fewer_than_two_fields(fields):
 def test_data_bytes_join_the_data_lines_in_utf8():
     chunk = ["a b 1\n", "\n", "é b 2\n"]
     is_data = data_flags(chunk).is_data
-    assert data_bytes(chunk, is_data) == "a b 1\né b 2\n".encode()
+    assert data_bytes(chunk, is_data) == "\na b 1\né b 2\n".encode()
+
+
+@pytest.mark.parametrize("ending", ["\n", "\r\n", "\r"])
+def test_data_bytes_turn_each_cr_into_lf_after_a_blank_line(ending):
+    chunk = [f"a b 1{ending}", ending, f"\ufeffc d 2{ending}", "e f 3"]
+    is_data = data_flags(chunk).is_data
+    end = ending.replace("\r", "\n")
+    assert data_bytes(chunk, is_data) == f"\na b 1{end}\ufeffc d 2{end}e f 3".encode()
+
+
+def test_parse_data_lines_read_a_mix_of_line_ends():
+    chunk = ["a b 1\r\n", "c d 2\r", "e f 3\n", "\r", "g h 4\r\n", "\ufeffi j 5\r", "k l 6"]
+    is_data = data_flags(chunk).is_data
+    expected = "\na b 1\n\nc d 2\ne f 3\ng h 4\n\n\ufeffi j 5\nk l 6"
+    assert data_bytes(chunk, is_data) == expected.encode()
+    frame = parse_data_lines(chunk, is_data, separator=" ", names=["x", "y", "z"])
+    assert frame["x"].tolist() == ["a", "c", "e", "g", "\ufeffi", "k"]
+    assert frame["z"].tolist() == ["1", "2", "3", "4", "5", "6"]
 
 
 @pytest.mark.parametrize(

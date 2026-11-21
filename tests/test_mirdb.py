@@ -20,9 +20,9 @@ R_NAMES = {
 }
 
 
-def write_lines(tmp_path, lines, name="x.txt"):
+def write_lines(tmp_path, lines, name="x.txt", ending="\n"):
     path = tmp_path / name
-    path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    path.write_bytes("".join(f"{line}{ending}" for line in lines).encode())
     return path
 
 
@@ -261,6 +261,43 @@ def test_read_mirdb_reads_each_line_end(tmp_path, ending):
     path = tmp_path / "x.txt"
     path.write_bytes(SAMPLE.read_bytes().replace(b"\n", ending.encode()))
     pd.testing.assert_frame_equal(read_mirdb(path), read_mirdb(SAMPLE))
+
+
+ENDINGS = pytest.mark.parametrize("ending", ["\n", "\r\n", "\r"], ids=["LF", "CRLF", "CR"])
+SPACE_LINES = ["hsa-a\tNM_1\t50", " hsa-b\tNM_2\t60", " hsa-c\tNM_3\t70"]
+
+
+@ENDINGS
+def test_read_mirdb_reads_each_line_end_before_lines_that_start_with_a_space(tmp_path, ending):
+    got = read_mirdb(write_lines(tmp_path, SPACE_LINES, ending=ending))
+    assert got["mirdb_id"].tolist() == ["hsa-a", " hsa-b", " hsa-c"]
+
+
+@ENDINGS
+def test_read_mirdb_names_a_bad_line_after_lines_that_start_with_a_space(tmp_path, ending):
+    path = write_lines(tmp_path, [*SPACE_LINES, "hsa-d\tNM_4\tabc"], ending=ending)
+    message = "line 4: score 'abc' is not a finite number; expected a decimal number"
+    with pytest.raises(InputError, match=failure(path, message)):
+        read_mirdb(path)
+
+
+@pytest.mark.parametrize(
+    ("text", "chunk", "ids"),
+    [
+        ("hsa-a\tNM_1\t50\n\ufeffhsa-b\tNM_2\t60\n", 1, ["hsa-a", "\ufeffhsa-b"]),
+        ("\ufeff\ufeffhsa-a\tNM_1\t50\nhsa-b\tNM_2\t60\n", None, ["\ufeffhsa-a", "hsa-b"]),
+        ("\n\ufeffhsa-a\tNM_1\t50\nhsa-b\tNM_2\t60\n", None, ["\ufeffhsa-a", "hsa-b"]),
+    ],
+    ids=["first line of a chunk", "after the byte order mark", "after a blank line"],
+)
+def test_read_mirdb_keeps_a_u_feff_after_the_start_of_the_file(
+    tmp_path, monkeypatch, text, chunk, ids
+):
+    if chunk is not None:
+        monkeypatch.setattr("seedmatch.mirdb._CHUNK_LINES", chunk)
+    path = tmp_path / "x.txt"
+    path.write_text(text, encoding="utf-8")
+    assert read_mirdb(path)["mirdb_id"].tolist() == ids
 
 
 def test_read_mirdb_reads_a_last_line_without_a_line_end(tmp_path):

@@ -101,10 +101,17 @@ def field_lines(  # noqa: PLR0913
 
 
 def data_bytes(chunk: list[str], is_data: NDArray[np.bool_]) -> bytes:
-    """Return the data lines of the chunk as UTF-8 bytes."""
+    """Return the data lines of the chunk as UTF-8 bytes, after one blank line.
+
+    Each CR becomes LF, thus a CRLF gives a blank line, which pandas skips. pandas 2.3.3 removes a
+    U+FEFF at the start of its input, and it misreads a lone CR before a line that starts with a
+    space.
+    """
     # Bytes, not a StringIO: pandas holds a text buffer in 4-byte characters, and the peak
     # memory of a chunk is then twice as large.
-    return "".join(compress(chunk, is_data.tolist())).encode()
+    data = "".join(chain(("\n",), compress(chunk, is_data.tolist()))).encode()
+    # `open_text` reads with newline="", thus each CR in a line is a line end.
+    return data.replace(b"\r", b"\n")
 
 
 def parse_data_lines(
