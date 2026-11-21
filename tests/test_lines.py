@@ -137,17 +137,16 @@ def test_data_bytes_join_the_data_lines_in_utf8():
 
 
 @pytest.mark.parametrize("ending", ["\n", "\r\n", "\r"])
-def test_data_bytes_turn_each_cr_into_lf_after_a_blank_line(ending):
+def test_data_bytes_turn_each_line_end_into_lf_after_a_blank_line(ending):
     chunk = [f"a b 1{ending}", ending, f"\ufeffc d 2{ending}", "e f 3"]
     is_data = data_flags(chunk).is_data
-    end = ending.replace("\r", "\n")
-    assert data_bytes(chunk, is_data) == f"\na b 1{end}\ufeffc d 2{end}e f 3".encode()
+    assert data_bytes(chunk, is_data) == "\na b 1\n\ufeffc d 2\ne f 3".encode()
 
 
 def test_parse_data_lines_read_a_mix_of_line_ends():
     chunk = ["a b 1\r\n", "c d 2\r", "e f 3\n", "\r", "g h 4\r\n", "\ufeffi j 5\r", "k l 6"]
     is_data = data_flags(chunk).is_data
-    expected = "\na b 1\n\nc d 2\ne f 3\ng h 4\n\n\ufeffi j 5\nk l 6"
+    expected = "\na b 1\nc d 2\ne f 3\ng h 4\n\ufeffi j 5\nk l 6"
     assert data_bytes(chunk, is_data) == expected.encode()
     frame = parse_data_lines(chunk, is_data, separator=" ", names=["x", "y", "z"])
     assert frame["x"].tolist() == ["a", "c", "e", "g", "\ufeffi", "k"]
@@ -315,3 +314,26 @@ def test_parse_data_lines_give_the_dtype_to_the_parser():
     )
     assert [str(dtype) for dtype in frame.dtypes] == ["object", "int64", "float64"]
     assert frame["y"].tolist() == [5, 6]
+
+
+@pytest.mark.parametrize(("separator", "space"), [("\t", "    "), (" ", "\t\t\t\t")])
+@pytest.mark.parametrize("before", range(8))
+def test_parse_data_lines_keep_the_leading_whitespace_of_a_line_at_the_end_of_a_parser_buffer(
+    separator, space, before
+):
+    # The C parser of pandas 2.3.3 reads its input in buffers of 262,144 bytes. With the option
+    # skip_blank_lines, it lost the whitespace of a line that starts 1 to 4 bytes before the end.
+    start = 262_144 - before
+    plain = separator.join(["a", "b", "1"]) + "\n"
+    count = (start - 1) // len(plain) - 2
+    last = start - 1 - count * len(plain)
+    chunk = [
+        *[plain] * count,
+        separator.join(["c", "d", "9" * (last - 5)]) + "\n",
+        separator.join([f"{space}e", "f", "2"]) + "\n",
+        plain,
+    ]
+    is_data = field_lines(chunk, 1, "f", separator=separator, fields=3, described=DESCRIBED).is_data
+    assert data_bytes(chunk, is_data).index(f"{space}e".encode()) == start
+    frame = parse_data_lines(chunk, is_data, separator=separator, names=["x", "y", "z"])
+    assert frame["x"].tolist() == ["a"] * count + ["c", f"{space}e", "a"]

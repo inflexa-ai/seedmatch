@@ -57,9 +57,10 @@ def plot_ranges(  # noqa: PLR0913
     higher bar covers the bar of the next row.
 
     `size` is the width and the height in inches, each above 0 and below 50, as in `ggsave`. A size
-    too small for the texts, the legends, and the labels raises `InputError`. The figure keeps its
-    layout, thus a later change of the figure does not move the Axes. To apply the layout again,
-    call `figure.set_layout_engine("constrained")`.
+    too small for the texts, the legends, and the labels raises `InputError`. The layout does not
+    count the width of a title, thus the figure cuts a title that is wider than the figure. The
+    figure keeps its layout, thus a later change of the figure does not move the Axes. To apply the
+    layout again, call `figure.set_layout_engine("constrained")`.
 
     A value that is not valid raises `InputError`. A limit outside -9e306 to 9e306, or an
     `x_limits` range wider than 9e306, raises `InputError`. The y axis goes from 0 to n + 1 for n

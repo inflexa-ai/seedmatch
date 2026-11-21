@@ -103,15 +103,19 @@ def field_lines(  # noqa: PLR0913
 def data_bytes(chunk: list[str], is_data: NDArray[np.bool_]) -> bytes:
     """Return the data lines of the chunk as UTF-8 bytes, after one blank line.
 
-    Each CR becomes LF, thus a CRLF gives a blank line, which pandas skips. pandas 2.3.3 removes a
-    U+FEFF at the start of its input, and it misreads a lone CR before a line that starts with a
-    space.
+    pandas 2.3.3 removes a U+FEFF at the start of its input, thus the data starts with a blank
+    line. Each line end becomes LF, thus the parser reads one form of line end and no blank line
+    after the first.
     """
     # Bytes, not a StringIO: pandas holds a text buffer in 4-byte characters, and the peak
     # memory of a chunk is then twice as large.
     data = "".join(chain(("\n",), compress(chunk, is_data.tolist()))).encode()
+    # In LF-only data, the search for one byte is more than 10 times faster than the replace
+    # of CRLF.
+    if b"\r" not in data:
+        return data
     # `open_text` reads with newline="", thus each CR in a line is a line end.
-    return data.replace(b"\r", b"\n")
+    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
 
 
 def parse_data_lines(
@@ -139,6 +143,11 @@ def parse_data_lines(
         dtype=dtype,
         quoting=csv.QUOTE_NONE,
         na_filter=False,
+        # With skip_blank_lines, the C parser of pandas 2.3.3 drops the whitespace at the start
+        # of a line that crosses the end of its 262,144-byte buffer. The data has no blank line
+        # but the first.
+        skip_blank_lines=False,
+        skiprows=1,
     )
 
 

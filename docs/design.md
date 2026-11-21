@@ -111,7 +111,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 - `import seedmatch` does not import matplotlib or `seedmatch.fetch`.
 - A computation function returns data. A plot function takes a result and returns a `matplotlib.figure.Figure`. No function writes a file unless it has an explicit output path parameter.
 - A plot function uses the object API of matplotlib. It does not import `matplotlib.pyplot`, and it does not change `matplotlib.rcParams`.
-- A plot function that takes `size` applies its layout one time before it returns. A size too small for the texts raises `InputError`, and a later save at each dpi keeps the positions.
+- A plot function that takes `size` applies its layout one time before it returns. A size too small for the texts raises `InputError`, and a later save at each dpi keeps the positions. The layout does not count the width of a title, thus the figure cuts a title that is wider than the figure.
 - A reader reads only the part of a file that the call uses:
   - The 2bit reader uses `mmap` and decodes only the requested ranges.
   - The EnsDb reader puts the filter in the SQL `WHERE` clause.

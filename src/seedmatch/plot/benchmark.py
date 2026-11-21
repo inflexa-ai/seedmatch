@@ -101,10 +101,11 @@ def plot_benchmark(benchmark: Benchmark, *, size: tuple[float, float] = (12.0, 5
     keep the default style of matplotlib, because the plots of R use base graphics.
 
     `size` is the width and the height in inches, each above 0 and below 50, as in `ggsave`. A size
-    too small for the texts, the legends, and the labels raises `InputError`. The figure keeps its
-    layout, thus a later change of the figure does not move the Axes of the curves. A color bar
-    keeps its aspect ratio, thus `set_size_inches` changes its drawn width. To apply the layout
-    again, call `figure.set_layout_engine("constrained")`. A `benchmark` that is not a
+    too small for the texts, the legends, and the labels raises `InputError`. The layout does not
+    count the width of a title, thus the figure cuts a title that is wider than the figure. The
+    figure keeps its layout, thus a later change of the figure does not move the Axes of the curves.
+    A color bar keeps its aspect ratio, thus `set_size_inches` changes its drawn width. To apply the
+    layout again, call `figure.set_layout_engine("constrained")`. A `benchmark` that is not a
     `Benchmark`, and a `size` that is not valid, also raise `InputError`.
 
     The function returns a `Figure`. It does not use `matplotlib.pyplot`. It writes no file, and
