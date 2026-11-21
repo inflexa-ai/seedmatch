@@ -290,8 +290,8 @@ class FastaGenome(Genome):
     def _read_gzi(self) -> None:
         """Read the `.gzi`: a count, then the compressed and uncompressed offset of each block.
 
-        Offsets that do not increase, and the errors of `_check_uncompressed_offsets`, raise
-        `InputError`.
+        Offsets that do not increase, a damaged block before the first entry, and the errors of
+        `_check_uncompressed_offsets` raise `InputError`.
         """
         shown = os.fspath(self._gzi)
         try:
@@ -320,8 +320,10 @@ class FastaGenome(Genome):
                 f"{_plural(size, 'byte')}"
             )
             raise self._gzi_error(problem)
-        # The first block has no entry in the file.
-        self._compressed = [0, *offsets]
+        first = self._first_data_block(offsets[0] if offsets else size, size)
+        # bgzip -r writes no entry for the first block with data, and empty blocks can come
+        # before it.
+        self._compressed = [first, *offsets]
         self._uncompressed = [0, *values[1::2]]
         for column, column_offsets in (
             ("compressed", self._compressed),
@@ -333,9 +335,9 @@ class FastaGenome(Genome):
                         f"{column} offset {offset} is not above the offset before it, {previous}"
                     )
                     raise self._gzi_error(problem)
-        self._check_uncompressed_offsets()
+        self._check_uncompressed_offsets(size)
 
-    def _check_uncompressed_offsets(self) -> None:
+    def _check_uncompressed_offsets(self, size: int) -> None:
         """Make sure that each uncompressed offset is the sum of the ISIZE of the blocks before it.
 
         The test reads the header and the ISIZE field of each block before the last `.gzi` entry,
@@ -344,18 +346,13 @@ class FastaGenome(Genome):
         offset = total = 0
         for listed, expected in zip(self._compressed[1:], self._uncompressed[1:], strict=True):
             while offset < listed:
-                size, _header_size = self._read_header(offset)
-                end = offset + size
+                end, isize = self._block_end(offset, size)
                 if end > listed:
                     problem = (
                         f"compressed offset {listed} is inside the block at compressed offset "
                         f"{offset}; the next block starts at {end}"
                     )
                     raise self._gzi_error(problem)
-                # The block ends at or before an entry that is below the file size, so the read
-                # gets the 4 bytes.
-                self._handle.seek(end - _ISIZE.size)
-                (isize,) = _ISIZE.unpack(self._handle.read(_ISIZE.size))
                 total += isize
                 offset = end
             if total != expected:
@@ -364,6 +361,33 @@ class FastaGenome(Genome):
                     f"not {total}, the sum of the ISIZE fields of the blocks before it"
                 )
                 raise self._gzi_error(problem)
+
+    def _block_end(self, offset: int, size: int) -> tuple[int, int]:
+        """Return the end of the BGZF block at the compressed offset, and its ISIZE field.
+
+        The file has `size` bytes. A block that ends after the file raises `InputError`. Each error
+        of `_read_header` also raises `InputError`.
+        """
+        block_size, _header_size = self._read_header(offset)
+        end = offset + block_size
+        if end > size:
+            raise self._damaged(offset, "the file ends inside it")
+        self._handle.seek(end - _ISIZE.size)
+        (isize,) = _ISIZE.unpack(self._handle.read(_ISIZE.size))
+        return end, isize
+
+    def _first_data_block(self, limit: int, size: int) -> int:
+        """Return the compressed offset of the first block with data that starts below `limit`.
+
+        If no such block exists, the result is 0.
+        """
+        offset = 0
+        while offset < limit:
+            end, isize = self._block_end(offset, size)
+            if isize:
+                return offset
+            offset = end
+        return 0
 
 
 def _block_size(extra: bytes) -> int | None:

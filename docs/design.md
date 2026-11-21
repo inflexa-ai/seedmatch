@@ -371,7 +371,7 @@ The ROC curve:
 - The canonical flag comes from the `Ensembl_canonical` tag. The support level is the integer at the start of `transcript_support_level`. If the value starts with `NA`, the transcript has no support level. If the value starts with neither an integer nor `NA`, the reader raises `InputError`. The biotypes come from `gene_biotype` and `transcript_biotype`, or from the GENCODE attributes `gene_type` and `transcript_type`.
 - A GTF has no Entrez IDs, thus a filter on `entrez_ids` raises `InputError`.
 - The IDs stay as the GTF gives them. Thus a GENCODE ID keeps its version suffix.
-- The FASTA genome reader reads a plain FASTA file with its `.fai` index, or a BGZF file with its `.fai` and `.gzi` indexes. It uses only `zlib` and the file functions of Python. It decompresses only the blocks of the requested range. A gzip file that is not BGZF raises `InputError`.
+- The FASTA genome reader reads a plain FASTA file with its `.fai` index, or a BGZF file with its `.fai` and `.gzi` indexes. It uses only `zlib` and the file functions of Python. It decompresses only the blocks of the requested range. A BGZF file can start with empty blocks, for example after `cat` of an empty BGZF file and another file. The `.gzi` has no entry for the first block with data, thus the reader finds this block when it opens the file. A gzip file that is not BGZF raises `InputError`.
 - GENCODE contig names have the prefix `chr`, but the Ensembl FASTA names do not. For each contig, the extraction uses the first genome name that exists: the same name, the name without `chr`, or the name with `chr`. `chrM` and `MT` are the same contig. If no contig name of the annotation agrees with a genome contig, `Reference` raises `InputError`.
 - A GTF has no contig lengths. Thus, on this path, `Reference` does not compare the contig lengths with the genome.
 - This path makes no parity claim, because the catalog has a different Ensembl release from SeedMatchR. A consistency test compares this path with the EnsDb path on one Ensembl release.
@@ -565,7 +565,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
   - soft-masked bases and N blocks
   - a range across a BGZF block boundary
 - Real references: tests with the marker `refs` read the directory in `SEEDMATCH_TEST_REFS`. They compare the feature sequences of `rnor7` and `hg38` with R digests: the names, the length, and the first 16 hexadecimal digits of the SHA-256 digest of each sequence. The digest files are gzip TSV files. If the variable is not set, the tests skip and give the reason.
-- Consistency: on the fixture, each GTF gives the same sequences as the EnsDb. On `rnor7` and on `hg38`, the Ensembl release 109 GTF gives the same sequences and the same transcripts as the EnsDb of release 109, on the standard chromosomes.
+- Consistency: on the fixture, each GTF gives the same sequences as the EnsDb. On the standard chromosomes of `rnor7` and of `hg38`, the GTF of Ensembl 109 gives the sequences and the transcripts of the EnsDb 109.
 
 ### Core without network
 

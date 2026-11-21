@@ -946,6 +946,94 @@ def test_gzi_of_a_file_with_one_block_has_no_entries(tmp_path):
         assert genome.sequence("a", 1, 40) == "ACGT" * 10
 
 
+EMPTY_BLOCK = bgzf_block(b"")
+
+
+@pytest.mark.parametrize("empty_blocks", [1, 2])
+@pytest.mark.parametrize("block_size", [50, 1000], ids=["many blocks", "one block"])
+def test_bgzf_file_that_starts_with_empty_blocks_is_valid(tmp_path, empty_blocks, block_size):
+    sequences = {"a": "ACGT" * 30, "b": "TTGCA" * 20}
+    path = write_genome(tmp_path, sequences, block_size=block_size)
+    gzi = tmp_path / "genome.fa.gzi"
+    lead = EMPTY_BLOCK * empty_blocks
+    # The empty blocks move each later block, and they get no entry, as `bgzip -r` gives.
+    pairs = [(compressed + len(lead), uncompressed) for compressed, uncompressed in read_gzi(gzi)]
+    path.write_bytes(lead + path.read_bytes())
+    gzi.write_bytes(gzi_bytes(pairs))
+    with FastaGenome(path) as genome:
+        found = {name: genome.sequence(name, 1, len(bases)) for name, bases in sequences.items()}
+    assert found == sequences
+
+
+def test_bgzf_file_cut_inside_the_block_after_an_empty_block_raises(tmp_path):
+    path = write_genome(tmp_path, {"a": "ACGT" * 10}, block_size=1000)
+    assert len(EMPTY_BLOCK) == 28
+    path.write_bytes((EMPTY_BLOCK + path.read_bytes())[: len(EMPTY_BLOCK) + 30])
+    message = (
+        f"{os.fspath(path)!r}: the BGZF block at compressed offset 28 is damaged: "
+        "the file ends inside it; expected an intact file"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        FastaGenome(path)
+
+
+def write_blocks(directory, blocks, pairs=()):
+    """Write `genome.fa` of the BGZF blocks, with an empty .fai and the .gzi pairs. Return it."""
+    path = directory / "genome.fa"
+    path.write_bytes(b"".join(blocks))
+    (directory / "genome.fa.fai").write_text("")
+    (directory / "genome.fa.gzi").write_bytes(gzi_bytes(list(pairs)))
+    return path
+
+
+@pytest.mark.parametrize("empty_blocks", [1, 3])
+def test_bgzf_file_of_only_empty_blocks_has_no_contigs(tmp_path, empty_blocks):
+    with FastaGenome(write_blocks(tmp_path, [EMPTY_BLOCK] * empty_blocks)) as genome:
+        assert dict(genome.contigs) == {}
+
+
+DATA_BLOCK = bgzf_block(b">a\nACGT\n")
+
+
+@pytest.mark.parametrize(
+    ("blocks", "problem"),
+    [
+        (
+            [EMPTY_BLOCK, EMPTY_BLOCK[:12] + b"XY" + EMPTY_BLOCK[14:], DATA_BLOCK],
+            "the gzip block at compressed offset 28 is not BGZF",
+        ),
+        (
+            [EMPTY_BLOCK, EMPTY_BLOCK[:5]],
+            "the file ends before the BGZF block at compressed offset 28 has a complete header",
+        ),
+    ],
+    ids=["no BC field", "cut header"],
+)
+def test_bgzf_file_with_a_bad_second_empty_block_names_its_offset(tmp_path, blocks, problem):
+    path = write_blocks(tmp_path, blocks)
+    with pytest.raises(InputError, match=re.escape(f"{os.fspath(path)!r}: {problem}")):
+        FastaGenome(path)
+
+
+def test_gzi_entry_that_points_at_an_empty_block_before_the_data_raises(tmp_path):
+    path = write_blocks(tmp_path, [EMPTY_BLOCK, EMPTY_BLOCK, DATA_BLOCK], [(28, 0)])
+    problem = "uncompressed offset 0 is not above the offset before it, 0"
+    with pytest.raises(InputError, match=gzi_error(path, problem)):
+        FastaGenome(path)
+
+
+def test_gzi_entry_inside_a_block_that_the_file_cuts_names_the_cut_block(tmp_path):
+    path = copy_as(tmp_path, "synthetic.fa.gz", "synthetic.fa.gz")
+    (tmp_path / "synthetic.fa.gz.gzi").write_bytes(gzi_bytes([(18906, 65273), (18950, 130543)]))
+    path.write_bytes(path.read_bytes()[:30000])
+    message = (
+        f"{os.fspath(path)!r}: the BGZF block at compressed offset 18906 is damaged: "
+        "the file ends inside it; expected an intact file"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        FastaGenome(path)
+
+
 @pytest.mark.parametrize("name", NAMES)
 def test_reads_from_a_read_only_directory(tmp_path, name):
     directory = tmp_path / "refs"
