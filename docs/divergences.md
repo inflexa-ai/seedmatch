@@ -186,6 +186,18 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: The map then uses the Ensembl release of the sequences, and it uses no internet. A GRCh37 map does not agree with a GRCh38 reference.
 - Test: `test_string_gene_network_maps_with_the_protein_table_D013` in `tests/network/test_string_network.py`. The `test_protein_genes_*` tests in `tests/annotation/test_ensdb.py` check the method of the EnsDb.
 
+## D-014: The documentation uses only functions that exist
+
+- ID: `D-014`
+- R location: the vignettes `vignettes/articles/SeedMatchR_miRNA_analysis.Rmd` (`:64`, `:76`, `:178`) and `vignettes/articles/SeedMatchR_build_PPI_network.Rmd` (`:30`).
+- R behavior: The miRNA vignette calls `filter_deseq` (`:64`), `get_feature_seqs` (`:76`), and `de_fc_ecdf` (`:178`). The network vignette calls `get_network_matches` without `organism` (`:30`). An R probe with R 4.5.3 and SeedMatchR 2.0.0 gives the evidence:
+  - `exists(name, envir = asNamespace("SeedMatchR"), inherits = FALSE)` is `FALSE` for `filter_deseq`, `de_fc_ecdf`, and `get_feature_seqs`. It is `TRUE` for `filter_res` and `deseq_fc_ecdf`.
+  - `get_network_matches(c("A"), aggregator = "mean")` stops with `argument "organism" is missing, with no default`.
+  - The export list of SeedMatchR 2.0.0 (`tests/data/SeedMatchR.NAMESPACE`) has `deseq_fc_ecdf` (`:25`), `filter_res` (`:28`), and `get_network_matches` (`:35`). It has no line for `filter_deseq`, `de_fc_ecdf`, or `get_feature_seqs`.
+- New behavior: The examples of `README.md` use only the public names of seedmatch, and a test runs each Python example. Each `seedmatch.` name and each `seedmatch-fetch` command of `docs/r-map.md` exists.
+- Reason: An agent copies the examples of the documentation. An example that calls an absent function stops with an error, and the agent cannot use it.
+- Test: `test_each_python_name_of_the_r_map_exists_D014` in `tests/test_r_map.py`. The tests of `tests/test_readme.py` run each Python example of `README.md`.
+
 ## D-015: A seed-count column replaces a column with the same name
 
 - ID: `D-015`
@@ -655,6 +667,7 @@ The IDs of the known divergences have the same order as the rows of the table in
 - R behavior: R selects the sequences with a seed match by name (`sequences[names]`). For a name that occurs two times, this gives the first sequence two times (note `repeated_name_r`).
   - The merge by `gene_name` (`:90`) then pairs each seed row with each region row of the name.
   - The case `repeated_name_r` has two sequences with the name `g`, and each sequence has a site. R gives 4 rows, and each row belongs to the first sequence. The second sequence has no row.
+  - Evidence: the cases and the notes of `tests/golden/noncanonical/compensatory.tsv`.
 - New behavior: Each sequence of the set is searched. A pair holds a seed match and a region of the same sequence, by the index of the sequence in the set.
 - Reason: A `SequenceSet` can hold two sequences with one ID, for example with `PerGene.EACH_TRANSCRIPT` and gene IDs as names.
 - Test: `test_each_sequence_is_searched_for_a_repeated_id_D052` in `tests/noncanonical/test_compensatory.py`.
@@ -666,6 +679,7 @@ The IDs of the known divergences have the same order as the rows of the table in
 - R behavior: Two `dplyr` filters keep the longest region of each transcript and region end, and then of each transcript and region start. The groups ignore the seed match.
   - Thus a longer region of one seed match drops the region of another seed match.
   - The case `two_seed_matches_r` has two seed matches in one sequence. R gives one row, and the seed match at 13 has no row.
+  - Evidence: the cases and the notes of `tests/golden/noncanonical/compensatory.tsv`.
 - New behavior: A pair is dropped if a pair of the same seed match has a region that contains its region and is longer. Pairs with the same region and different guide windows stay.
 - Reason: Each seed match is a site of its own. On the R goldens without this case, the R rule and the port rule give the same rows.
 - Test: `test_a_region_of_one_seed_match_does_not_drop_a_region_of_another_D053` and `test_a_region_inside_a_longer_region_of_its_seed_match_is_dropped` in `tests/noncanonical/test_compensatory.py`.
@@ -678,6 +692,7 @@ The IDs of the known divergences have the same order as the rows of the table in
   - A region that occurs two times in the guide gives two equal rows with the text `8,12` (case `repeated_region_r`).
   - A region at g8 that also occurs at g2 gives the text `2,8` (case `region_at_g2_r`, note `relative_position_seq_g6`).
   - `mismatch_in_seed` is 1 if the text of the seed match differs from the target (`:106-108`). Thus a match with 2 mismatches gives 1 (case `seed_mm2_r`).
+  - Evidence: the cases and the notes of `tests/golden/noncanonical/compensatory.tsv`.
 - New behavior: `guide_start` and `guide_end` are the integers of the window of the row. `seed_mismatches` is the number of mismatches, and a position outside the sequence is a mismatch. For `max_seed_mismatch` of 0 or 1, it equals the R value.
 - Reason: A text of positions is not a number, and the position of g2 is not in the region. The flag hides the number of mismatches.
 - Test: `test_each_row_gives_the_guide_positions_of_its_region_D054` and `test_seed_mismatches_is_the_number_of_mismatches_D054` in `tests/noncanonical/test_compensatory.py`.
@@ -689,6 +704,7 @@ The IDs of the known divergences have the same order as the rows of the table in
 - R behavior: `compensatory_region_length_min = 6` with `compensatory_region_length_max = 3` gives the lengths 6, 5, 4, and 3, and R returns 3 rows of length 6 (case `min_above_max_r`).
   - A minimum above the 16 positions of g8 to g23 searches the region g8 to g23 three times (note `min_17`).
   - `limit = 2` gives no row. R keeps `seed_start > end + 1` and `seed_start < end + 2`, and no integer obeys these two tests.
+  - Evidence: the cases and the notes of `tests/golden/noncanonical/compensatory.tsv`. No case has `limit = 2`, and the filter at `:92` gives the `limit = 2` result.
 - New behavior: `InputError` for `max_length` below `min_length`, for a length above the number of positions of the region, and for a `max_distance` below 1. A longest region of more letters than the pattern limit of the search also raises `InputError`, before the first search.
 - Reason: R gives a result for other lengths than the arguments, and it gives no message.
 - Test: `test_compensatory_options_reject_lengths_that_select_no_region_D055`, `test_a_short_guide_has_no_room_for_the_region_D055`, `test_the_message_names_one_position_in_the_singular_D055`, and `test_a_window_above_the_pattern_limit_raises_before_a_search_D055` in `tests/noncanonical/test_compensatory.py`.

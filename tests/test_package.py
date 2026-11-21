@@ -9,6 +9,8 @@ import seedmatch
 from seedmatch.errors import InputError, SeedMatchError
 
 DIVERGENCES = Path(__file__).parents[1] / "docs" / "divergences.md"
+DESIGN = Path(__file__).parents[1] / "docs" / "design.md"
+DIVERGENCE_FIELDS = ("ID", "R location", "R behavior", "New behavior", "Reason", "Test")
 TESTS = Path(__file__).parent
 
 
@@ -38,6 +40,22 @@ def test_each_divergence_id_is_unique_and_has_a_test():
     # This file names a probe ID in its own matcher test, so it must not count as a divergence test.
     test_text = "\n".join(p.read_text() for p in TESTS.rglob("test_*.py") if p != Path(__file__))
     assert ids_without_test(ids, test_text) == []
+
+
+def test_each_divergence_row_of_the_design_has_an_entry_with_each_field():
+    design = DESIGN.read_text(encoding="utf-8")
+    section = design.split("\n## Divergences (defect fixes)\n", 1)[1].split("\n## ", 1)[0]
+    # The table has no ID column: data row n has the ID D-nnn of n. [1:] drops the header row, and
+    # the separator line "|---|" does not start with "| ".
+    rows = [line for line in section.splitlines() if line.startswith("| ")][1:]
+    text = DIVERGENCES.read_text(encoding="utf-8")
+    entries = re.split(r"^## (?=D-\d{3}:)", text, flags=re.MULTILINE)[1:]
+    ids = [entry.split(":", 1)[0] for entry in entries]
+    assert ids == [f"D-{n:03d}" for n in range(1, len(rows) + 1)]
+    for entry_id, entry in zip(ids, entries, strict=True):
+        fields = re.findall(r"^- ([A-Za-z ]+):", entry, flags=re.MULTILINE)
+        assert list(dict.fromkeys(fields)) == list(DIVERGENCE_FIELDS), entry_id
+        assert f"\n- ID: `{entry_id}`\n" in entry, entry_id
 
 
 def test_divergence_id_counts_with_or_without_hyphen_in_test_text():
