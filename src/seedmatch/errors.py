@@ -1,4 +1,8 @@
-"""Errors that seedmatch raises."""
+"""Errors that seedmatch raises, and the warning that it gives."""
+
+import os
+import warnings
+from pathlib import Path
 
 
 class SeedMatchError(Exception):
@@ -15,3 +19,15 @@ class FetchError(SeedMatchError):
 
 class SeedMatchWarning(UserWarning):
     """Base class of each warning that seedmatch gives."""
+
+
+_PACKAGE_DIRECTORY = str(Path(__file__).parent) + os.sep
+
+
+def warn(message: str) -> None:
+    """Warn with `SeedMatchWarning`. The warning names the first line outside the package.
+
+    The line is the same for each depth of the calls inside seedmatch, thus a caller of a public
+    function sees its own line, also if a plot function calls the function that warns.
+    """
+    warnings.warn(message, SeedMatchWarning, skip_file_prefixes=(_PACKAGE_DIRECTORY,))

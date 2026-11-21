@@ -1,7 +1,6 @@
 """The reader of the STRING protein links, their gene pairs, and the scores of their genes."""
 
 import os
-import warnings
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -35,7 +34,7 @@ from seedmatch._lines import (
 )
 from seedmatch._rmath import r_quantile
 from seedmatch.annotation.reference import Reference
-from seedmatch.errors import InputError, SeedMatchWarning
+from seedmatch.errors import InputError, warn
 from seedmatch.network.messages import Aggregator, mean_messages, pair_keys, sender_weights
 
 STRING_HEADER: Final = "protein1 protein2 combined_score"
@@ -519,7 +518,7 @@ def string_scores(
             "no gene of de is a gene of the network; each seed count is 0. "
             f"Expected the gene IDs of the network, for example {shown(genes[0])}"
         )
-        warnings.warn(message, SeedMatchWarning, stacklevel=2)
+        warn(message)
     seed_counts = np.zeros(gene_count, dtype=np.float64)
     np.maximum.at(seed_counts, row_genes[in_network], counts[in_network])
 

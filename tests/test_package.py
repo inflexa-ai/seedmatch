@@ -20,7 +20,7 @@ def ids_without_test(ids: list[str], test_text: str) -> list[str]:
 def test_import_loads_no_fetch_and_no_plot_modules():
     code = (
         "import sys, seedmatch; print(sorted(m for m in sys.modules "
-        "if m.startswith(('seedmatch.fetch', 'matplotlib', 'pysam'))))"
+        "if m.startswith(('seedmatch.fetch', 'seedmatch.plot', 'matplotlib', 'pysam'))))"
     )
     # The arguments are the interpreter path and a constant script, so no input reaches the command.
     out = subprocess.run(  # noqa: S603

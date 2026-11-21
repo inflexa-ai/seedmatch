@@ -1,6 +1,5 @@
 """The ECDF test of two gene sets in a DE table, and the group of each row (`R/deseq_fc_ecdf.R`)."""
 
-import warnings
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -20,7 +19,7 @@ from seedmatch._checks import (
     check_numeric_columns,
     shown,
 )
-from seedmatch.errors import InputError, SeedMatchWarning
+from seedmatch.errors import InputError, warn
 from seedmatch.stats.dts import check_dts_range, dts_test
 from seedmatch.stats.ks import ks_test
 from seedmatch.stats.types import Alternative, PValueMethod, TwoSampleResult, as_alternative
@@ -302,5 +301,5 @@ def _warn_for_shared_gene(members: Mapping[str, list[str]]) -> None:
                 message = (
                     f"groups {first!r} and {name!r} share the gene {gene!r}; the last group wins"
                 )
-                warnings.warn(message, SeedMatchWarning, stacklevel=3)
+                warn(message)
                 return

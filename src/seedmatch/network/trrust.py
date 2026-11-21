@@ -1,7 +1,6 @@
 """The reader of the TRRUST table of regulators and targets, and the scores of its genes."""
 
 import os
-import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Final
@@ -28,7 +27,7 @@ from seedmatch._lines import (
     read_chunks,
     vocabulary_codes,
 )
-from seedmatch.errors import InputError, SeedMatchWarning
+from seedmatch.errors import InputError, warn
 from seedmatch.network.messages import Aggregator, mean_messages, pair_keys, sender_weights
 
 TRRUST_MODES: Final = ("Activation", "Repression", "Unknown")
@@ -211,7 +210,7 @@ def trrust_scores(
             "no gene of seed_genes is a gene of the TRRUST table; each seed flag is 0. "
             f"TRRUST names a gene by its symbol, for example {shown(genes[0])}"
         )
-        warnings.warn(message, SeedMatchWarning, stacklevel=2)
+        warn(message)
 
     # A pair key is below G^2 for G genes, thus this key is below 3 * G^2. G is at most 2 * rows.
     # Thus a key fits an int64 for a table of fewer than 8e8 rows.

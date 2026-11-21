@@ -774,3 +774,29 @@ The IDs of the known divergences have the same order as the rows of the table in
   - If no gene of `de` is in the network, `string_scores` warns with `SeedMatchWarning`. The message names the first gene of the network as an example.
 - Reason: A gene-level result uses the maximum count (`D-003`). A count of NaN, below 0, or infinite is not a count of matches. IDs of another type give scores that look valid, thus the function warns (`D-058`).
 - Test: `test_string_scores_take_the_highest_count_of_a_gene_D062`, `test_string_scores_reject_a_bad_count_D062`, and `test_string_scores_warn_without_a_de_gene_in_the_network_D062` in `tests/network/test_string_scores.py`.
+
+## D-063: plot_ecdf labels each p-value
+
+- ID: `D-063`
+- R location: `.plot_ecdf` (`R/deseq_fc_ecdf.R:312-324`), called by `deseq_fc_ecdf` (`:133-145`).
+- R behavior: The branches compare `p < .01 && p >= .001`, `p > .01`, and `p < .001`. No branch takes p = 0.01, thus R stops with `object 'pvalue_label' not found`.
+  - A NaN or NA p-value stops R with `missing value where TRUE/FALSE needed`.
+  - A DTS p-value of 20 of 2000 permutations is exactly 0.01.
+  - Evidence: `tests/golden/plots/ecdf_labels.tsv`.
+- New behavior: The label of p = 0.01 is `0.01`, and NaN gives `NaN`. The other labels are the labels of R.
+- Reason: Each result of `ecdf_test` must give a figure.
+- Test: `test_plot_ecdf_labels_each_p_value_D063` and `test_plot_ecdf_labels_the_p_value_of_exactly_one_hundredth_D063` in `tests/plot/test_plot_ecdf.py`.
+
+## D-064: plot_ecdf draws only the groups, and its legend counts the values of each line
+
+- ID: `D-064`
+- R location: `deseq_fc_ecdf` (`R/deseq_fc_ecdf.R:100-121`), and `.plot_ecdf` (`:326-336`).
+- R behavior: A row of `res` in no gene list has the group `NA`. `stat_ecdf` draws a gray line for it, with the legend key `NA`.
+  - Evidence: the case `no_group_r` of `tests/golden/plots/ecdf_lines.tsv`.
+- R behavior: The count of a legend label is the length of the gene list (`:112`). Thus a gene that `res` does not have, a repeated gene, and a row without a fold change add to the count.
+  - Evidence: the notes `legend absent_and_repeated` (`Background: 164`) and `legend na_fold_change` of `tests/golden/plots/ecdf_lines.tsv`.
+- R behavior: The labels come in the order of `factor_order`, but the counts come in the order of `gene_lists` (`:112`, `:121`). Thus another order gives each group the count of another group.
+  - Evidence: the note `legend factor_order_reversed` (`mer7m8: 161`) of `tests/golden/plots/ecdf_lines.tsv`.
+- New behavior: The figure has one line for each key of `groups`, in the order of the keys. The count of a label is the number of finite `log2FoldChange` values of its line.
+- Reason: A legend label must describe its line.
+- Test: `test_plot_ecdf_draws_only_the_groups_D064`, `test_plot_ecdf_counts_the_values_of_each_line_D064`, and `test_plot_ecdf_follows_the_order_of_the_keys_D064` in `tests/plot/test_plot_ecdf.py`.

@@ -44,7 +44,7 @@ A plot function makes a `matplotlib.figure.Figure` with the object API. It does 
 - `import seedmatch` does not import matplotlib or `seedmatch.plot`. The core functions of this plan are in the core, and `seedmatch` exports them. Only `seedmatch.plot` exports the plot functions.
 - A plot function uses `matplotlib.figure.Figure` and its Axes. It does not import `matplotlib.pyplot`, and it does not change `matplotlib.rcParams`. It writes no file.
 - The tests of a figure read the data of its artists: the points of each line, the bars, the texts, and the colors. They do not compare pixels. Pixel identity with ggplot2 is a non-goal of the design. The coverage omits `*/seedmatch/plot/*`, but each plot module has tests.
-- Errors derive from `seedmatch.errors.SeedMatchError`. Invalid input raises `InputError`, and each message names the bad value and the expected value. A warning has the category `SeedMatchWarning`.
+- Errors derive from `seedmatch.errors.SeedMatchError`. Invalid input raises `InputError`, and each message names the bad value and the expected value. A warning has the category `SeedMatchWarning`, and it goes through `seedmatch.errors.warn`.
 - The message templates of this plan are normative. Each error test matches a stable part of its template. A template that names a helper of `seedmatch._checks` is the message of that helper.
 - Each change of behavior from R gets an entry `## D-NNN: <title>` in `docs/divergences.md`. It also gets a row in the table of `docs/design.md`, and a test whose name contains the ID.
 - This plan writes the entries of the new IDs `D-063` to `D-070`, after the entry of `D-062`. The table rows come after the row of `D-062`, in ID order. The IDs come in task order, thus each task adds its entries and its rows at the end. Task 4 also changes the text of `D-010`.
@@ -256,6 +256,7 @@ def as_color(name: str, value: object) -> str: ...
 def new_figure(size: tuple[float, float]) -> Figure: ...
 def style_theme_axes(axes: Axes) -> None: ...
 def style_gray_axes(axes: Axes) -> None: ...
+def as_written[T: Text](text: T) -> T: ...
 
 # seedmatch/stats/wasserstein.py (Task 3): renamed from _as_wasserstein_sample, with the same messages.
 def as_wasserstein_sample(name: str, values: ArrayLike) -> npt.NDArray[np.float64]: ...
@@ -289,6 +290,7 @@ Rules of `_style.py`:
   - a white panel with an edge of `#2c3e50`
   - major grid lines of `#6b8cae`, dashed, with the width `linewidth_points(0.2)`
 - `style_gray_axes` applies the panel of `theme_grey` of ggplot2: the face color `#EBEBEB`, white grid lines with the width `linewidth_points(0.5)`, and no edge lines.
+- `as_written` sets `parse_math=False` on a Text and returns it. Each plot function calls it on each title or label that comes from an argument. Thus a `$` in a user text draws as written.
 - The sizes are near the sizes of R, not equal. These functions change only the given Axes, never `rcParams`.
 
 Rules of `seedmatch.stats.density`:
