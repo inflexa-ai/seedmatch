@@ -1,7 +1,10 @@
 """Arithmetic of R that Python does not share."""
 
 import math
-from typing import Final
+from typing import Any, Final
+
+import numpy as np
+from numpy.typing import NDArray
 
 from seedmatch._checks import as_limit
 from seedmatch.errors import InputError
@@ -51,3 +54,30 @@ def _round_magnitude(x: float, places: int) -> float:
     if upper - x < x - lower or (upper - x == x - lower and below % 2 == 1):
         return upper
     return lower
+
+
+def r_quantile(values: NDArray[np.number[Any]], probability: float) -> float:
+    """Return the quantile of `values` as `stats::quantile(values, probability)` of R gives it.
+
+    This is type 7, the default of R. With n values, R takes index = 1 + (n - 1) * probability,
+    lo = floor(index), and hi = ceiling(index). The result is the value of rank lo. If index is
+    above lo and the value of rank hi is different, the result is (1 - h) * x[lo] + h * x[hi] for
+    h = index - lo. The function does the same float64 operations in the same order, thus it
+    differs from `numpy.quantile` in the last bit for some inputs. `numpy.quantile` gives 897.5
+    and R gives 897.4999999999999 for the 22 scores of the STRING sample at 0.95.
+
+    `values` is a one-dimensional array of finite numbers, and it has at least one value.
+    `probability` is from 0 to 1. The caller makes sure of these conditions, and the function
+    does not check them. The time is O(n) and the memory is 8 bytes for each value. A float64 copy
+    of `values` goes to `numpy.ndarray.partition`, which puts the values of the ranks lo and hi in
+    their sorted places and does not order the other values. The input stays as it is.
+    """
+    partitioned = np.array(values, dtype=np.float64)
+    index = 1 + (len(partitioned) - 1) * float(probability)
+    low_rank, high_rank = math.floor(index), math.ceil(index)
+    partitioned.partition(sorted({low_rank - 1, high_rank - 1}))
+    low, high = float(partitioned[low_rank - 1]), float(partitioned[high_rank - 1])
+    if index > low_rank and high != low:
+        weight = index - low_rank
+        return (1 - weight) * low + weight * high
+    return low

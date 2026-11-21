@@ -7,7 +7,7 @@ from helpers import golden_rows
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from seedmatch._rmath import r_round
+from seedmatch._rmath import r_quantile, r_round
 from seedmatch.errors import InputError
 
 
@@ -122,3 +122,38 @@ def rounding_cases(draw):
 def test_r_round_gives_the_nearer_of_the_floor_and_the_ceiling(case):
     x, digits = case
     assert r_round(x, digits) == oracle(x, digits)
+
+
+@pytest.mark.parametrize("case", golden_rows("network/r_quantiles.tsv"), ids=lambda row: row.case)
+def test_r_quantile_matches_r(case):
+    values = np.array([float(text) for text in case.values.split(",")])
+    assert r_quantile(values, float(case.probability)) == float(case.quantile)
+
+
+def test_r_quantile_differs_from_numpy_in_the_last_bit():
+    (row,) = (row for row in golden_rows("network/r_quantiles.tsv") if row.case == "links_p95")
+    values = np.array([float(text) for text in row.values.split(",")])
+    assert r_quantile(values, 0.95) == 897.4999999999999
+    assert np.quantile(values, 0.95) == 897.5
+
+
+def test_r_quantile_keeps_a_repeated_value_exactly():
+    value = 7.188239240658031
+    assert r_quantile(np.full(27, value), 0.7141294836112025) == value
+
+
+def test_r_quantile_accepts_integer_values_and_keeps_its_input():
+    values = np.array([800, 400, 900, 400, 650], dtype=np.int16)
+    before = values.copy()
+    assert r_quantile(values, 0.5) == 650.0
+    assert type(r_quantile(values, 0.5)) is float
+    assert values.tolist() == before.tolist()
+
+
+@pytest.mark.parametrize("probability", [0.0, 0.1, 0.25, 0.5, 0.73, 0.95, 1.0])
+@pytest.mark.parametrize("size", [1, 2, 3, 10, 101])
+def test_r_quantile_agrees_with_numpy_to_rounding(size, probability):
+    values = np.random.default_rng(size).normal(size=size)
+    assert r_quantile(values, probability) == pytest.approx(
+        float(np.quantile(values, probability)), rel=1e-12, abs=1e-12
+    )

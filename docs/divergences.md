@@ -712,3 +712,19 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `trrust_scores` warns with `SeedMatchWarning`. The message names the first gene of the network as an example.
 - Reason: IDs of another type give scores that look valid. The function warns and does not raise an error, because a valid list of genes can have no gene of the network.
 - Test: `test_trrust_scores_warn_without_a_seed_gene_in_the_network_D058` in `tests/network/test_trrust.py`.
+
+## D-059: read_string_links rejects a bad line of the STRING file
+
+- ID: `D-059`
+- R location: `get_stringPPI_to_stringGGI` (`R/get_stringPPI_to_stringGGI.R:15-16`), which calls `load` of STRINGdb 2.22.0 through `get_graph`.
+- R behavior: `load` reads the file with `read.table(temp, sep = " ", header=TRUE, stringsAsFactors=FALSE, fill = TRUE)` (`R/rstring.R:1064`). It keeps the rows with `PPI$combined_score >= score_threshold` (`:1067`).
+  - A text score makes the column text, and `>=` then compares text. A planner probe with R 4.5.3 keeps `abc` and `99`, but not `1000`.
+  - The result of R depends on the position of the bad line, because `read.table` finds the number of columns from the first five lines. Each case below is a line in the first five lines. The notes of `tests/golden/network/string_links.tsv` also give a late `'` and a late line with 4 fields.
+  - A line with 2 fields or a `#` gives a row of `NA` values in the subset `>= 400`. A `'` gives a row of `NA` values if a later line closes the quote. If no line closes it, R reads no row and warns `incomplete final line found by readTableHeader`.
+  - A line with 4 fields moves the columns, and R keeps the row.
+  - A score of 450.5 or 5000 gives a numeric column, and R keeps the row. A score of -5 is below the threshold, and R drops it.
+  - A late line with 4 fields gives two rows, and the second row has `NA` values. A late `'` joins the next lines into one row, and R warns `EOF within quoted string`.
+- New behavior: Line 1 must be the header `protein1 protein2 combined_score`. Each other line has 3 fields with one space between them. The first two fields hold a protein ID, and the third field holds a score with an integer value from 0 to 1000.
+  - Another line, an empty protein ID, a NUL character, and a line of more than 1024 characters raise `InputError` with the line number. `#` and quote characters are text.
+- Reason: STRING gives each combined score as an integer from 0 to 1000. A text score gives a wrong selection and no message. The limit bounds the memory of a chunk.
+- Test: `test_read_string_links_reject_a_bad_line_D059`, `test_read_string_links_keep_hash_and_quote_text_D059`, `test_read_string_links_reject_a_long_line_D059`, and `test_read_string_links_reject_a_nul_character_D059` in `tests/network/test_string_links.py`.
