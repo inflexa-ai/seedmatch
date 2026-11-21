@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 class SeedMatchError(Exception):
-    """Base class of each error that seedmatch raises."""
+    """Base class of each exception class that seedmatch defines."""
 
 
 class InputError(SeedMatchError, ValueError):

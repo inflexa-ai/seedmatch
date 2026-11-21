@@ -6,6 +6,8 @@
 - Source path: `tests/testthat/testdata/`
 - Source commit: `2fc0c4f`
 
+`SeedMatchR.NAMESPACE` is a copy of the file `NAMESPACE` of SeedMatchR at commit `2fc0c4f`. The bytes are the same as in the source. `tests/test_r_map.py` reads its `export(...)` lines.
+
 `DESEQ2_results.tsv` holds differential expression results. `Test_seqs.fa` holds the sequences that the seed search reads.
 
 `de_filter_cases.tsv` is not a copy. The seedmatch tests and the R script `tools/golden/R/de_and_counts.R` read it. Each row is a boundary case of `filter_res`:
