@@ -16,6 +16,7 @@ from seedmatch._checks import (
 )
 from seedmatch.errors import InputError
 from seedmatch.plot._style import (
+    apply_layout,
     as_color,
     as_limits,
     as_size,
@@ -51,9 +52,15 @@ def plot_ranges(  # noqa: PLR0913
     `start` or an `end` outside -2^52 to 2^52, and a row with `end < start` raise `InputError`.
 
     `x_limits` is the range of the x axis. Its default is the range of the bars with 5% on each
-    side. `title` is the title of the Axes, `color` is the color of the bars, and `size` is the
-    width and the height in inches. `bar_height` is the height of a bar, above 0 and at most 1.
-    The value 1 is the distance between two rows, and a higher bar covers the bar of the next row.
+    side. `title` is the title of the Axes, and `color` is the color of the bars. `bar_height` is
+    the height of a bar, above 0 and at most 1. The value 1 is the distance between two rows, and a
+    higher bar covers the bar of the next row.
+
+    `size` is the width and the height in inches, each above 0 and below 50, as in `ggsave`. A size
+    too small for the texts, the legends, and the labels raises `InputError`. The figure keeps its
+    layout, thus a later change of the figure does not move the Axes. To apply the layout again,
+    call `figure.set_layout_engine("constrained")`.
+
     A value that is not valid raises `InputError`. A limit outside -9e306 to 9e306, or an
     `x_limits` range wider than 9e306, raises `InputError`. The y axis goes from 0 to n + 1 for n
     rows.
@@ -64,8 +71,8 @@ def plot_ranges(  # noqa: PLR0913
     The time and the memory are O(n) for n rows. One `PolyCollection` holds the bars with 4
     vertices for each row, and no row has an artist of its own. The function has no row limit,
     because a limit drops rows without a message, as `head()` of R does. For 10^5 ranges, the call
-    takes 0.065 seconds, 0.65 µs for each row. With `Figure.savefig` to PNG at 100 dpi, it takes
-    0.24 seconds, 2.4 µs for each row. The peak of `tracemalloc` is 40.7 MiB, 427 bytes for each
+    takes 0.078 seconds, 0.78 µs for each row. With `Figure.savefig` to PNG at 100 dpi, it takes
+    0.24 seconds, 2.4 µs for each row. The peak of `tracemalloc` is 41.1 MiB, 431 bytes for each
     row. Machine: Apple M2 Max, Python 3.12.
     """
     check_columns(ranges, ("start", "end"), name="ranges", label="ranges table")
@@ -131,4 +138,4 @@ def plot_ranges(  # noqa: PLR0913
     axes.set_xlabel("Position")
     axes.set_ylabel("Ranges")
     style_gray_axes(axes)
-    return figure
+    return apply_layout(figure)

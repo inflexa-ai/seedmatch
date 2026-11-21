@@ -16,7 +16,8 @@ from seedmatch.plot import plot_ranges
 
 RANGES = "plots/ranges_plot.tsv"
 SIZE_MESSAGE = (
-    "size (0, 5) is not valid; expected (width, height) in inches, two finite numbers above 0"
+    "size (0, 5) is not valid; expected (width, height) in inches, "
+    "two finite numbers above 0 and below 50"
 )
 BAR_HEIGHT_MESSAGE = "bar_height {} is out of range; expected a number above 0 and at most 1"
 POSITION_MESSAGE = "ranges table has {} {} in row {}; expected a position from -2^52 to 2^52"

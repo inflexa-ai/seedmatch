@@ -16,6 +16,7 @@ from seedmatch.plot._style import (
     PALETTE,
     PANEL_EDGE,
     TEXT_COLOR,
+    apply_layout,
     as_color,
     as_limits,
     as_size,
@@ -60,9 +61,15 @@ def plot_ecdf(  # noqa: PLR0913
     line is its name and the count of its values (`D-064`). `result` is the result of
     `ecdf_test`, and the left title of the Axes gives its statistic and its p-value (`D-063`).
     `title` is the title of the figure. `palette` needs a color for each group. `x_limits` are the
-    limits of the x axis before the expansion of 5% on each side. `size` is the width and the
-    height in inches. A value that is not valid raises `InputError`. A value of `x_limits` or of
-    the fold changes outside -9e306 to 9e306, or a range wider than 9e306, raises `InputError`.
+    limits of the x axis before the expansion of 5% on each side.
+
+    `size` is the width and the height in inches, each above 0 and below 50, as in `ggsave`. A size
+    too small for the texts, the legends, and the labels raises `InputError`. The figure keeps its
+    layout, thus a later change of the figure does not move the Axes. To apply the layout again,
+    call `figure.set_layout_engine("constrained")`.
+
+    A value that is not valid raises `InputError`. A value of `x_limits` or of the fold changes
+    outside -9e306 to 9e306, or a range wider than 9e306, raises `InputError`.
 
     Each line is a step function, `drawstyle="steps-post"`, and it extends from the lowest to the
     highest of the view and of all values. The function returns a `Figure` and does not use
@@ -70,8 +77,8 @@ def plot_ecdf(  # noqa: PLR0913
 
     The time is O(n log n) for n rows, because `numpy.unique` sorts the values of each group. The
     figure holds two floats for each distinct value. For 22,000 rows in two groups, the call takes
-    0.014 seconds, and the call with `Figure.savefig` to PNG at 100 dpi takes 0.06 seconds. The
-    peak memory above the start of the two is 3.3 MiB. Machine: Apple M2 Max, Python 3.12.
+    0.033 seconds, and the call with `Figure.savefig` to PNG at 100 dpi takes 0.07 seconds. The
+    peak memory above the start of the two is 3.0 MiB. Machine: Apple M2 Max, Python 3.12.
     """
     check_columns(de, ("gene_id", "log2FoldChange"))
     check_numeric_columns(de, ["log2FoldChange"])
@@ -140,7 +147,7 @@ def plot_ecdf(  # noqa: PLR0913
     legend.get_title().set(fontsize=12, fontweight="bold", color=TEXT_COLOR)
     for text in legend.get_texts():
         as_written(text)
-    return figure
+    return apply_layout(figure)
 
 
 def _p_value_label(p_value: float | None) -> str:

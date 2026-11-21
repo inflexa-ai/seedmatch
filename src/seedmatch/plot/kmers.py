@@ -8,7 +8,7 @@ from matplotlib.figure import Figure
 from seedmatch._checks import as_text, shown
 from seedmatch.errors import InputError
 from seedmatch.kmers import kmer_histogram
-from seedmatch.plot._style import as_size, as_written, new_figure
+from seedmatch.plot._style import apply_layout, as_size, as_written, new_figure
 
 _BAR_FACE: Final = "#E5E5E5"
 _TITLE_SIZE: Final = 14.4
@@ -36,18 +36,24 @@ def plot_kmer_histogram(
     raises `InputError`, also a lowercase target. The message gives the first k-mer as an example.
     A target that occurs more than one time in the index also raises `InputError`.
 
-    `title` is the title of the Axes. `size` is the width and the height in inches, and a value
-    that is not valid raises `InputError`. The arguments and the errors of `gene_counts` and
-    `max_bins` are those of `kmer_histogram`. The function returns a `Figure` and does not use
+    `title` is the title of the Axes.
+
+    `size` is the width and the height in inches, each above 0 and below 50, as in `ggsave`. A size
+    too small for the texts, the legends, and the labels raises `InputError`. The figure keeps its
+    layout, thus a later change of the figure does not move the Axes. To apply the layout again,
+    call `figure.set_layout_engine("constrained")`.
+
+    A value that is not valid raises `InputError`. The arguments and the errors of `gene_counts`
+    and `max_bins` are those of `kmer_histogram`. The function returns a `Figure` and does not use
     `matplotlib.pyplot`. It writes no file, and it does not change `gene_counts` or `rcParams`.
 
-    Each bar is an artist of its own. It takes about 0.7 ms and 9.5 KiB, and 1.2 ms with
+    Each bar is an artist of its own. It takes about 0.21 ms and 9.6 KiB, and 0.30 ms with
     `Figure.savefig` to PNG at 100 dpi. The figure has at most `max_bins` bars, thus the caller
     controls the cost. The first lookup in an index builds its hash table, which takes O(n) time and
-    about 32 bytes for each of n labels. For the 4^10 labels of k = 10, the first call takes 0.06
-    seconds and 33 MiB above the input, and a later call takes 0.009 seconds. For the 16,384 counts
-    of k = 7 on the test data, the call takes 0.009 seconds, and the call with `Figure.savefig` to
-    PNG at 100 dpi takes 0.04 seconds. Machine: Apple M2 Max, Python 3.12.
+    about 32 bytes for each of n labels. For the 4^10 labels of k = 10, the first call takes 0.12
+    seconds and 33 MiB above the input, and a later call takes 0.031 seconds. For the 16,384 counts
+    of k = 7 on the test data, the call takes 0.024 seconds, and the call with `Figure.savefig` to
+    PNG at 100 dpi takes 0.05 seconds. Machine: Apple M2 Max, Python 3.12.
     """
     heading = as_text("title", title)
     kmer = as_text("target", target)
@@ -86,4 +92,4 @@ def plot_kmer_histogram(
     axes.set_ylabel("Frequency")
     axes.spines["top"].set_visible(False)
     axes.spines["right"].set_visible(False)
-    return figure
+    return apply_layout(figure)

@@ -1,7 +1,8 @@
 """The style that each figure of `seedmatch.plot` shares: the palette, the theme, and the checks."""
 
 import math
-from typing import Final
+import warnings
+from typing import TYPE_CHECKING, Final, cast
 
 import numpy as np
 from matplotlib.axes import Axes
@@ -11,6 +12,9 @@ from matplotlib.text import Text
 
 from seedmatch._checks import as_text, shown
 from seedmatch.errors import InputError
+
+if TYPE_CHECKING:
+    from matplotlib.layout_engine import LayoutEngine
 
 PALETTE: Final = (
     "black",
@@ -37,6 +41,11 @@ _PAIR_LENGTH: Final = 2
 # count reaches 1e307, and the bin count can be 1. Near the largest float, the ticks after the end
 # of a view also overflow. The expansion of 5% on each side of a range of 9e306 gives 9.9e306.
 AXIS_BOUND: Final = 9e306
+# ggsave of ggplot2 4.0.2 rejects a side of 50 inches or more. The bound also keeps the canvas of
+# apply_layout below about 95 MiB at 100 dpi.
+_MAX_SIDE: Final = 50.0
+# The start of the UserWarning of matplotlib 3.11.1 for a constrained layout that collapses.
+_COLLAPSE: Final = "constrained_layout not applied"
 
 
 def linewidth_points(linewidth: float) -> float:
@@ -87,10 +96,10 @@ def _finite_pair(value: object) -> tuple[float, float] | None:
 def as_size(size: object) -> tuple[float, float]:
     """Return `size` as two floats, the width and the height in inches. A bool is not a number."""
     pair = _finite_pair(size)
-    if pair is None or min(pair) <= 0:
+    if pair is None or min(pair) <= 0 or max(pair) >= _MAX_SIDE:
         message = (
             f"size {shown(size)} is not valid; expected (width, height) in inches, "
-            "two finite numbers above 0"
+            "two finite numbers above 0 and below 50"
         )
         raise InputError(message)
     return pair
@@ -152,6 +161,39 @@ def as_written[T: Text](text: T) -> T:
 def new_figure(size: tuple[float, float]) -> Figure:
     """Return an empty `Figure` of the size in inches. It does not use `matplotlib.pyplot`."""
     return Figure(figsize=size, layout="constrained", facecolor="white")
+
+
+def _too_small(figure: Figure) -> InputError:
+    size = tuple(figure.get_size_inches().tolist())
+    message = (
+        f"size {shown(size)} is too small for the texts of the figure; "
+        "expected a larger width or height"
+    )
+    return InputError(message)
+
+
+def apply_layout(figure: Figure) -> Figure:
+    """Apply the constrained layout of the figure one time, and keep the positions of the Axes.
+
+    The positions stay for each later draw. Thus a save at each dpi gives no layout warning. A size
+    too small for the texts, or a side below one pixel, raises `InputError`.
+    """
+    # A denormal side makes the layout divide to infinity, and matplotlib then raises a raw error.
+    if figure.get_size_inches().min() * figure.dpi < 1:
+        raise _too_small(figure)
+    # new_figure gives each figure of a plot function a constrained layout engine.
+    engine = cast("LayoutEngine", figure.get_layout_engine())
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message=_COLLAPSE, category=UserWarning)
+        try:
+            engine.execute(figure)
+        except UserWarning as warning:
+            # An outer filter can also raise a warning that is not the collapse.
+            if not str(warning).startswith(_COLLAPSE):
+                raise
+            raise _too_small(figure) from None
+    figure.set_layout_engine("none")
+    return figure
 
 
 def style_theme_axes(axes: Axes) -> None:

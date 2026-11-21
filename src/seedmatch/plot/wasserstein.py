@@ -14,6 +14,7 @@ from seedmatch._checks import shown
 from seedmatch.errors import InputError
 from seedmatch.plot._style import (
     AXIS_BOUND,
+    apply_layout,
     as_size,
     check_axis_range,
     expanded,
@@ -62,16 +63,22 @@ def plot_wasserstein(
     `seed` and `non_seed` are one-dimensional numbers, and `n_interp` is the number of grid points
     of the difference. The arguments and the errors are the arguments and the errors of
     `wasserstein_areas`. A sample whose density bandwidth is not finite, or is below
-    1 / (sqrt(2 pi) * 9e306), about 4.43e-308, also raises `InputError`. `size` is the width and
-    the height in inches, and a value that is not valid raises `InputError`. A pooled value outside
-    -9e306 to 9e306, or a pooled range wider than 9e306, also raises `InputError`. The function
-    returns a `Figure` and does not use `matplotlib.pyplot`. It writes no file, and it does not
-    change its arguments or `rcParams`.
+    1 / (sqrt(2 pi) * 9e306), about 4.43e-308, also raises `InputError`. A pooled value outside
+    -9e306 to 9e306, or a pooled range wider than 9e306, also raises `InputError`.
+
+    `size` is the width and the height in inches, each above 0 and below 50, as in `ggsave`. A size
+    too small for the texts, the legends, and the labels raises `InputError`. The figure keeps its
+    layout, thus a later change of the figure does not move the Axes. To apply the layout again,
+    call `figure.set_layout_engine("constrained")`. A `size` that is not valid also raises
+    `InputError`.
+
+    The function returns a `Figure` and does not use `matplotlib.pyplot`. It writes no file, and it
+    does not change its arguments or `rcParams`.
 
     The time is O(512 * n) for the density of n values, and O(`n_interp` + n log n) for the other
     Axes. The work memory of the density is 4 MiB. The figure holds 512 points for each density
     and `n_interp` points for the difference. For 20,000 and 2,000 normal values with
-    `n_interp=10000`, the call takes 0.053 seconds, and the call with `Figure.savefig` to PNG at
+    `n_interp=10000`, the call takes 0.083 seconds, and the call with `Figure.savefig` to PNG at
     100 dpi takes 0.14 seconds. The peak memory of `tracemalloc` is 5.4 MiB for both. Machine:
     Apple M2 Max, Python 3.12.
     """
@@ -103,7 +110,7 @@ def plot_wasserstein(
         f"Wass(+ censored) = {pasted(areas.positive_censored)}   "
         f"Wass (total) = {pasted(areas.absolute)}"
     )
-    return figure
+    return apply_layout(figure)
 
 
 def _draw_density(

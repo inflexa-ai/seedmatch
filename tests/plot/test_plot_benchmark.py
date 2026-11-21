@@ -18,7 +18,8 @@ from seedmatch.stats import Benchmark, pr_curve, roc_curve
 
 BENCHMARK = "plots/benchmark_plot.tsv"
 SIZE_MESSAGE = (
-    "size (0, 5) is not valid; expected (width, height) in inches, two finite numbers above 0"
+    "size (0, 5) is not valid; expected (width, height) in inches, "
+    "two finite numbers above 0 and below 50"
 )
 LABELS = [1, 0] * 10
 THRESHOLD_MESSAGE = (

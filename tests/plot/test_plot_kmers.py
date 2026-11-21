@@ -16,7 +16,8 @@ from seedmatch.plot import plot_kmer_histogram
 KMER_HIST = "plots/kmer_hist.tsv"
 TITLE = "K-mer gene frequencies"
 SIZE_MESSAGE = (
-    "size (0, 5) is not valid; expected (width, height) in inches, two finite numbers above 0"
+    "size (0, 5) is not valid; expected (width, height) in inches, "
+    "two finite numbers above 0 and below 50"
 )
 
 

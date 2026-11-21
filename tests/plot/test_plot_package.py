@@ -1,14 +1,25 @@
+import io
 import math
 import subprocess
 import sys
+import warnings
 
 import numpy as np
+import pandas as pd
 import pytest
-from helpers import exactly
+from helpers import exactly, sirna_de, sirna_seqs, wasserstein_samples
 from matplotlib.colors import to_hex
 
+from seedmatch import benchmark_predictions, ecdf_test, kmer_counts, kmer_gene_counts
 from seedmatch.errors import InputError
-from seedmatch.plot import PALETTE
+from seedmatch.plot import (
+    PALETTE,
+    plot_benchmark,
+    plot_ecdf,
+    plot_kmer_histogram,
+    plot_ranges,
+    plot_wasserstein,
+)
 from seedmatch.plot._style import (
     TEXT_COLOR,
     as_color,
@@ -186,15 +197,32 @@ def test_as_size_accepts_numpy_numbers():
 
 
 @pytest.mark.parametrize(
-    "size", [(0, 5), (5, -1), (5, math.inf), (True, 5), (5,), (1, 2, 3), (10**400, 5), "5x5"]
+    "size",
+    [
+        (0, 5),
+        (5, -1),
+        (5, math.inf),
+        (True, 5),
+        (5,),
+        (1, 2, 3),
+        (10**400, 5),
+        "5x5",
+        (50, 5),
+        (5, 50.0),
+        (10**6, 5),
+    ],
 )
 def test_as_size_rejects_a_bad_size(size):
     message = (
         f"size {size!r} is not valid; expected (width, height) in inches, "
-        "two finite numbers above 0"
+        "two finite numbers above 0 and below 50"
     )
     with pytest.raises(InputError, match=exactly(message)):
         as_size(size)
+
+
+def test_as_size_accepts_a_side_just_below_50():
+    assert as_size((49.99, 0.01)) == (49.99, 0.01)
 
 
 def test_as_limits_returns_floats():
@@ -283,3 +311,134 @@ def test_style_gray_axes_applies_the_panel_of_theme_grey():
         grid = axis.get_gridlines()[0]
         assert to_hex(grid.get_color()) == "#ffffff"
         assert grid.get_linewidth() == pytest.approx(linewidth_points(0.5))
+
+
+def sized_calls():
+    """Return a call of each plot function that takes `size`, on the test data."""
+    de = sirna_de()
+    groups = {
+        "Background": de.loc[de["mer7m8"] == 0, "gene_id"],
+        "mer7m8": de.loc[de["mer7m8"] >= 1, "gene_id"],
+    }
+    result = ecdf_test(de, target=groups["mer7m8"], background=groups["Background"])
+    seed, non_seed = wasserstein_samples("test_data")
+    counts = kmer_gene_counts(kmer_counts(sirna_seqs()))
+    ranges = pd.DataFrame({"start": [1, 5, 9], "end": [3, 9, 20]})
+    return {
+        "plot_ranges": lambda **options: plot_ranges(ranges, **options),
+        "plot_ecdf": lambda **options: plot_ecdf(de, groups, result, **options),
+        "plot_kmer_histogram": lambda **options: plot_kmer_histogram(counts, "CTCTATA", **options),
+        "plot_wasserstein": lambda **options: plot_wasserstein(
+            seed, non_seed, n_interp=100, **options
+        ),
+        "plot_benchmark": lambda **options: plot_benchmark(benchmark_predictions(de), **options),
+    }
+
+
+SIZED = list(sized_calls())
+
+
+def too_small(size):
+    return (
+        f"size {size!r} is too small for the texts of the figure; expected a larger width or height"
+    )
+
+
+@pytest.mark.parametrize("name", SIZED)
+def test_each_plot_function_rejects_a_size_too_small_for_its_texts(name):
+    with pytest.raises(InputError, match=exactly(too_small((0.3, 0.3)))):
+        sized_calls()[name](size=(0.3, 0.3))
+
+
+def test_plot_ecdf_rejects_a_legend_too_wide_for_the_default_size():
+    de = sirna_de()
+    groups = {"g" * 60: de.loc[de["mer7m8"] >= 1, "gene_id"]}
+    groups["Background"] = de.loc[de["mer7m8"] == 0, "gene_id"]
+    result = ecdf_test(de, target=groups["g" * 60], background=groups["Background"])
+    with pytest.raises(InputError, match=exactly(too_small((5.0, 5.0)))):
+        plot_ecdf(de, groups, result)
+
+
+def test_the_too_small_message_shows_the_size_as_floats():
+    with pytest.raises(InputError, match=exactly(too_small((1.0, 1.0)))):
+        sized_calls()["plot_ecdf"](size=(1, 1))
+
+
+@pytest.mark.parametrize("name", SIZED)
+@pytest.mark.parametrize("size", [(1e-320, 5.0), (5.0, 1e-320)])
+def test_each_plot_function_rejects_a_side_below_one_pixel(name, size):
+    call = sized_calls()[name]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(InputError, match=exactly(too_small(size))):
+            call(size=size)
+
+
+def test_a_layout_warning_other_than_the_collapse_stays_a_warning():
+    ranges = pd.DataFrame({"start": [1, 5], "end": [3, 9]})
+    with pytest.warns(UserWarning, match=r"Glyph 12354 .* missing from font"):
+        plot_ranges(ranges, title="\u3042")
+
+
+def test_a_layout_warning_that_an_outer_filter_raises_is_not_a_size_error():
+    ranges = pd.DataFrame({"start": [1, 5], "end": [3, 9]})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(UserWarning, match=r"Glyph 12354 .* missing from font"):
+            plot_ranges(ranges, title="\u3042")
+
+
+def test_a_plot_function_restores_the_warning_filters_after_a_collapse():
+    call = sized_calls()["plot_ranges"]
+    before = list(warnings.filters)
+    with pytest.raises(InputError, match=exactly(too_small((0.3, 0.3)))):
+        call(size=(0.3, 0.3))
+    assert warnings.filters == before
+
+
+def test_a_plot_function_restores_the_warning_filters_after_a_layout():
+    call = sized_calls()["plot_ranges"]
+    before = list(warnings.filters)
+    call()
+    assert warnings.filters == before
+
+
+# The color bars of plot_benchmark take their width at the first draw, thus the test draws one
+# time before it reads the positions.
+@pytest.mark.parametrize("name", SIZED)
+def test_each_plot_function_keeps_its_layout_for_each_save(name):
+    figure = sized_calls()[name]()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        figure.savefig(io.BytesIO(), format="png", dpi=100)
+        positions = [axes.get_position().bounds for axes in figure.axes]
+        for file_format, dpi in (("png", 50), ("png", 300), ("pdf", 72), ("svg", 72)):
+            figure.savefig(io.BytesIO(), format=file_format, dpi=dpi)
+            assert [axes.get_position().bounds for axes in figure.axes] == positions
+
+
+# A color bar keeps its aspect ratio, thus its drawn width follows the size of the figure. The
+# original position is the position that the layout gave.
+@pytest.mark.parametrize("name", SIZED)
+def test_each_plot_function_keeps_its_axes_when_the_size_changes(name):
+    figure = sized_calls()[name]()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        figure.savefig(io.BytesIO(), format="png", dpi=100)
+        positions = [axes.get_position(original=True).bounds for axes in figure.axes]
+        figure.set_size_inches(10, 8)
+        figure.savefig(io.BytesIO(), format="png", dpi=100)
+        assert [axes.get_position(original=True).bounds for axes in figure.axes] == positions
+
+
+@pytest.mark.parametrize("name", SIZED)
+def test_each_plot_function_lays_out_again_after_set_layout_engine(name):
+    figure = sized_calls()[name]()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        figure.savefig(io.BytesIO(), format="png", dpi=100)
+        positions = [axes.get_position().bounds for axes in figure.axes]
+        figure.set_size_inches(10, 8)
+        figure.set_layout_engine("constrained")
+        figure.savefig(io.BytesIO(), format="png", dpi=100)
+        assert [axes.get_position().bounds for axes in figure.axes] != positions

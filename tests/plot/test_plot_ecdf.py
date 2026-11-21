@@ -378,7 +378,8 @@ BAD_ARGUMENTS = [
     ),
     pytest.param(
         {"size": (0, 5)},
-        "size (0, 5) is not valid; expected (width, height) in inches, two finite numbers above 0",
+        "size (0, 5) is not valid; expected (width, height) in inches, "
+        "two finite numbers above 0 and below 50",
         id="zero-size",
     ),
     pytest.param({"title": 5}, "title 5 has type int; expected a str", id="title"),
