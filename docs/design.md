@@ -43,6 +43,7 @@ The source of truth for behavior is the SeedMatchR repository at commit `2fc0c4f
 - The runtime dependencies come only from the inflexa package-store lock (`../inflexa/images/package-store/lock.amd64.json`):
   - required: `numpy`, `pandas`, `scipy`, `numba`
   - extra `plot`: `matplotlib`
+- `pyproject.toml` sets `pandas<3`. pandas 3 gives a text column the dtype `str`, not `object`, thus the tables of the port change their dtypes and some messages.
 - The genome readers use only the standard library (`mmap`, `zlib`, `sqlite3`) and numpy. Thus the port reads a BGZF FASTA genome without an extra.
 - A new runtime dependency must have an entry in the inflexa manifest. Thus, do not add one.
 - The wheel is pure Python. The inflexa build images have no Rust toolchain. Numba compiles the search kernels at run time.
