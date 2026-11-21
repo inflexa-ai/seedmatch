@@ -451,3 +451,45 @@ def test_wasserstein_difference_holds_a_few_times_its_result_in_memory():
     finally:
         tracemalloc.stop()
     assert peak < 4 * 32 * n_interp
+
+
+DENORMAL_SEED = np.arange(10) * 5e-324
+# The areas that wass_dist of SeedMatchR 2.0.0 gives under R 4.5.3.
+DENORMAL_CASES = [
+    pytest.param(DENORMAL_SEED, np.arange(12.0), (4.992, 4.992, 0.0), id="above the seed"),
+    pytest.param(DENORMAL_SEED, -np.arange(12.0), (5.903, 0.0, 5.903), id="below the seed"),
+]
+
+
+@pytest.mark.parametrize(("seed", "non_seed", "expected"), DENORMAL_CASES)
+def test_wasserstein_gives_the_r_areas_without_a_warning_for_a_denormal_spread(
+    seed, non_seed, expected
+):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        areas = wasserstein_areas(seed, non_seed, n_interp=100)
+    assert (areas.absolute, areas.negative_censored, areas.positive_censored) == expected
+
+
+def test_wasserstein_gives_the_r_area_of_a_tiny_seed_against_a_huge_non_seed():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        areas = wasserstein_areas(np.arange(10) * 1e-300, np.arange(12) * 1e300, n_interp=100)
+    # wass_dist of R 4.5.3 gives 4.9916666666666682e+300 for the absolute and the negative area.
+    # The sums of the port come in another order, and the result differs by 2 ulp.
+    assert areas.absolute == pytest.approx(4.9916666666666682e300, rel=1e-15)
+    assert areas.negative_censored == pytest.approx(4.9916666666666682e300, rel=1e-15)
+    assert areas.positive_censored == 0.0
+
+
+@pytest.mark.parametrize(("seed", "non_seed", "expected"), DENORMAL_CASES)
+def test_wasserstein_difference_gives_no_warning_for_a_denormal_spread(seed, non_seed, expected):
+    del expected
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        got = wasserstein_difference(seed, non_seed, n_interp=100)
+    assert np.isfinite(got.to_numpy(dtype=np.float64)).all()
+    x, seed_curve = got["x"].to_numpy(), got["seed"].to_numpy()
+    assert (seed_curve[x < seed.min()] == 0.0).all()
+    assert (seed_curve[x > seed.max()] == 1.0).all()
+    assert np.count_nonzero((x < seed.min()) | (x > seed.max())) == 99

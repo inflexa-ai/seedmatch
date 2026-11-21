@@ -319,9 +319,6 @@ def test_plot_wasserstein_draws_a_range_at_the_bound(size):
         figure.savefig(io.BytesIO(), format="png")
 
 
-# The ECDF of a sample with a denormal spread divides by a denormal width, and numpy warns about the
-# overflow. `wasserstein_areas` has the same limit, and the error of the bandwidth follows it.
-@pytest.mark.filterwarnings("ignore:overflow encountered in divide:RuntimeWarning")
 @pytest.mark.parametrize("name", ["seed", "non_seed"])
 def test_plot_wasserstein_rejects_a_sample_whose_bandwidth_is_zero(name):
     message = (
@@ -329,8 +326,10 @@ def test_plot_wasserstein_rejects_a_sample_whose_bandwidth_is_zero(name):
         "because the values are too close together"
     )
     arguments = {"seed": TEN, "non_seed": TEN} | {name: np.arange(10) * 5e-324}
-    with pytest.raises(InputError, match=exactly(message)):
-        plot_wasserstein(**arguments)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(InputError, match=exactly(message)):
+            plot_wasserstein(**arguments)
 
 
 def test_plot_wasserstein_runs_on_large_samples_in_bounded_memory():

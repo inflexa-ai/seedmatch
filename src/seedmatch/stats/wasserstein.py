@@ -216,7 +216,10 @@ def _interpolate(curve: Ecdf, grid: npt.NDArray[np.float64]) -> npt.NDArray[np.f
     segment -= 1
     np.clip(segment, 0, knots.size - 2, out=segment)
     values = grid - knots[segment]
-    values /= curve.widths[segment]
+    # Inside the knots, the ratio is at most 1. Outside them, a small width against a wide grid can
+    # give an infinite value, and the two masks below replace each such value with 0 or 1.
+    with np.errstate(over="ignore"):
+        values /= curve.widths[segment]
     values *= curve.steps[segment]
     values += curve.heights[segment]
     values[grid < knots[0]] = 0.0
