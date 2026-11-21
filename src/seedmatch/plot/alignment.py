@@ -6,7 +6,7 @@ from matplotlib.figure import Figure
 
 from seedmatch._checks import as_text
 from seedmatch.errors import InputError
-from seedmatch.plot._style import as_written, new_figure
+from seedmatch.plot._style import as_written, check_text_pixels, new_figure
 
 _NAMES: Final = ("siRNA ", " " * 6, "target")
 _FONT_SIZE: Final = 11
@@ -26,7 +26,8 @@ def plot_alignment(text: str) -> Figure:
     text is the three lines in order, each after its name and one space. The names are `siRNA `,
     six spaces, and `target` (`D-067`). R names the first line `miRNA` in the figure, but the
     data.frame names it `siRNA `. The font is bold and monospace, with the size 11 of `geom_text`,
-    and the block of text is at the center of the figure. A `$` in `text` draws as written.
+    and the block of text is at the center of the figure. A `$` in `text` draws as written. A
+    figure dpi too low for the text raises `InputError`.
 
     The label is the text with the names. The width of the figure is 0.1 inch for each character
     of the longest line of the label, plus 0.4 inch. The height is 0.9 inch. The face is white.
@@ -63,4 +64,5 @@ def plot_alignment(text: str) -> Figure:
             fontsize=_FONT_SIZE,
         )
     )
+    check_text_pixels(figure)
     return figure

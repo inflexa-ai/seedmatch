@@ -1,9 +1,12 @@
 import io
 import math
+import re
 import subprocess
 import sys
 import warnings
+from functools import partial
 
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 import pytest
@@ -14,6 +17,7 @@ from seedmatch import benchmark_predictions, ecdf_test, kmer_counts, kmer_gene_c
 from seedmatch.errors import InputError
 from seedmatch.plot import (
     PALETTE,
+    plot_alignment,
     plot_benchmark,
     plot_ecdf,
     plot_kmer_histogram,
@@ -22,9 +26,11 @@ from seedmatch.plot import (
 )
 from seedmatch.plot._style import (
     TEXT_COLOR,
+    apply_layout,
     as_color,
     as_limits,
     as_size,
+    check_text_pixels,
     expanded,
     linewidth_points,
     new_figure,
@@ -343,6 +349,117 @@ def sized_calls():
 
 
 SIZED = list(sized_calls())
+
+
+def each_call(size=None):
+    """Return a call of each plot function on the test data, with `size` if it takes a size."""
+    options = {} if size is None else {"size": size}
+    calls = {name: partial(call, **options) for name, call in sized_calls().items()}
+    calls["plot_alignment"] = partial(plot_alignment, "3'-UUU-5'\n    |  \n5'-...AAA...-3'")
+    return calls
+
+
+TOO_LOW = re.compile(
+    r"figure dpi 3 is too low for the font size ([\d.]+) of a text of the figure; "
+    r"expected a figure dpi of at least (\d+), from matplotlib\.rcParams\['figure\.dpi'\]"
+)
+
+
+@pytest.mark.parametrize("name", list(each_call()))
+def test_each_plot_function_rejects_a_dpi_too_low_for_its_texts_and_accepts_the_bound(name):
+    with mpl.rc_context({"figure.dpi": 3}), pytest.raises(InputError) as error:
+        each_call()[name]()
+    found = TOO_LOW.fullmatch(str(error.value))
+    assert found, str(error.value)
+    font_size, bound = float(found[1]), int(found[2])
+    assert bound == math.ceil(72 / font_size)
+    # A large figure keeps the layout away from the collapse at a low dpi.
+    with mpl.rc_context({"figure.dpi": bound}):
+        figure = each_call(size=(40.0, 40.0))[name]()
+        figure.savefig(io.BytesIO(), format="png")
+
+
+def test_a_plot_function_rejects_a_font_size_of_the_rc_params_too_small_for_the_dpi():
+    message = (
+        "figure dpi 30 is too low for the font size 1 of a text of the figure; "
+        "expected a figure dpi of at least 72, from matplotlib.rcParams['figure.dpi']"
+    )
+    with (
+        mpl.rc_context({"figure.dpi": 30, "font.size": 1}),
+        pytest.raises(InputError, match=exactly(message)),
+    ):
+        sized_calls()["plot_ranges"]()
+
+
+def test_apply_layout_ignores_a_hidden_text():
+    with mpl.rc_context({"figure.dpi": 30}):
+        figure = new_figure((5.0, 5.0))
+        figure.add_subplot()
+        hidden = figure.text(0.5, 0.5, "x", fontsize=1, visible=False)
+        assert apply_layout(figure) is figure
+        hidden.set_visible(True)
+        with pytest.raises(InputError, match=r"font size 1 of a text"):
+            check_text_pixels(figure)
+
+
+def test_a_plot_function_ignores_an_empty_title_with_a_font_size_too_small_for_the_dpi():
+    ranges = pd.DataFrame({"start": [1, 5], "end": [3, 9]})
+    with mpl.rc_context({"figure.dpi": 30, "axes.titlesize": 1}):
+        plot_ranges(ranges, title="").savefig(io.BytesIO(), format="png")
+
+
+@pytest.mark.parametrize(
+    ("x", "labelsize"),
+    [((0.0, 1.0), 1.0), ((1e6, 1e6 + 1), 20.0)],
+    ids=["tick labels", "offset text"],
+)
+def test_check_text_pixels_counts_an_axis_text_that_a_draw_fills(x, labelsize):
+    with mpl.rc_context({"figure.dpi": 30, "xtick.labelsize": 1}):
+        figure = new_figure((5.0, 5.0))
+        axes = figure.add_subplot()
+        axes.plot(x, (0.0, 1.0))
+        axes.xaxis.set_tick_params(labelsize=labelsize)
+        with pytest.raises(InputError, match=r"font size 1 of a text"):
+            check_text_pixels(figure)
+        with pytest.raises(RuntimeError, match="invalid ppem value"):
+            figure.savefig(io.BytesIO(), format="png")
+
+
+def test_check_text_pixels_ignores_an_empty_offset_text():
+    with mpl.rc_context({"figure.dpi": 30, "xtick.labelsize": 1}):
+        figure = new_figure((5.0, 5.0))
+        axes = figure.add_subplot()
+        axes.plot((0.0, 1.0), (0.0, 1.0))
+        axes.xaxis.set_tick_params(labelsize=20)
+        check_text_pixels(figure)
+        figure.savefig(io.BytesIO(), format="png")
+
+
+def test_check_text_pixels_rejects_a_dpi_with_a_fraction_below_the_bound_of_its_message():
+    message = (
+        "figure dpi 3.9 is too low for the font size 20 of a text of the figure; "
+        "expected a figure dpi of at least 4, from matplotlib.rcParams['figure.dpi']"
+    )
+    with mpl.rc_context({"figure.dpi": 3.9}):
+        figure = new_figure((5.0, 5.0))
+        figure.text(0.5, 0.5, "x", fontsize=20)
+        with pytest.raises(InputError, match=exactly(message)):
+            check_text_pixels(figure)
+        figure.set_dpi(4)
+        check_text_pixels(figure)
+
+
+@pytest.mark.parametrize("dpi", [math.nan, math.inf, 0.0, -100.0])
+def test_new_figure_rejects_a_dpi_that_is_not_finite_and_above_0(dpi):
+    message = (
+        f"figure dpi {dpi:g} is not valid; "
+        "expected a finite figure dpi above 0, from matplotlib.rcParams['figure.dpi']"
+    )
+    with (
+        mpl.rc_context({"figure.dpi": dpi}),
+        pytest.raises(InputError, match=exactly(message)),
+    ):
+        new_figure((5.0, 5.0))
 
 
 def too_small(size):

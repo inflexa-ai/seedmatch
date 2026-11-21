@@ -4,8 +4,10 @@ import math
 import warnings
 from typing import TYPE_CHECKING, Final, cast
 
+import matplotlib as mpl
 import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.axis import Axis
 from matplotlib.colors import is_color_like
 from matplotlib.figure import Figure
 from matplotlib.text import Text
@@ -46,6 +48,8 @@ AXIS_BOUND: Final = 9e306
 _MAX_SIDE: Final = 50.0
 # The start of the UserWarning of matplotlib 3.11.1 for a constrained layout that collapses.
 _COLLAPSE: Final = "constrained_layout not applied"
+_POINTS_PER_INCH: Final = 72
+_DPI_FROM: Final = "from matplotlib.rcParams['figure.dpi']"
 
 
 def linewidth_points(linewidth: float) -> float:
@@ -170,9 +174,16 @@ def _too_small(figure: Figure) -> InputError:
 def new_figure(size: tuple[float, float]) -> Figure:
     """Return an empty `Figure` of the size in inches. It does not use `matplotlib.pyplot`.
 
-    A side below one pixel at the dpi of the figure raises `InputError`.
+    The dpi is `matplotlib.rcParams["figure.dpi"]`. A dpi that is not finite and above 0 raises
+    `InputError`, and so does a side below one pixel at the dpi.
     """
-    figure = Figure(figsize=size, layout="constrained", facecolor="white")
+    dpi = float(mpl.rcParams["figure.dpi"])
+    if not (math.isfinite(dpi) and dpi > 0):
+        message = (
+            f"figure dpi {dpi:g} is not valid; expected a finite figure dpi above 0, {_DPI_FROM}"
+        )
+        raise InputError(message)
+    figure = Figure(figsize=size, dpi=dpi, layout="constrained", facecolor="white")
     # Such a side makes the transforms of matplotlib divide to infinity. Then the first artist
     # warns in np.dot on some platforms, and the layout raises a raw error.
     if figure.get_size_inches().min() * figure.dpi < 1:
@@ -180,12 +191,45 @@ def new_figure(size: tuple[float, float]) -> Figure:
     return figure
 
 
+def check_text_pixels(figure: Figure) -> None:
+    """Raise `InputError` if the font size of a drawn text is below 1 pixel at the figure dpi.
+
+    A drawn text is visible and not empty. The function first fills the tick labels and the offset
+    text of each axis, as a draw does.
+    """
+    # matplotlib does not draw an empty text, for example the default titles of an Axes. A draw
+    # fills the tick labels and the offset text of an axis, thus an empty one can draw later.
+    for axis in figure.findobj(Axis):
+        axis.get_ticklabels(which="both")
+        axis.get_offset_text().set_text(axis.get_major_formatter().get_offset())
+    sizes = [
+        text.get_fontsize()
+        for text in figure.findobj(Text)
+        if text.get_visible() and text.get_text()
+    ]
+    if not sizes:
+        return
+    # matplotlib makes each font size at least 1 point, thus the division is safe.
+    smallest = float(min(sizes))
+    # FreeType gets the dpi as an integer, and it rejects a size below half a pixel. The bound of
+    # 1 pixel keeps a margin.
+    if smallest * math.floor(figure.dpi) < _POINTS_PER_INCH:
+        needed = math.ceil(_POINTS_PER_INCH / smallest)
+        message = (
+            f"figure dpi {figure.dpi:g} is too low for the font size {smallest:g} of a text of the "
+            f"figure; expected a figure dpi of at least {needed}, {_DPI_FROM}"
+        )
+        raise InputError(message)
+
+
 def apply_layout(figure: Figure) -> Figure:
     """Apply the constrained layout of the figure one time, and keep the positions of the Axes.
 
     The positions stay for each later draw. Thus a save at each dpi gives no layout warning. A size
-    too small for the texts raises `InputError`.
+    too small for the texts raises `InputError`, and so does a figure dpi too low for a text
+    (`check_text_pixels`).
     """
+    check_text_pixels(figure)
     # new_figure gives each figure of a plot function a constrained layout engine.
     engine = cast("LayoutEngine", figure.get_layout_engine())
     with warnings.catch_warnings():
