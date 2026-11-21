@@ -25,6 +25,8 @@ from seedmatch import (
     find_matches,
     full_search_ranges,
     kmer_counts,
+    kmer_gene_counts,
+    kmer_histogram,
     match_distances,
     read_string_links,
     read_trrust,
@@ -187,7 +189,7 @@ def run_core_pipeline() -> None:
     de = filter_de(sirna_de(), basemean_cutoff=0)
     annotate_seed_counts(de, seqs, Guide(GUIDE).target(Seed.MER7M8))
     full_search_ranges(Guide(GUIDE), seqs)
-    kmer_counts(seqs, k=3)
+    kmer_histogram(kmer_gene_counts(kmer_counts(seqs, k=3)))
     alignment_text(find_matches(Guide(GUIDE).target(Seed.MER7M8), seqs).iloc[0], Guide(GUIDE), seqs)
     match_distances(find_matches(Guide(GUIDE).target(Seed.MER6), seqs))
     seed_match_report(de, seqs, Guide(GUIDE))

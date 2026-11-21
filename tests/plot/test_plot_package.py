@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 
 import seedmatch as sm
-from seedmatch.plot import plot_ecdf, plot_wasserstein
+from seedmatch.plot import plot_ecdf, plot_kmer_histogram, plot_wasserstein
 
 rng = np.random.default_rng(0)
 de = pd.DataFrame(
@@ -43,6 +43,9 @@ PLOT_CALLS = {
     "plot_ecdf": lambda: plot_ecdf(de, {"Background": background, "target": target}, result),
     "plot_wasserstein": lambda: plot_wasserstein(
         de["log2FoldChange"][:10], de["log2FoldChange"][10:], n_interp=100
+    ),
+    "plot_kmer_histogram": lambda: plot_kmer_histogram(
+        pd.Series(rng.integers(0, 30, size=64), index=[f"K{i}" for i in range(64)]), "K0"
     ),
 }
 """
@@ -109,7 +112,9 @@ def test_plot_functions_load_no_pyplot():
 def test_plot_functions_keep_the_rc_params():
     done = run_script(RC_PARAMS_SCRIPT)
     assert done.returncode == 0, done.stderr
-    assert done.stdout.strip() == "{'plot_ecdf': [], 'plot_wasserstein': []}"
+    assert done.stdout.strip() == (
+        "{'plot_ecdf': [], 'plot_wasserstein': [], 'plot_kmer_histogram': []}"
+    )
 
 
 def test_the_palette_is_the_palette_of_r():

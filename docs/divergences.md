@@ -143,7 +143,7 @@ The IDs of the known divergences have the same order as the rows of the table in
 - ID: `D-010`
 - R location: `kmer_hist` (`R/kmer_hist.R:32-36`).
 - R behavior: `plot(hist(...))` returns `NULL`, and `NULL + abline(...)` returns `integer(0)`. Thus `kmer_hist` returns `integer(0)` and no data. An R probe with R 4.5.3 gives the evidence: `kmer_hist(<the sequences of kmer_cases.tsv>, "ACG", width = 3)`, with `pdf(NULL)` as the device, returns `integer(0)`. The note of `tests/golden/analyses/kmer_gene_counts.tsv` records this value.
-- New behavior: `kmer_gene_counts` returns the gene count of each k-mer. The plot module of a later plan draws the histogram.
+- New behavior: `kmer_gene_counts` returns the gene count of each k-mer. `plot_kmer_histogram` draws the histogram (`D-066`).
 - Reason: R returns no data, thus a caller cannot read the counts or the target count.
 - Test: `test_kmer_gene_counts_give_the_counts_of_kmer_hist_D010` in `tests/test_kmers.py`.
 
@@ -811,3 +811,18 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: Each line is the interpolated ECDF of `wasserstein_areas`. It is 0 up to the first value, and then it goes up to the height of the first value. Straight lines join the values, and the line is 1 after the last value.
 - Reason: The figure must show the functions that the areas integrate.
 - Test: `test_plot_wasserstein_draws_the_ecdf_of_the_areas_D065` in `tests/plot/test_plot_wasserstein.py`.
+
+## D-066: plot_kmer_histogram draws one figure with bins of integer counts and the target line
+
+- ID: `D-066`
+- R location: `kmer_hist` (`R/kmer_hist.R:30-34`).
+- R behavior: `plot(graphics::hist(...))` draws the histogram two times. Page 1 has the title and the label of `kmer_hist`. Page 2 has `Histogram of gene.counts` and `gene.counts`, and `abline` draws the target line on page 2 only.
+  - Evidence: the notes `pages` and `title calls` of `tests/golden/plots/kmer_hist.tsv`.
+- R behavior: `breaks = 50` gives the breaks of `pretty`, and each bin is closed on the right. The first bin also holds its lower break. Thus for the breaks 0, 2, ..., 88, the first bin holds the counts 0, 1, and 2, and each other bin holds two counts.
+- R behavior: on `Test_seqs.fa`, the first bar of R is 3394, but only 2142 k-mers have 0 or 1 genes. For other counts, `pretty` gives more than 50 bins, or bins of a fractional width. For example, the range 1 to 7 gives 60 bins of width 0.1.
+- R behavior: a target that is not a k-mer of the counts gives `NA`, for example a lowercase target or a target of another length. R then draws no line and gives no message.
+  - Evidence: the target notes of `tests/golden/plots/kmer_hist.tsv`.
+- New behavior: `kmer_histogram` gives bins of w integer counts each. w is the first of 1, 2, 5, 10, 20, 50, and so on, that gives at most `max_bins` bins.
+- New behavior: `plot_kmer_histogram` draws one Axes with the bars, the title, and the target line. A target that is not a k-mer raises `InputError`.
+- Reason: Each bar must hold the same number of integer counts, and the target line must be on the histogram.
+- Test: `test_kmer_histogram_bins_the_integer_counts_D066` in `tests/test_kmers.py`. `test_plot_kmer_histogram_draws_the_bins_and_the_target_D066`, `test_plot_kmer_histogram_titles_the_first_page_of_r_D066`, and `test_plot_kmer_histogram_rejects_a_target_that_is_not_a_kmer_D066` in `tests/plot/test_plot_kmers.py`.

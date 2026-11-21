@@ -6,7 +6,7 @@ from seedmatch.de import filter_de, read_deseq2_table
 from seedmatch.distances import MatchAnchor, match_distances
 from seedmatch.errors import InputError, SeedMatchError, SeedMatchWarning
 from seedmatch.evalue import e_value_null, e_values
-from seedmatch.kmers import KmerCounts, kmer_counts, kmer_gene_counts
+from seedmatch.kmers import KmerCounts, kmer_counts, kmer_gene_counts, kmer_histogram
 from seedmatch.mirdb import read_mirdb
 from seedmatch.network import (
     Aggregator,
@@ -117,6 +117,7 @@ __all__ = [
     "full_search_ranges",
     "kmer_counts",
     "kmer_gene_counts",
+    "kmer_histogram",
     "match_distances",
     "pr_curve",
     "read_deseq2_table",

@@ -8,12 +8,13 @@ from helpers import DATA, GUIDE, exactly, golden, golden_note, sirna_seqs
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from seedmatch import Guide, Seed, SequenceSet, kmer_counts, kmer_gene_counts
+from seedmatch import Guide, Seed, SequenceSet, kmer_counts, kmer_gene_counts, kmer_histogram
 from seedmatch.errors import InputError
 from seedmatch.kmers import MAX_K
 
 KMER_COUNTS = golden("analyses/kmer_counts.tsv")
 KMER_GENE_COUNTS = golden("analyses/kmer_gene_counts.tsv")
+KMER_HIST = "plots/kmer_hist.tsv"
 CASES = list(dict.fromkeys(KMER_COUNTS["case"]))
 CASE_PARAMETERS = re.compile(r"_k(\d+)_s(\d+)$")
 
@@ -243,3 +244,198 @@ def test_kmer_counts_of_an_empty_set():
     assert counts.matrix.shape == (0, 64)
     assert list(frame.columns) == ["seq_id", "gene_id", *counts.kmers()]
     assert len(frame) == 0
+
+
+def data_gene_counts():
+    return kmer_gene_counts(kmer_counts(sirna_seqs()))
+
+
+def r_gene_count_table():
+    """Return the number of k-mers for each gene count, as `table(gene.counts)` of R gives it."""
+    table = golden(KMER_HIST)
+    return pd.Series(table["kmers"].astype(int).to_numpy(), index=table["gene_count"].astype(int))
+
+
+def test_kmer_histogram_bins_the_integer_counts_D066():
+    histogram = kmer_histogram(data_gene_counts())
+    assert list(histogram.columns) == ["low", "high", "kmers"]
+    assert (histogram.dtypes == "int64").all()
+    assert isinstance(histogram.index, pd.RangeIndex)
+    assert histogram.iloc[:2].to_numpy().tolist() == [[0, 1, 2142], [2, 3, 2242]]
+    assert histogram.iloc[-1].tolist() == [86, 87, 1]
+    assert len(histogram) == 44
+    assert histogram["kmers"].sum() == 16384
+    # The first bin of R holds the counts 0, 1, and 2, and the first bin of the port holds 0 and 1.
+    r_table = r_gene_count_table()
+    first_bar_of_r = int(golden_note(KMER_HIST, r"^# hist counts: (\d+),"))
+    assert first_bar_of_r == r_table.loc[:2].sum() == 3394
+    assert histogram["kmers"].iloc[0] == r_table.loc[:1].sum() == 2142
+
+
+def test_kmer_histogram_defaults_to_at_most_50_bins():
+    assert len(kmer_histogram(data_gene_counts())) == 44
+    fifty = kmer_histogram(pd.Series(range(50)))
+    assert len(fifty) == 50
+    assert (fifty["high"] == fifty["low"]).all()
+    wider = kmer_histogram(pd.Series(range(51)))
+    assert len(wider) == 26
+    assert (wider["high"] - wider["low"] == 1).all()
+
+
+def test_kmer_histogram_sums_the_counts_of_r():
+    r_table = r_gene_count_table()
+    histogram = kmer_histogram(data_gene_counts())
+    assert r_table.sum() == 16384
+    for row in histogram.itertuples():
+        assert r_table.loc[row.low : row.high].sum() == row.kmers
+
+
+def test_kmer_histogram_widens_the_bins_to_max_bins():
+    counts = data_gene_counts()
+    ten = kmer_histogram(counts, max_bins=10)
+    assert len(ten) == 9
+    assert (ten["high"] - ten["low"] + 1 == 10).all()
+    assert ten["kmers"].tolist()[:5] == [8484, 6021, 1570, 225, 59]
+    assert ten["kmers"].tolist()[-3:] == [4, 1, 1]
+    assert kmer_histogram(counts, max_bins=3).to_numpy().tolist() == [
+        [0, 49, 16359],
+        [50, 99, 25],
+    ]
+
+
+def test_kmer_histogram_starts_at_the_bin_of_the_lowest_count():
+    counts = pd.Series([7, 12, 12, 30], index=["A", "C", "G", "T"])
+    fifty = kmer_histogram(counts)
+    assert len(fifty) == 24
+    assert fifty.iloc[0].tolist() == [7, 7, 1]
+    assert fifty.iloc[-1].tolist() == [30, 30, 1]
+    assert fifty.loc[fifty["low"] == 12, "kmers"].tolist() == [2]
+    assert kmer_histogram(counts, max_bins=5).to_numpy().tolist() == [
+        [0, 9, 1],
+        [10, 19, 2],
+        [20, 29, 0],
+        [30, 39, 1],
+    ]
+
+
+def test_kmer_histogram_gives_one_bin_for_equal_counts():
+    assert kmer_histogram(pd.Series([5, 5, 5])).to_numpy().tolist() == [[5, 5, 3]]
+    assert kmer_histogram(pd.Series([0, 3]), max_bins=1).to_numpy().tolist() == [[0, 4, 2]]
+
+
+@pytest.mark.parametrize("dtype", ["uint8", "int32", "Int64", "UInt16"])
+def test_kmer_histogram_accepts_each_integer_dtype(dtype):
+    counts = pd.Series([1, 2, 2, 9], index=list("ACGT"), dtype=dtype)
+    histogram = kmer_histogram(counts, max_bins=3)
+    assert histogram.to_numpy().tolist() == [[0, 4, 3], [5, 9, 1]]
+    assert (histogram.dtypes == "int64").all()
+
+
+def test_kmer_histogram_computes_the_bins_in_int64_for_a_narrow_dtype():
+    counts = pd.Series([0, 200], dtype="uint8")
+    assert kmer_histogram(counts, max_bins=1).to_numpy().tolist() == [[0, 499, 2]]
+
+
+def test_kmer_histogram_counts_the_bins_from_the_lowest_count():
+    counts = pd.Series([2**60, 2**60 + 3])
+    assert kmer_histogram(counts).to_numpy().tolist() == [
+        [2**60, 2**60, 1],
+        [2**60 + 1, 2**60 + 1, 0],
+        [2**60 + 2, 2**60 + 2, 0],
+        [2**60 + 3, 2**60 + 3, 1],
+    ]
+
+
+def test_kmer_histogram_accepts_the_largest_count():
+    counts = pd.Series([0, 2**61], index=["A", "C"])
+    histogram = kmer_histogram(counts, max_bins=2)
+    assert histogram["kmers"].sum() == 2
+    assert histogram["high"].iloc[-1] >= 2**61
+    assert (histogram.dtypes == "int64").all()
+    assert kmer_histogram(counts, max_bins=1).to_numpy().tolist() == [[0, 5 * 10**18 - 1, 2]]
+
+
+@settings(deadline=None)
+@given(
+    values=st.lists(st.integers(0, 3000), min_size=1, max_size=60),
+    max_bins=st.integers(1, 80),
+)
+def test_kmer_histogram_equals_an_oracle(values, max_bins):
+    counts = pd.Series(values, index=[f"k{i}" for i in range(len(values))])
+    histogram = kmer_histogram(counts, max_bins=max_bins)
+    lo, hi = min(values), max(values)
+    widths = {factor * 10**power for power in range(5) for factor in (1, 2, 5)}
+    fits = [w for w in sorted(widths) if hi // w - lo // w + 1 <= max_bins]
+    width = fits[0]
+    assert (histogram["high"] - histogram["low"] + 1 == width).all()
+    assert histogram["low"].tolist() == [b * width for b in range(lo // width, hi // width + 1)]
+    expected = Counter(value // width for value in values)
+    assert histogram["kmers"].tolist() == [expected[b] for b in range(lo // width, hi // width + 1)]
+    assert len(histogram) <= max_bins
+
+
+@pytest.mark.parametrize(
+    ("counts", "kwargs", "message"),
+    [
+        ([1, 2], {}, "gene_counts has type list; expected a Series"),
+        (
+            pd.Series([1.0, 2.0], index=["A", "C"]),
+            {},
+            "gene_counts has dtype float64; expected an integer dtype, as kmer_gene_counts gives",
+        ),
+        (
+            pd.Series([True, False], index=["A", "C"]),
+            {},
+            "gene_counts has dtype bool; expected an integer dtype, as kmer_gene_counts gives",
+        ),
+        (
+            pd.Series([1, None, 3, None], index=["A", "C", "G", "T"], dtype="Int64"),
+            {},
+            "gene_counts has a missing value for k-mer 'C'; expected a count",
+        ),
+        (
+            pd.Series([], dtype="int64"),
+            {},
+            "gene_counts has no value; expected at least one k-mer",
+        ),
+        (
+            pd.Series([-1, 5], index=["AAA", "AAC"]),
+            {},
+            "gene_counts holds -1 for k-mer 'AAA'; expected 0 or more",
+        ),
+        (
+            pd.Series([4, 0, -3, -1], index=["AAA", "AAC", "AAG", "AAT"]),
+            {},
+            "gene_counts holds -3 for k-mer 'AAG'; expected 0 or more",
+        ),
+        (
+            pd.Series([0, 2**61 + 1], index=["AAA", "AAC"]),
+            {},
+            "gene_counts holds 2305843009213693953 for k-mer 'AAC'; expected at most 2^61",
+        ),
+        (pd.Series([1, 2]), {"max_bins": 0}, "max_bins 0 is less than 1; expected 1 or more"),
+        (pd.Series([1, 2]), {"max_bins": True}, "max_bins True has type bool; expected an integer"),
+    ],
+    ids=[
+        "list",
+        "float64",
+        "bool",
+        "missing",
+        "empty",
+        "negative",
+        "later negative",
+        "too large",
+        "max_bins 0",
+        "max_bins bool",
+    ],
+)
+def test_kmer_histogram_rejects_bad_input(counts, kwargs, message):
+    with pytest.raises(InputError, match=exactly(message)):
+        kmer_histogram(counts, **kwargs)
+
+
+def test_kmer_histogram_does_not_change_the_counts():
+    counts = data_gene_counts()
+    before = counts.copy()
+    kmer_histogram(counts)
+    pd.testing.assert_series_equal(counts, before)
