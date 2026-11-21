@@ -59,6 +59,7 @@ from seedmatch.stats import (
     pr_curve,
     roc_curve,
     wasserstein_areas,
+    wasserstein_difference,
 )
 
 __all__ = [
@@ -130,6 +131,7 @@ __all__ = [
     "string_scores",
     "trrust_scores",
     "wasserstein_areas",
+    "wasserstein_difference",
     "wobble_bulge_matches",
     "wobble_bulge_null",
     "wobble_bulge_patterns",

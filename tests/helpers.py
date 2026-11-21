@@ -32,6 +32,7 @@ from seedmatch import (
     string_gene_network,
     string_scores,
     trrust_scores,
+    wasserstein_difference,
     wobble_bulge_matches,
 )
 from seedmatch.sequence import SequenceSet, read_fasta
@@ -166,6 +167,21 @@ def sirna_de() -> pd.DataFrame:
     return pd.read_csv(DATA / "DESEQ2_results.tsv", sep="\t")
 
 
+WASSERSTEIN_CASES = ["test_data", "wass_40x300_ties"]
+
+
+# The cache of stats_samples shares its lists, so a test must not change them.
+def wasserstein_samples(case: str) -> tuple[list[float], list[float]]:
+    """Return the seed sample and the non-seed sample of a case of the Wasserstein plot goldens."""
+    if case == "test_data":
+        de = sirna_de()
+        return (
+            de.loc[de["mer7m8"] >= 1, "log2FoldChange"].tolist(),
+            de.loc[de["mer7m8"] == 0, "log2FoldChange"].tolist(),
+        )
+    return stats_samples()[case]
+
+
 def run_core_pipeline() -> None:
     seqs = read_fasta(DATA / "Test_seqs.fa")
     de = filter_de(sirna_de(), basemean_cutoff=0)
@@ -191,6 +207,12 @@ def run_core_pipeline() -> None:
         network.edges,
         pd.DataFrame({"gene_id": ["ENSSYNG00000000001"], "count": [1]}),
         column="count",
+    )
+    table = sirna_de()
+    wasserstein_difference(
+        table.loc[table["mer7m8"] >= 1, "log2FoldChange"],
+        table.loc[table["mer7m8"] == 0, "log2FoldChange"],
+        n_interp=100,
     )
 
 

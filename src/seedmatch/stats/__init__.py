@@ -6,7 +6,7 @@ from seedmatch.stats.dts import dts_test
 from seedmatch.stats.ecdf import EcdfTest, EcdfTestResult, assign_groups, ecdf_test
 from seedmatch.stats.ks import ks_test
 from seedmatch.stats.types import Alternative, PValueMethod, TwoSampleResult
-from seedmatch.stats.wasserstein import WassersteinAreas, wasserstein_areas
+from seedmatch.stats.wasserstein import WassersteinAreas, wasserstein_areas, wasserstein_difference
 from seedmatch.stats.wilcoxon import wilcoxon_test
 
 __all__ = [
@@ -27,5 +27,6 @@ __all__ = [
     "pr_curve",
     "roc_curve",
     "wasserstein_areas",
+    "wasserstein_difference",
     "wilcoxon_test",
 ]

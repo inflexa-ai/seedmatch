@@ -9,12 +9,19 @@ from fractions import Fraction
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import golden_rows, stats_samples
+from helpers import (
+    WASSERSTEIN_CASES,
+    exactly,
+    golden,
+    golden_rows,
+    stats_samples,
+    wasserstein_samples,
+)
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from seedmatch.errors import InputError
-from seedmatch.stats import WassersteinAreas, wasserstein_areas
+from seedmatch.stats import WassersteinAreas, wasserstein_areas, wasserstein_difference
 from seedmatch.stats.wasserstein import _unrounded_areas
 
 R_ROWS = [
@@ -324,3 +331,123 @@ def test_wasserstein_runs_on_a_large_grid_and_large_samples():
     assert elapsed < 10
     coarse = wasserstein_areas(seed, non_seed, n_interp=10_000)
     assert math.isclose(areas.absolute, coarse.absolute, abs_tol=0.002)
+
+
+DIFFERENCE = "plots/wasserstein_difference.tsv"
+
+
+@pytest.mark.parametrize("case", WASSERSTEIN_CASES)
+def test_wasserstein_difference_matches_r(case):
+    seed, non_seed = wasserstein_samples(case)
+    got = wasserstein_difference(seed, non_seed, n_interp=100)
+    table = golden(DIFFERENCE)
+    expected = table[(table["case"] == case) & (table["n_interp"] == "100")]
+    assert len(got) == len(expected) == 100
+    # The x values of R differ from the port in the last bit, thus no comparison with ==.
+    for column in ("x", "difference"):
+        np.testing.assert_allclose(
+            got[column], expected[column].astype(float), rtol=1e-9, atol=1e-12
+        )
+
+
+def test_wasserstein_difference_gives_the_areas():
+    seed, non_seed = wasserstein_samples("test_data")
+    got = wasserstein_difference(seed, non_seed)
+    area = np.trapezoid(np.abs(got["difference"].to_numpy()), got["x"].to_numpy())
+    assert abs(area - wasserstein_areas(seed, non_seed).absolute) <= 5e-4
+
+
+def test_wasserstein_difference_has_the_grid_of_the_areas():
+    seed, non_seed = wasserstein_samples("test_data")
+    got = wasserstein_difference(seed, non_seed, n_interp=50)
+    assert list(got.columns) == ["x", "seed", "non_seed", "difference"]
+    assert set(got.dtypes) == {np.dtype("float64")}
+    assert isinstance(got.index, pd.RangeIndex)
+    assert len(got) == 50
+    assert got["x"].iloc[0] == min(*seed, *non_seed)
+    assert got["x"].iloc[-1] == max(*seed, *non_seed)
+    assert got["seed"].iloc[0] == 1 / 18
+    assert got["non_seed"].iloc[0] == 0.0
+    assert got["seed"].iloc[-1] == got["non_seed"].iloc[-1] == 1.0
+    np.testing.assert_array_equal(got["difference"], got["seed"] - got["non_seed"])
+    assert len(wasserstein_difference(seed, non_seed)) == 10000
+
+
+def test_wasserstein_difference_gives_the_two_ecdf_curves_of_the_areas():
+    seed, non_seed = stats_samples()["wass_10x10_plain"]
+    got = wasserstein_difference(seed, non_seed, n_interp=100)
+    assert (np.diff(got["seed"]) >= 0).all()
+    assert (np.diff(got["non_seed"]) >= 0).all()
+    area = np.trapezoid(np.abs(got["difference"].to_numpy()), got["x"].to_numpy())
+    assert abs(area - wasserstein_areas(seed, non_seed, n_interp=100).absolute) <= 5e-4
+
+
+TEN = [float(k) for k in range(10)]
+REJECTED = [
+    pytest.param(
+        {"seed": TEN[:9], "non_seed": TEN},
+        "seed has 9 values; expected at least 10",
+        id="nine-values",
+    ),
+    pytest.param(
+        {"seed": TEN, "non_seed": [1.0] * 10},
+        "non_seed has 10 values that are all 1.0; expected at least 2 distinct values",
+        id="one-distinct-value",
+    ),
+    pytest.param(
+        {"seed": [0.0, 1.0, np.nan, *TEN], "non_seed": TEN},
+        "seed[2] is NaN; expected a number",
+        id="nan",
+    ),
+    pytest.param(
+        {"seed": TEN, "non_seed": TEN, "n_interp": 1},
+        "n_interp 1 is less than 2; expected 2 or more",
+        id="one-point",
+    ),
+    pytest.param(
+        {"seed": TEN, "non_seed": TEN, "n_interp": True},
+        "n_interp True has type bool; expected an integer",
+        id="bool-points",
+    ),
+    pytest.param(
+        {"seed": [-1e308, *TEN], "non_seed": [1e308, *TEN]},
+        "seed and non_seed span from -1e+308 to 1e+308; "
+        "expected a range of at most 8.988465674311579e+307",
+        id="range",
+    ),
+]
+
+
+@pytest.mark.parametrize(("kwargs", "message"), REJECTED)
+def test_wasserstein_difference_rejects_what_the_areas_reject(kwargs, message):
+    with pytest.raises(InputError, match=exactly(message)):
+        wasserstein_areas(**kwargs)
+    with pytest.raises(InputError, match=exactly(message)):
+        wasserstein_difference(**kwargs)
+
+
+def test_wasserstein_difference_accepts_a_series_a_tuple_and_a_numpy_integer():
+    seed, non_seed = stats_samples()["wass_10x10_plain"]
+    expected = wasserstein_difference(seed, non_seed, n_interp=100)
+    got = wasserstein_difference(pd.Series(seed), tuple(non_seed), n_interp=np.int64(100))
+    pd.testing.assert_frame_equal(got, expected)
+
+
+def test_wasserstein_difference_does_not_change_its_inputs():
+    seed, non_seed = np.arange(10.0)[::-1].copy(), np.arange(12.0)[::-1] + 0.5
+    wasserstein_difference(seed, non_seed, n_interp=50)
+    assert seed.tolist() == list(range(9, -1, -1))
+    assert non_seed.tolist() == [11.5 - k for k in range(12)]
+
+
+def test_wasserstein_difference_holds_a_few_times_its_result_in_memory():
+    generator = np.random.default_rng(7)
+    seed, non_seed = generator.normal(0.2, 1, 2000), generator.normal(0, 1, 20000)
+    n_interp = 200_000
+    tracemalloc.start()
+    try:
+        wasserstein_difference(seed, non_seed, n_interp=n_interp)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 4 * 32 * n_interp

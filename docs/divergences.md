@@ -800,3 +800,14 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: The figure has one line for each key of `groups`, in the order of the keys. The count of a label is the number of finite `log2FoldChange` values of its line.
 - Reason: A legend label must describe its line.
 - Test: `test_plot_ecdf_draws_only_the_groups_D064`, `test_plot_ecdf_counts_the_values_of_each_line_D064`, and `test_plot_ecdf_follows_the_order_of_the_keys_D064` in `tests/plot/test_plot_ecdf.py`.
+
+## D-065: plot_wasserstein draws the ECDF that the areas use
+
+- ID: `D-065`
+- R location: `wass_dist` (`R/wass_dist.R:89-93`).
+- R behavior: `stat_ecdf(geom = "line")` adds a point at `-Inf` with 0 and a point at `Inf` with 1. `geom_line` joins them to the values.
+  - Evidence: `tests/golden/plots/wasserstein_ecdf.tsv`.
+- R behavior: Thus the line goes from 0 at the left edge of the panel to the height of the first value, with a slope. The slope changes with the width of the panel. The areas use 0 below the first value (`yleft = 0`, `:70-71`).
+- New behavior: Each line is the interpolated ECDF of `wasserstein_areas`. It is 0 up to the first value, and then it goes up to the height of the first value. Straight lines join the values, and the line is 1 after the last value.
+- Reason: The figure must show the functions that the areas integrate.
+- Test: `test_plot_wasserstein_draws_the_ecdf_of_the_areas_D065` in `tests/plot/test_plot_wasserstein.py`.

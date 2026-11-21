@@ -12,5 +12,6 @@ except ImportError as error:
 
 from seedmatch.plot._style import PALETTE
 from seedmatch.plot.ecdf import plot_ecdf
+from seedmatch.plot.wasserstein import plot_wasserstein
 
-__all__ = ["PALETTE", "plot_ecdf"]
+__all__ = ["PALETTE", "plot_ecdf", "plot_wasserstein"]

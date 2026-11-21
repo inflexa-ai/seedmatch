@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 
 import seedmatch as sm
-from seedmatch.plot import plot_ecdf
+from seedmatch.plot import plot_ecdf, plot_wasserstein
 
 rng = np.random.default_rng(0)
 de = pd.DataFrame(
@@ -41,6 +41,9 @@ target, background = list(de["gene_id"][:10]), list(de["gene_id"][10:])
 result = sm.ecdf_test(de, target=target, background=background)
 PLOT_CALLS = {
     "plot_ecdf": lambda: plot_ecdf(de, {"Background": background, "target": target}, result),
+    "plot_wasserstein": lambda: plot_wasserstein(
+        de["log2FoldChange"][:10], de["log2FoldChange"][10:], n_interp=100
+    ),
 }
 """
 
@@ -106,7 +109,7 @@ def test_plot_functions_load_no_pyplot():
 def test_plot_functions_keep_the_rc_params():
     done = run_script(RC_PARAMS_SCRIPT)
     assert done.returncode == 0, done.stderr
-    assert done.stdout.strip() == "{'plot_ecdf': []}"
+    assert done.stdout.strip() == "{'plot_ecdf': [], 'plot_wasserstein': []}"
 
 
 def test_the_palette_is_the_palette_of_r():
