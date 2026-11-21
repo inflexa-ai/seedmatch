@@ -16,7 +16,7 @@ The benchmark goes in `seedmatch.stats`, because the design puts the PR and ROC 
 
 **Later plans (not in this plan):**
 
-- The k-mer histogram, the `ggplot` output of `plotAlignment`, and the PR and ROC plots (delivery step 9).
+- The k-mer histogram, the `ggplot` output of `plotAlignment`, and the PR and ROC plots: closed. `docs/plans/2026-11-21-plot-and-report.md` ports them.
 - The wobble and bulge search, the compensatory search, and the network scores.
 - In R, `run_wobble_bulges_pipeline` makes the column `overall_matches` that `generate_e_value` reads. This plan gives the e-value of each count column of a DE table.
 

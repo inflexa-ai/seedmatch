@@ -100,7 +100,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 | `seedmatch.noncanonical` | Wobble and bulge search, 3' compensatory search. |
 | `seedmatch.network` | TRRUST message passing and the STRING gene network. |
 | `seedmatch.kmers`, `seedmatch.alignment`, `seedmatch.distances`, `seedmatch.evalue` | The smaller analyses. |
-| `seedmatch.plot` | Figures from results. Extra `plot`. |
+| `seedmatch.plot` | Figures from results: the ECDF, the Wasserstein areas, the k-mer histogram, the alignment, the ranges, and the PR and ROC curves. Extra `plot`. |
 | `seedmatch.resources` | The registry of the upstream resources: identifiers, URLs, file names, digests. No I/O. |
 | `seedmatch.fetch` | Downloads, and the command `seedmatch-fetch`. |
 
@@ -110,6 +110,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 - The same rule bans `seedmatch.fetch` in each module outside `seedmatch.fetch`.
 - `import seedmatch` does not import matplotlib or `seedmatch.fetch`.
 - A computation function returns data. A plot function takes a result and returns a `matplotlib.figure.Figure`. No function writes a file unless it has an explicit output path parameter.
+- A plot function uses the object API of matplotlib. It does not import `matplotlib.pyplot`, and it does not change `matplotlib.rcParams`.
 - A reader reads only the part of a file that the call uses:
   - The 2bit reader uses `mmap` and decodes only the requested ranges.
   - The EnsDb reader puts the filter in the SQL `WHERE` clause.
@@ -581,6 +582,10 @@ A change of behavior that has no entry is a defect of the port. The builder adds
   - a second run into one `dest` while the first run downloads raises `FetchError` and keeps the `.part` file of the first run
   - a `Content-Length` header that is not the registry size causes an error before the read
   - a URL or a redirect that is not `https` causes an error
+
+### Plots
+
+The tests of `seedmatch.plot` read the data of the artists: the points of each line, the bars, the texts, and the colors. They do not compare pixels. `tools/golden/R/plots.R` gives the layer data of ggplot2 and the cells of `gt`.
 
 ### Documentation examples
 

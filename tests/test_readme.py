@@ -165,3 +165,38 @@ def test_readme_string_example_gives_the_network(readme_namespace):
     seeded = string_scores(network.edges, de, column="mer7m8")
     assert seeded["seed_count"].tolist() == [4.0, 0.0]
     assert seeded["score"].tolist() == [2.0, 2.0]
+
+
+def test_readme_plot_example_draws_the_figures(readme_namespace, tmp_path):
+    ks = ecdf_golden_row("readme", "KS", "greater")
+    ecdf_axes = readme_namespace["ecdf_figure"].axes[0]
+    legend = [text.get_text() for text in ecdf_axes.get_legend().get_texts()]
+    assert legend == [f"Background: {ks.n_background}", f"mer7m8: {ks.n_target}"]
+    assert ecdf_axes.get_title(loc="left") == "Statistic: 0.46\np-value: 0.001"
+    assert (tmp_path / "ecdf.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+    wass = ecdf_golden_row("readme", "Wass", "NA")
+    title = readme_namespace["wasserstein_figure"].get_suptitle()
+    assert title.startswith(f"Wass(- censored) = {float(wass.statistic):.3f}")
+
+    (target_line,) = readme_namespace["kmer_figure"].axes[0].get_lines()
+    expected_count = readme_namespace["genes_with_kmer"][readme_namespace["target"].sequence]
+    assert list(target_line.get_xdata()) == [expected_count, expected_count]
+
+    names = ["siRNA ", " " * 6, "target"]
+    (label,) = readme_namespace["alignment_figure"].texts
+    assert label.get_text().split("\n") == [
+        f"{name} {line}"
+        for name, line in zip(names, readme_namespace["alignment"].split("\n"), strict=True)
+    ]
+
+    (collection,) = readme_namespace["ranges_figure"].axes[0].collections
+    assert len(collection.get_paths()) == len(readme_namespace["ranges"])
+
+    benchmark = readme_namespace["benchmark"]
+    pr_axes = readme_namespace["benchmark_figure"].axes[0]
+    assert pr_axes.get_title() == f"PR curve\nAUC = {benchmark.pr.auc_integral:.7g}"
+
+    assert "In-silico siRNA Binding Prediction" in (tmp_path / "report.html").read_text(
+        encoding="utf-8"
+    )

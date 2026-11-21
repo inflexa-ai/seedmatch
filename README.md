@@ -15,7 +15,7 @@ Inflexa, Inc. builds an agentic toolchain for bioinformatics. The toolchain port
 A sandbox such as the Inflexa sandbox has no network egress, and an agent corrects its calls from the error messages. Thus seedmatch obeys these rules:
 
 - **No network in the core.** The core modules never use the network. Each function reads its input from a path or an object that you give. The separate module `seedmatch.fetch` downloads the resources (see [Resources](#resources)).
-- **Python only.** The package is pure Python on numpy, pandas, numba, and scipy. It does not use R or a system library.
+- **Python only.** The package is pure Python on numpy, pandas, numba, and scipy. It does not use R or a system library. The extra `plot` adds matplotlib.
 - **Errors that an agent can use.** Each `InputError` names the bad value and the expected value. Thus an agent can correct the call.
 
 ## Example
@@ -97,7 +97,7 @@ utr3_counts = count_matches(target, utr3)
 
 ## Other analyses
 
-`kmer_counts` counts the k-mers of each sequence. Its result holds a sparse matrix with one row for each sequence and one column for each k-mer. `kmer_gene_counts` gives the number of genes that have each k-mer. R draws a histogram of this number in `kmer_hist`. This example reads the number for the target of the example above.
+`kmer_counts` counts the k-mers of each sequence. Its result holds a sparse matrix with one row for each sequence and one column for each k-mer. `kmer_gene_counts` gives the number of genes that have each k-mer. R draws a histogram of this number in `kmer_hist`. `kmer_histogram` gives the bins, and `seedmatch.plot.plot_kmer_histogram` draws the figure (D-066). This example reads the number for the target of the example above.
 
 ```python
 from seedmatch import kmer_counts, kmer_gene_counts
@@ -265,6 +265,59 @@ The gene IDs of `de` must be the Ensembl gene IDs of the EnsDb. A gene with more
 
 `score_threshold=0` and `percentile=0` make a large network. On the STRING rat file, the reader keeps 13,894,314 links. The read takes 10.1 seconds, and the peak memory above the start is about 660 MB. `string_gene_network` takes 3.6 seconds and about 1.8 GB more, and it gives 11,097,016 rows. `string_scores` takes 1.8 seconds and about 630 MB more. In a sandbox with a small memory limit, keep the defaults.
 
+## Plots and the HTML report
+
+The functions of `seedmatch.plot` work only with the extra `plot`, which installs matplotlib. A plot function returns a `matplotlib.figure.Figure` and writes no file. To write the file, call `savefig` of the figure. `report_html` is in the core, and its result is ASCII HTML. This example uses the objects of the examples above.
+
+```python
+from pathlib import Path
+
+from seedmatch import report_html
+from seedmatch.plot import (
+    plot_alignment,
+    plot_benchmark,
+    plot_ecdf,
+    plot_kmer_histogram,
+    plot_ranges,
+    plot_wasserstein,
+)
+
+# The ECDF of the two gene sets of the ecdf_test example, with the result of the test.
+ecdf_figure = plot_ecdf(de, {"Background": background, "mer7m8": seed_genes}, ecdf_result)
+ecdf_figure.savefig("ecdf.png", dpi=300)
+
+# The density, the ECDF, and the ECDF difference of the Wasserstein areas.
+wasserstein_figure = plot_wasserstein(
+    de.loc[de["mer7m8"] >= 1, "log2FoldChange"], de.loc[de["mer7m8"] == 0, "log2FoldChange"]
+)
+
+# The number of genes with each 7-mer, with a line at the target.
+kmer_figure = plot_kmer_histogram(genes_with_kmer, target.sequence)
+
+# The alignment text of the example above.
+alignment_figure = plot_alignment(alignment)
+
+# One bar for each match range of the first example.
+ranges_figure = plot_ranges(ranges)
+
+# The PR curve and the ROC curve of the benchmark example.
+benchmark_figure = plot_benchmark(benchmark)
+
+# The SeedMatchReport table as HTML.
+Path("report.html").write_text(report_html(report, guide), encoding="utf-8")
+```
+
+These figures differ from the figures of R:
+
+- `plot_ecdf` gives a figure for each p-value. R stops for a p-value of 0.01 (D-063).
+- The legend of `plot_ecdf` counts the values of each line. R counts the gene lists (D-064).
+- `plot_wasserstein` draws the ECDF that the areas use. R draws a line from the left edge of the panel (D-065).
+- `plot_kmer_histogram` draws one figure, and each bar holds the same number of integer counts. R draws the histogram two times, with bins of `pretty` (D-066).
+- `plot_alignment` names the guide line `siRNA`, as the data.frame of R does. The figure of R names it `miRNA` (D-067).
+- `plot_ranges` draws each row at its position in the table, and each option has an effect. R draws only the first 6 rows of a data.frame, and it ignores `xlim`, `main`, and `col` (D-068).
+- `plot_benchmark` draws a figure for a curve with one distinct score and for an infinite score. R stops for one distinct score of 0 or less, and for an infinite score (D-069).
+- `report_html` labels the windows from the guide, and its table has no fixed element ID. R gives fixed labels and the ID `mygt` (D-070).
+
 ## Resources
 
 The core of seedmatch reads files from a path, and the sandbox of an agent has no network access. Thus a machine with network access runs `seedmatch-fetch`, and the sandbox reads the files from a path. If you install seedmatch, you get the command `seedmatch-fetch`.
@@ -313,6 +366,7 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - The wobble and bulge search runs. In R, each call of `run_wobble_bulges_pipeline` stops with an error. The port counts each distinct start of a site one time, and a bulge is a run of extra target bases (D-005).
 - The 3' compensatory search runs. R returns 0 rows for each input. Without the early return, its code stops at the first site. The port gives each pair of a seed match and a region (D-004).
 - `trrust_scores` takes the messages of a gene from its regulators. R takes them from the targets of the gene (D-007).
+- `plot_ecdf` gives a figure for each p-value, and its legend counts the values of each line. R stops for a p-value of 0.01, and its legend counts the gene lists (D-063, D-064).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
 ## Scope
@@ -325,6 +379,7 @@ This version has the core path:
 - the annotation: the EnsDb file or an Ensembl or GENCODE GTF file, the 2bit and FASTA genome files, and the feature sequences of a `Reference`
 - the DE table: the reader and the filter
 - the seed counts, `full_search`, `full_search_ranges`, and `seed_match_report`
+- the HTML table of the report
 - the statistics: the KS and Wilcoxon tests, DTS, the Wasserstein areas, and `ecdf_test` for two gene sets
 - the PR and ROC curves of scores and 0/1 labels
 - the k-mer counts of a sequence set, and the number of genes with each k-mer
@@ -336,11 +391,8 @@ This version has the core path:
 - the wobble and bulge search: the sites with G:U pairs or a bulge, their count for each gene, and the null of this count
 - the 3' compensatory search: the sites with a seed match and, before it in the sequence, a match of a 3' region of the guide
 - the TRRUST and STRING network scores
+- the plots of the ECDF, the Wasserstein areas, the k-mer counts, the alignment, the match ranges, and the PR and ROC curves
 - the registry of the upstream resources, and the command `seedmatch-fetch` that downloads them
-
-These parts of SeedMatchR are not in this version:
-
-- the plots and the HTML report
 
 ## Installation
 
@@ -348,6 +400,12 @@ Python 3.12 or later is necessary. Install seedmatch from GitHub:
 
 ```bash
 uv pip install git+https://github.com/inflexa-ai/seedmatch.git
+```
+
+To draw the figures of `seedmatch.plot`, install the extra `plot`:
+
+```bash
+uv pip install "seedmatch[plot] @ git+https://github.com/inflexa-ai/seedmatch.git"
 ```
 
 To install it from a clone of this repository, use `uv pip install .`.

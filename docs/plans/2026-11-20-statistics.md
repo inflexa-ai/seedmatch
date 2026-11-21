@@ -10,7 +10,7 @@
 
 **Spec:** `docs/design.md`, sections "Parity contract", "Statistics rules", and "Divergences".
 
-**Later plans (not in this plan):** the ECDF plot and the p-value label of `.plot_ecdf`, and `benchmark_preds` (PR and ROC curves) with the other analyses.
+**Later plans (not in this plan):** the ECDF plot and the p-value label of `.plot_ecdf`, and `benchmark_preds` (PR and ROC curves) with the other analyses: closed. `docs/plans/2026-11-21-plot-and-report.md` ports the plots.
 
 ## Global Constraints
 
