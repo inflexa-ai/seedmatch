@@ -479,7 +479,11 @@ REQUIRED_COLUMNS = {
     "tx2exon": ["tx_id", "exon_id", "exon_idx"],
     "exon": ["exon_id", "exon_seq_start", "exon_seq_end"],
 }
-OPTIONAL_COLUMNS = {"chromosome": ["seq_name", "seq_length"], "entrezgene": ["gene_id", "entrezid"]}
+OPTIONAL_COLUMNS = {
+    "chromosome": ["seq_name", "seq_length"],
+    "entrezgene": ["gene_id", "entrezid"],
+    "protein": ["tx_id", "protein_id"],
+}
 EACH_FIELD = TranscriptFilter(
     support_level=1,
     gene_ids=("ENSSYNG00000000001",),
@@ -504,6 +508,7 @@ def test_the_queries_read_only_the_required_columns_and_the_optional_columns():
     connection.set_authorizer(record)
     db.contig_names()
     db.contig_lengths()
+    db.protein_genes(["ENSSYNP00000000001"])
     for transcript_filter in (EACH_FIELD, EVERYTHING):
         db.transcripts(transcript_filter)
         db.exon_rows(transcript_filter, coding_only=True)
@@ -596,6 +601,104 @@ def test_transcripts_keep_a_support_level_outside_the_range_of_the_filter(tmp_pa
     frame = db.transcripts(EVERYTHING).set_index("tx_id")
     db.close()
     assert frame.loc["ENSSYNT00000000012", "support_level"] == level
+
+
+def test_protein_genes_map_the_proteins_of_the_fixture():
+    db = AnnotationDb.open(ENSDB)
+    got = db.protein_genes(
+        ["ENSSYNP00000000001", "ENSSYNP00000000002", "ENSSYNP00000000012", "ENSSYNP00000000098"]
+    )
+    db.close()
+    assert got == {
+        "ENSSYNP00000000001": "ENSSYNG00000000001",
+        "ENSSYNP00000000002": "ENSSYNG00000000001",
+        "ENSSYNP00000000012": "ENSSYNG00000000008",
+    }
+
+
+def test_protein_genes_give_one_entry_for_a_repeated_id():
+    db = AnnotationDb.open(ENSDB)
+    got = db.protein_genes(
+        ["ENSSYNP00000000001"] * 3 + ["ENSSYNP00000000012", "ENSSYNP00000000001"]
+    )
+    db.close()
+    assert got == {
+        "ENSSYNP00000000001": "ENSSYNG00000000001",
+        "ENSSYNP00000000012": "ENSSYNG00000000008",
+    }
+
+
+def test_protein_genes_give_an_empty_map_for_no_protein():
+    db = AnnotationDb.open(ENSDB)
+    got = db.protein_genes([])
+    db.close()
+    assert got == {}
+
+
+def test_protein_genes_take_more_ids_than_the_variable_limit_of_sqlite():
+    ids = [f"ENSSYNP{number:011d}" for number in range(100, 100100)]
+    db = AnnotationDb.open(ENSDB)
+    got = db.protein_genes([*ids, "ENSSYNP00000000012"])
+    db.close()
+    assert got == {"ENSSYNP00000000012": "ENSSYNG00000000008"}
+
+
+def test_protein_genes_skip_a_protein_of_a_transcript_without_a_gene(tmp_path):
+    path = copy_ensdb(tmp_path, "UPDATE tx SET gene_id = NULL WHERE tx_id = 'ENSSYNT00000000012'")
+    db = AnnotationDb.open(path)
+    got = db.protein_genes(["ENSSYNP00000000001", "ENSSYNP00000000012"])
+    db.close()
+    assert got == {"ENSSYNP00000000001": "ENSSYNG00000000001"}
+
+
+def test_protein_genes_reject_an_annotation_without_a_protein_table(tmp_path):
+    path = copy_ensdb(tmp_path, "DROP TABLE protein")
+    db = AnnotationDb.open(path)
+    message = (
+        f"{os.fspath(path)!r}: the annotation has no table 'protein'; "
+        "expected an EnsDb file with this table"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        db.protein_genes(["ENSSYNP00000000001"])
+    db.close()
+
+
+def test_annotation_db_rejects_a_protein_table_without_protein_id(tmp_path):
+    path = copy_ensdb(
+        tmp_path, "DROP INDEX protein_protein_id_idx", "ALTER TABLE protein DROP COLUMN protein_id"
+    )
+    message = (
+        f"{os.fspath(path)!r}: the table 'protein' has no column 'protein_id'; "
+        "expected the EnsDb columns tx_id, protein_id"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        AnnotationDb.open(path)
+
+
+def test_protein_genes_reject_a_protein_with_two_genes(tmp_path):
+    path = copy_ensdb(
+        tmp_path,
+        "INSERT INTO protein VALUES ('ENSSYNT00000000003', 'ENSSYNP00000000001', NULL)",
+    )
+    db = AnnotationDb.open(path)
+    message = (
+        f"{os.fspath(path)!r}: protein 'ENSSYNP00000000001' has the genes "
+        "'ENSSYNG00000000001' and 'ENSSYNG00000000002'; expected one gene for each protein"
+    )
+    with pytest.raises(InputError, match=re.escape(message)):
+        db.protein_genes(["ENSSYNP00000000001"])
+    db.close()
+
+
+def test_protein_genes_accept_a_protein_of_two_transcripts_of_one_gene(tmp_path):
+    path = copy_ensdb(
+        tmp_path,
+        "INSERT INTO protein VALUES ('ENSSYNT00000000002', 'ENSSYNP00000000001', NULL)",
+    )
+    db = AnnotationDb.open(path)
+    got = db.protein_genes(["ENSSYNP00000000001"])
+    db.close()
+    assert got == {"ENSSYNP00000000001": "ENSSYNG00000000001"}
 
 
 def test_sqlite_file_without_the_tx_table_raises(tmp_path):

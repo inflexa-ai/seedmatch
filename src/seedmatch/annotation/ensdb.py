@@ -35,6 +35,7 @@ _REQUIRED_COLUMNS: Final = {
 _OPTIONAL_COLUMNS: Final = {
     "chromosome": ("seq_name", "seq_length"),
     "entrezgene": ("gene_id", "entrezid"),
+    "protein": ("tx_id", "protein_id"),
 }
 _COORDINATE: Final = (1, COORDINATE_MAX)
 # The valid values of each integer column that the checks read: the lowest and the highest value,
@@ -132,8 +133,8 @@ class AnnotationDb:
     def __init__(self, connection: sqlite3.Connection, source: str) -> None:
         """Make sure that the database has the EnsDb tables and the columns that the queries read.
 
-        An optional table (`chromosome`, `entrezgene`) that the file has must have the columns that
-        the queries read. Then read which optional columns `tx` has.
+        An optional table (`chromosome`, `entrezgene`, `protein`) that the file has must have the
+        columns that the queries read. Then read which optional columns `tx` has.
         """
         self._connection = connection
         self.source = source
@@ -346,6 +347,40 @@ class AnnotationDb:
             tx_seq_start=tx_seq_start,
             tx_row=tx_row,
         )
+
+    def protein_genes(self, protein_ids: Sequence[str]) -> dict[str, str]:
+        """Map each protein ID of the table `protein` to the gene of its transcript.
+
+        A protein ID that the table lacks is not in the result. A protein of a transcript without a
+        gene (`tx.gene_id` is NULL) is not in the result either. An annotation without a `protein`
+        table, for example one from `load_gtf`, raises `InputError`, and so does a protein with
+        more than one gene. A protein of two transcripts of one gene is valid. The IDs go to SQLite
+        as one JSON array, so their number has no limit of SQLite. The query uses the index
+        `protein_protein_id_idx` of the EnsDb, and the memory is O(P) for P IDs.
+        """
+        if "protein" not in self._tables:
+            message = (
+                f"{self.source!r}: the annotation has no table 'protein'; "
+                "expected an EnsDb file with this table"
+            )
+            raise InputError(message)
+        # The text holds only fixed names, and the IDs are one parameter.
+        sql = (
+            "SELECT protein.protein_id, tx.gene_id FROM protein "  # noqa: S608
+            "JOIN tx ON tx.tx_id = protein.tx_id "
+            f"WHERE protein.protein_id {_IN_SET} AND tx.gene_id IS NOT NULL"
+        )
+        genes: dict[str, str] = {}
+        for protein_id, gene_id in self._connection.execute(sql, (json.dumps(list(protein_ids)),)):
+            known = genes.setdefault(protein_id, gene_id)
+            if known != gene_id:
+                first, second = sorted((known, gene_id))
+                message = (
+                    f"{self.source!r}: protein {protein_id!r} has the genes {first!r} and "
+                    f"{second!r}; expected one gene for each protein"
+                )
+                raise InputError(message)
+        return genes
 
     def close(self) -> None:
         """Close the connection."""

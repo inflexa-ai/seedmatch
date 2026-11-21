@@ -177,6 +177,16 @@ The IDs of the known divergences have the same order as the rows of the table in
 - Reason: A caller who selects seeds or edit distances for `full_search` expects the best match of the columns that the search made. A missing column is not an error.
 - Test: `test_best_match_skips_absent_columns_D012`, `test_best_match_of_a_frame_without_count_columns_is_no_matches_D012`, and `test_best_match_of_a_frame_without_rows_is_empty_D012` in `tests/report/test_full_search.py`.
 
+## D-013: string_gene_network maps the proteins with the EnsDb
+
+- ID: `D-013`
+- R location: `get_stringPPI_to_stringGGI` (`R/get_stringPPI_to_stringGGI.R:32-60`).
+- R behavior: `biomaRt::getBM` gives the gene of each protein. The rat query uses the current Ensembl release of BioMart. The human query uses the archive `grch37.ensembl.org` (`:32-39`).
+  - For a value of `sp` other than `rat` and `human`, `mart` has no value. Evidence: the source. There is no R run, because biomaRt is not in `tools/golden/.rlib`, and the tests do not use the internet.
+- New behavior: `string_gene_network` maps the protein IDs with the tables `protein` and `tx` of the EnsDb of the `Reference`.
+- Reason: The map then uses the Ensembl release of the sequences, and it uses no internet. A GRCh37 map does not agree with a GRCh38 reference.
+- Test: `test_string_gene_network_maps_with_the_protein_table_D013` in `tests/network/test_string_network.py`. The `test_protein_genes_*` tests in `tests/annotation/test_ensdb.py` check the method of the EnsDb.
+
 ## D-015: A seed-count column replaces a column with the same name
 
 - ID: `D-015`
@@ -728,3 +738,26 @@ The IDs of the known divergences have the same order as the rows of the table in
   - Another line, an empty protein ID, a NUL character, and a line of more than 1024 characters raise `InputError` with the line number. `#` and quote characters are text.
 - Reason: STRING gives each combined score as an integer from 0 to 1000. A text score gives a wrong selection and no message. The limit bounds the memory of a chunk.
 - Test: `test_read_string_links_reject_a_bad_line_D059`, `test_read_string_links_keep_hash_and_quote_text_D059`, `test_read_string_links_reject_a_long_line_D059`, and `test_read_string_links_reject_a_nul_character_D059` in `tests/network/test_string_links.py`.
+
+## D-060: string_gene_network joins the links of each protein of a gene
+
+- ID: `D-060`
+- R location: `get_stringPPI_to_stringGGI` (`R/get_stringPPI_to_stringGGI.R:62-64`).
+- R behavior: `adj_matrix[!duplicated(newnames), !duplicated(newnames)]` keeps only the row and the column of the first protein of each gene. R drops the links of the other proteins, and then the genes without a link.
+  - Evidence: `tests/golden/network/string_ppi.tsv`, case `p50`, has the pairs G1-G4 and G2-G6. Gn is the fixture gene `ENSSYNG<n>`, with n as 11 digits. The case does not have G1-G5 of the second protein of G1, or G2-G8 of the second protein of G2.
+  - Evidence: on the rat file of STRING 12.5 and the EnsDb 109, 96 genes of the default network have more than one protein. Each gene pair of R is a pair of the port, and the port has 1,112 rows more.
+- New behavior: The links of a gene are the links of each of its proteins. A gene pair gets the highest score of its links. A link of two proteins of one gene gives no pair.
+- Reason: A gene-level result uses each sequence of the gene (`D-003`). In the same way, the network uses each protein of the gene.
+- Test: `test_string_gene_network_joins_the_proteins_of_a_gene_D060` and `test_string_gene_network_gives_a_pair_the_highest_score_of_its_links_D060` in `tests/network/test_string_network.py`.
+
+## D-061: string_gene_network drops a protein without a gene
+
+- ID: `D-061`
+- R location: `get_stringPPI_to_stringGGI` (`R/get_stringPPI_to_stringGGI.R:43-60`).
+- R behavior: The name of a protein is the text of its ID between the first and the second `.` (`:43-44`). A protein that BioMart does not map keeps this name (`:56-58`). Thus the result has gene IDs and protein IDs. If no protein maps, the result has only protein IDs, and R gives no message. R drops the text after a second `.`.
+  - Evidence: `tests/golden/network/string_nodes.tsv`, case `p0`, has the nodes `ENSSYNP00000000098` and `ENSSYNP00000000099`.
+  - Evidence: on the rat file of STRING 12.5 and the EnsDb 109, 628 of the 8,809 proteins of the default network have no gene.
+  - Evidence: the expression of `:43-44` gives `AT1G01010` for the ID `3702.AT1G01010.1` (R 4.5.3).
+- New behavior: The network has only gene pairs, and `GeneNetwork.unmapped_proteins` lists each protein without a gene. The protein ID is the text after the first `.`, also if the ID has a second `.`. An ID without `.`, with no text before it, or with no text after it raises `InputError`. Links that join no two genes also raise `InputError`.
+- Reason: A protein ID is not a gene ID, thus no row of `de` can match it.
+- Test: `test_string_gene_network_drops_the_unmapped_proteins_D061`, `test_string_gene_network_gives_no_pair_for_a_link_of_an_unmapped_protein_D061`, `test_string_gene_network_keeps_the_text_after_the_first_dot_of_a_protein_ID_D061`, `test_string_gene_network_rejects_links_without_a_gene_pair_D061`, and `test_string_gene_network_rejects_a_protein_id_without_a_taxon_prefix_D061` in `tests/network/test_string_network.py`.

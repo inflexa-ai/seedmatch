@@ -10,9 +10,11 @@ from seedmatch.kmers import KmerCounts, kmer_counts, kmer_gene_counts
 from seedmatch.mirdb import read_mirdb
 from seedmatch.network import (
     Aggregator,
+    GeneNetwork,
     StringLinks,
     read_string_links,
     read_trrust,
+    string_gene_network,
     trrust_scores,
 )
 from seedmatch.noncanonical import (
@@ -73,6 +75,7 @@ __all__ = [
     "Features",
     "FullSearchOptions",
     "FullSearchRangesOptions",
+    "GeneNetwork",
     "Guide",
     "InputError",
     "KmerCounts",
@@ -122,6 +125,7 @@ __all__ = [
     "reverse_complement",
     "roc_curve",
     "seed_match_report",
+    "string_gene_network",
     "trrust_scores",
     "wasserstein_areas",
     "wobble_bulge_matches",

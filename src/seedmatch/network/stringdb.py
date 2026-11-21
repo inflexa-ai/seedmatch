@@ -1,4 +1,4 @@
-"""The reader of the STRING protein links, and the cutoff of their scores."""
+"""The reader of the STRING protein links, the cutoff of their scores, and their gene pairs."""
 
 import os
 from dataclasses import dataclass, field
@@ -8,7 +8,15 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-from seedmatch._checks import as_cutoff, as_limit, concatenate_and_clear
+from seedmatch._checks import (
+    as_cutoff,
+    as_limit,
+    check_columns,
+    check_integer_columns,
+    check_text_columns,
+    check_type,
+    concatenate_and_clear,
+)
 from seedmatch._io import local_path, open_text
 from seedmatch._lines import (
     field_lines,
@@ -19,11 +27,15 @@ from seedmatch._lines import (
     vocabulary_codes,
 )
 from seedmatch._rmath import r_quantile
+from seedmatch.annotation.reference import Reference
 from seedmatch.errors import InputError
 
 STRING_HEADER: Final = "protein1 protein2 combined_score"
 STRING_SCORE_MAX: Final = 1000
-_COLUMNS: Final = ("protein1", "protein2", "combined_score")
+_PROTEIN_COLUMNS: Final = ("protein1", "protein2")
+_SCORE_COLUMNS: Final = ("combined_score",)
+_COLUMNS: Final = (*_PROTEIN_COLUMNS, *_SCORE_COLUMNS)
+_LINKS_LABEL: Final = "links table"
 _CHUNK_LINES: Final = 2**16
 
 
@@ -276,3 +288,140 @@ def _check_rows(
         )
     message = f"{source!r}: line {numbers[row]}: {problem}"
     raise InputError(message)
+
+
+@dataclass(frozen=True, eq=False)
+class GeneNetwork:
+    """The gene pairs of STRING links, and the proteins that have no gene.
+
+    `edges` has the columns `gene1` and `gene2` (`object`) and `combined_score` (`int64`), and a
+    `RangeIndex`. It has a row for each order of each gene pair. `unmapped_proteins` holds the
+    STRING ID of each protein that the annotation maps to no gene, in the order of their first
+    occurrence in `protein1` and then in `protein2`.
+    """
+
+    edges: pd.DataFrame
+    unmapped_proteins: tuple[str, ...]
+
+
+def string_gene_network(links: pd.DataFrame, reference: Reference) -> GeneNetwork:
+    """Map the proteins of STRING links to genes with the EnsDb of the reference.
+
+    This is the map of `get_stringPPI_to_stringGGI` of SeedMatchR, with the `protein` table of
+    the EnsDb in place of BioMart (`D-013`). `links` has the columns `protein1` and `protein2`
+    (`str`) and `combined_score` (an integer dtype), as `StringLinks.links` has. `reference` must
+    have an EnsDb. An annotation of `load_gtf` has no `protein` table.
+
+    A STRING protein ID has the form `<taxon>.<protein ID>`. The protein ID of the EnsDb is the
+    text after the first `.`, also if the ID has a second `.` (`D-061`). A link of two proteins
+    with a gene each gives the pair of their genes. A link of two proteins of one gene gives no
+    pair, and a link of a protein with no gene gives no pair (`D-061`). Thus the network has gene
+    IDs only, and `unmapped_proteins` lists the other proteins. A protein of a transcript without
+    a gene is one of them.
+
+    R keeps the first protein of each gene and drops the links of the others. Here the links of
+    each protein of a gene join, and a pair gets the highest score of its links (`D-060`).
+
+    The edges have a row for each order of each gene pair. The genes come in the order of the
+    first occurrence of one of their proteins, in `protein1` and then in `protein2`. The rows
+    come in the order of `gene1`, and then of `gene2`. For a symmetric table in the order of
+    `protein1`, as STRING gives it, the genes come in the vertex order of R.
+
+    These inputs raise `InputError`:
+
+    - a `links` that is not a `DataFrame`, or that lacks one of the three columns
+    - a protein ID that is not a `str`
+    - a score that is not an integer, or that is not from 0 to 1000
+    - a `links` without a row
+    - a `reference` that is not a `Reference`, or that has no `protein` table
+    - a protein ID without a taxon prefix, an empty taxon, or an empty protein ID
+    - a protein with more than one gene in the EnsDb
+    - links that join no two genes. The message names the annotation.
+
+    The time is O(E log E) for E links, because the function sorts the keys `gene1 * G + gene2`
+    for G genes one time. The memory is O(E). The map asks the EnsDb for the proteins of the links
+    with one query. The default links of the STRING rat file (`read_string_links`) have 98,920
+    links and 8,809 proteins. With the EnsDb 109 of `rnor7`, 628 proteins have no gene, and 96
+    genes have more than one protein (at most 4). The result has 84,654 rows and 7,979 genes. This
+    is 1,112 rows more than the gene pairs of R. The first call takes 0.2 seconds, a later call
+    takes 0.04 seconds, and the peak memory above the start is about 25 MB. With
+    `score_threshold=0` and `percentile=0`, the links have 13,894,314 rows. The call takes 3.6
+    seconds, and the result has 11,097,016 rows. The peak memory above the start is about 1.5 GB,
+    or 110 bytes for each link. Machine: Apple M2 Max, Python 3.12.
+    """
+    check_columns(links, _COLUMNS, name="links", label=_LINKS_LABEL)
+    check_text_columns(links, _PROTEIN_COLUMNS, label=_LINKS_LABEL)
+    check_integer_columns(links, _SCORE_COLUMNS)
+    _check_scores(links["combined_score"])
+    if not len(links):
+        message = "the links table has no row; expected at least one link"
+        raise InputError(message)
+    check_type("reference", reference, Reference)
+
+    rows = len(links)
+    codes, proteins = pd.factorize(
+        np.concatenate([links[name].to_numpy(dtype=object) for name in _PROTEIN_COLUMNS])
+    )
+    ids = [_protein_id(protein) for protein in proteins]
+    gene_of = reference.annotation.protein_genes(ids)
+    found = [gene_of.get(protein_id) for protein_id in ids]
+    is_mapped = np.fromiter((gene is not None for gene in found), dtype=np.bool_, count=len(ids))
+    gene_codes, genes = pd.factorize(
+        np.array([gene for gene in found if gene is not None], dtype=object)
+    )
+    gene_of_protein = np.full(len(ids), -1, dtype=np.int64)
+    gene_of_protein[is_mapped] = gene_codes
+
+    first = gene_of_protein[codes[:rows]]
+    second = gene_of_protein[codes[rows:]]
+    is_pair = (first >= 0) & (second >= 0) & (first != second)
+    if not is_pair.any():
+        message = (
+            f"no link joins two genes of the annotation {reference.annotation.source!r}; "
+            "expected the STRING links of the species of the annotation"
+        )
+        raise InputError(message)
+    first, second = first[is_pair], second[is_pair]
+    scores = links["combined_score"].to_numpy(dtype=np.int64)[is_pair]
+
+    # A key is below G^2 for G genes, and G is at most 2 * rows. Thus a key fits an int64 for a
+    # table of fewer than 1.5e9 rows.
+    gene_count = len(genes)
+    keys = np.concatenate([first * gene_count + second, second * gene_count + first])
+    order = np.argsort(keys)
+    keys = keys[order]
+    is_start = np.ones(len(keys), dtype=np.bool_)
+    is_start[1:] = keys[1:] != keys[:-1]
+    starts = np.flatnonzero(is_start)
+    best = np.maximum.reduceat(np.concatenate([scores, scores])[order], starts)
+    gene1, gene2 = np.divmod(keys[starts], gene_count)
+    edges = frame_of({"gene1": genes[gene1], "gene2": genes[gene2], "combined_score": best})
+    return GeneNetwork(edges=edges, unmapped_proteins=tuple(proteins[~is_mapped].tolist()))
+
+
+def _check_scores(scores: pd.Series) -> None:
+    """Raise `InputError` for the first score outside 0 to `STRING_SCORE_MAX`.
+
+    The comparison runs on the column as it is, thus a `uint64` score above 2^63 - 1 is found
+    before the cast to `int64`.
+    """
+    is_bad = ((scores < 0) | (scores > STRING_SCORE_MAX)).to_numpy(dtype=np.bool_)
+    if is_bad.any():
+        row = int(np.argmax(is_bad))
+        message = (
+            f"{_LINKS_LABEL} column 'combined_score' holds {int(scores.iloc[row])} in row {row}; "
+            f"expected an integer from 0 to {STRING_SCORE_MAX}"
+        )
+        raise InputError(message)
+
+
+def _protein_id(protein: str) -> str:
+    """Return the text after the first `.` of a STRING ID. An ID without a taxon raises."""
+    taxon, dot, identifier = protein.partition(".")
+    if not (taxon and dot and identifier):
+        message = (
+            f"{_LINKS_LABEL}: protein ID {protein!r} has no taxon prefix; "
+            "expected the form '<taxon>.<protein ID>'"
+        )
+        raise InputError(message)
+    return identifier
