@@ -9,6 +9,7 @@ from typing import Final
 
 import numpy as np
 
+from seedmatch._checks import as_limit, check_at_least
 from seedmatch._io import open_binary
 from seedmatch.errors import InputError
 from seedmatch.sequence.alphabet import encode_dna_bytes
@@ -105,10 +106,12 @@ def write_fasta(
     *,
     width: int = 80,
 ) -> None:
-    """Write the IDs and bases of the set. Each sequence line has at most width letters."""
-    if width < 1:
-        message = f"width {width} is invalid; expected at least 1"
-        raise InputError(message)
+    """Write the IDs and bases of the set. Each sequence line has at most width letters.
+
+    A `width` that is not an integer of 1 or more raises `InputError`.
+    """
+    width = as_limit("width", width)
+    check_at_least("width", width, 1)
     for name in sequences.ids:
         if _WHITE_SPACE.search(name):
             message = f"id {name!r} has white space; expected an ID without white space"

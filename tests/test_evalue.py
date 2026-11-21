@@ -301,7 +301,7 @@ def test_e_value_null_rejects_options_of_another_type():
 def test_e_value_null_checks_rng_and_workers_with_the_shared_messages():
     with pytest.raises(InputError, match=r"^rng 1.5 has type float; expected a numpy\.random"):
         e_value_null(Guide(GUIDE), sirna_seqs(), rng=1.5)
-    message = "workers 0 is less than 1; expected an int of 1 or more"
+    message = "workers 0 is less than 1; expected 1 or more"
     with pytest.raises(InputError, match=exactly(message)):
         e_value_null(Guide(GUIDE), sirna_seqs(), rng=1, workers=0)
 

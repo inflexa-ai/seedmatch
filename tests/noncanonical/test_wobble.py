@@ -428,7 +428,7 @@ def test_wobble_bulge_matches_do_not_depend_on_workers():
 
 
 def test_wobble_bulge_matches_reject_a_workers_below_1():
-    message = "workers 0 is less than 1; expected an int of 1 or more"
+    message = "workers 0 is less than 1; expected 1 or more"
     with pytest.raises(InputError, match=exactly(message)):
         wobble_bulge_matches(Guide(GUIDE), sirna_seqs(), workers=0)
 
@@ -660,7 +660,7 @@ def test_wobble_bulge_null_checks_rng_n_random_and_workers_with_the_messages_of_
     message = "n_random 1.5 has type float; expected an integer"
     with pytest.raises(InputError, match=exactly(message)):
         wobble_bulge_null(guide, sequences, rng=1, n_random=1.5)
-    message = "workers 0 is less than 1; expected an int of 1 or more"
+    message = "workers 0 is less than 1; expected 1 or more"
     with pytest.raises(InputError, match=exactly(message)):
         wobble_bulge_null(guide, sequences, rng=1, workers=0)
 

@@ -771,7 +771,7 @@ def test_compensatory_sites_do_not_depend_on_workers():
 
 
 def test_compensatory_sites_reject_a_workers_below_1():
-    message = "workers 0 is less than 1; expected an int of 1 or more"
+    message = "workers 0 is less than 1; expected 1 or more"
     with pytest.raises(InputError, match=exactly(message)):
         compensatory_sites(Guide(GUIDE), sirna_seqs(), workers=0)
 

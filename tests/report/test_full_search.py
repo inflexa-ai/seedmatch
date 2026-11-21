@@ -330,8 +330,8 @@ def test_an_unordered_collection_is_rejected_because_its_order_gives_the_output_
 @pytest.mark.parametrize(
     ("workers", "message"),
     [
-        (0, r"workers 0 is less than 1; expected an int of 1 or more"),
-        (-2, r"workers -2 is less than 1; expected an int of 1 or more"),
+        (0, r"workers 0 is less than 1; expected 1 or more"),
+        (-2, r"workers -2 is less than 1; expected 1 or more"),
         (True, r"workers True has type bool; expected an integer"),
         (1.5, r"workers 1.5 has type float; expected an integer"),
         ("4", r"workers '4' has type str; expected an integer"),

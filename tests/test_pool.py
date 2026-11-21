@@ -162,8 +162,6 @@ def test_pool_width_keeps_an_int_of_1_or_more():
     assert pool_width(3) == 3
 
 
-def test_pool_width_rejects_a_width_below_1_with_its_own_message():
-    with pytest.raises(
-        InputError, match=r"^workers 0 is less than 1; expected an int of 1 or more$"
-    ):
+def test_pool_width_rejects_a_width_below_1_with_the_message_of_check_at_least():
+    with pytest.raises(InputError, match=r"^workers 0 is less than 1; expected 1 or more$"):
         pool_width(0)

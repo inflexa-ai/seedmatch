@@ -362,10 +362,19 @@ def test_write_fasta_of_an_empty_set_makes_an_empty_file(tmp_path):
     assert (tmp_path / "x.fa").read_text() == ""
 
 
-@pytest.mark.parametrize("width", [0, -5])
-def test_write_fasta_rejects_a_width_below_one(tmp_path, width):
+@pytest.mark.parametrize(
+    ("width", "message"),
+    [
+        (0, "width 0 is less than 1; expected 1 or more"),
+        (-5, "width -5 is less than 1; expected 1 or more"),
+        (True, "width True has type bool; expected an integer"),
+        (1.5, "width 1.5 has type float; expected an integer"),
+        ("80", "width '80' has type str; expected an integer"),
+    ],
+)
+def test_write_fasta_rejects_a_width_that_is_not_an_integer_of_1_or_more(tmp_path, width, message):
     seqs = SequenceSet.from_records([("a", "AC")])
-    with pytest.raises(InputError, match=rf"width {width}.*at least 1"):
+    with pytest.raises(InputError, match=exactly(message)):
         write_fasta(seqs, tmp_path / "x.fa", width=width)
     assert not (tmp_path / "x.fa").exists()
 

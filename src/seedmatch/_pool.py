@@ -5,8 +5,7 @@ from collections import deque
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 
-from seedmatch._checks import as_limit
-from seedmatch.errors import InputError
+from seedmatch._checks import as_limit, check_at_least
 
 
 def pool_width(workers: int | None) -> int:
@@ -15,9 +14,7 @@ def pool_width(workers: int | None) -> int:
         # os.cpu_count() is None if the number of CPUs is unknown.
         return os.cpu_count() or 1
     width = as_limit("workers", workers)
-    if width < 1:
-        message = f"workers {width} is less than 1; expected an int of 1 or more"
-        raise InputError(message)
+    check_at_least("workers", width, 1)
     return width
 
 
