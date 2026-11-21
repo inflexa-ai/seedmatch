@@ -356,6 +356,7 @@ The ROC curve:
   - `UNION` copies `.reduce_features`. The genes come in the order of `gene_id`. The union merges the ranges that overlap or touch. The ranges of the union come in transcript order (`D-027`).
   - R applies `longest.utr` and `reduce.features` only to the 3' UTR. The port applies `PerGene` to each feature type (`D-029`).
 - `min_width` removes each sequence that is shorter than the width. The default is 8, the default of `min.feature.width`.
+- The ranges of a feature hold at most 2^62 - 1 bases. `Features` and `PerGene.LONGEST` raise `InputError` for a feature with more bases, because the sums use int64.
 - Each sequence keeps its transcript ID and its gene ID as two fields of `SequenceSet`. With `UNION`, the ID of a sequence is its gene ID. R replaces the names with gene IDs, thus two sequences can have the same name. With `reduce.features`, R gives the name `NA` to each sequence (`R/load_annotations.R:103-107`).
 - A gene-level result uses an explicit rule. A seed count for a gene is the maximum over its sequences. The best match of a gene is the best over its sequences. R uses the first sequence for the counts (`R/SeedMatchR.R:207`), but each sequence for the report (`R/SeedMatchReport.R:85-99`). These are divergences.
 - The rat 2bit file is soft-masked. Biostrings changes lowercase letters to uppercase, thus the reader also does this.

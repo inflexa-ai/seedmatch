@@ -3,13 +3,22 @@ import re
 
 import numpy as np
 import pytest
-from annotation_cases import ALL, CASES, ENSDB, NOT_CODING, copy_ensdb, fixture_reference
+from annotation_cases import (
+    ALL,
+    ANNOTATION,
+    CASES,
+    ENSDB,
+    NOT_CODING,
+    copy_ensdb,
+    fixture_reference,
+)
 from helpers import GOLDEN, golden
 
 import seedmatch.annotation.ensdb
 from seedmatch.annotation.ensdb import AnnotationDb, ExonRows
 from seedmatch.annotation.features import Features, derive_features
 from seedmatch.annotation.filters import FeatureType, PerGene, TranscriptFilter
+from seedmatch.annotation.reference import Reference
 from seedmatch.errors import InputError
 
 G01 = "ENSSYNG00000000001"
@@ -577,6 +586,122 @@ def test_at_least_gives_arrays_that_are_read_only():
 def test_features_reject_parts_that_do_not_fit_together(change, message):
     with pytest.raises(InputError, match=re.escape(message)):
         Features(**feature_parts(**change))
+
+
+C = 2**62 - 1
+TOO_WIDE = "has more than 2^62 - 1 bases in its ranges; expected at most 2^62 - 1"
+
+
+@pytest.mark.parametrize("count", [2, 3, 4, 5])
+def test_features_reject_a_feature_with_more_than_2_62_minus_1_bases(count):
+    parts = feature_parts(
+        starts=np.array([10] + [1] * count, dtype=np.int64),
+        ends=np.array([15] + [C] * count, dtype=np.int64),
+        offsets=np.array([0, 1, 1 + count], dtype=np.int64),
+    )
+    with pytest.raises(InputError, match=re.escape(f"feature 'B' {TOO_WIDE}")):
+        Features(**parts)
+
+
+def test_features_accept_a_feature_of_exactly_2_62_minus_1_bases():
+    parts = feature_parts(
+        starts=np.array([10, 1, 1], dtype=np.int64),
+        ends=np.array([15, 2**61, 2**61 - 1], dtype=np.int64),
+    )
+    assert Features(**parts).widths().tolist() == [6, C]
+
+
+@pytest.mark.parametrize(
+    "ends",
+    [[15, 2**61, 2**61], [15, C, 2**63 - 1]],
+    ids=["2^62 bases", "a sum that wraps to a negative value"],
+)
+def test_features_reject_a_feature_of_2_62_bases_or_more(ends):
+    parts = feature_parts(
+        starts=np.array([10, 1, 1], dtype=np.int64),
+        ends=np.array(ends, dtype=np.int64),
+    )
+    with pytest.raises(InputError, match=re.escape(f"feature 'B' {TOO_WIDE}")):
+        Features(**parts)
+
+
+def test_features_accept_features_whose_sum_of_all_widths_wraps_int64():
+    parts = feature_parts(
+        ids=("A", "B", "C", "D"),
+        gene_ids=("GA", "GB", "GC", "GD"),
+        contigs=("1",) * 4,
+        strands=np.ones(4, dtype=np.int8),
+        starts=np.ones(4, dtype=np.int64),
+        ends=np.full(4, C, dtype=np.int64),
+        offsets=np.arange(5, dtype=np.int64),
+    )
+    assert Features(**parts).widths().tolist() == [C] * 4
+
+
+WIDE_ROWS = hand_rows(
+    ("T1", "G1", 1, None, ((1, C), (1, C), (1, C))),
+    ("T2", "G1", 1, None, ((1, 100),)),
+)
+
+
+@pytest.mark.parametrize("per_gene", [PerGene.EACH_TRANSCRIPT, PerGene.LONGEST])
+def test_derive_features_reject_a_transcript_with_more_than_2_62_minus_1_bases(per_gene):
+    with pytest.raises(InputError, match=re.escape(f"feature 'T1' {TOO_WIDE}")):
+        derive_features(WIDE_ROWS, FeatureType.EXONS, per_gene)
+
+
+def test_longest_skips_a_wide_transcript_that_the_feature_type_skips():
+    rows = hand_rows(
+        ("T1", "G1", 1, None, ((1, C), (1, C), (1, C))),
+        ("T2", "G1", 1, (10, 20), ((1, 100),)),
+    )
+    each = derive_features(rows, FeatureType.UTR3, PerGene.EACH_TRANSCRIPT)
+    longest = derive_features(rows, FeatureType.UTR3, PerGene.LONGEST)
+    assert longest.ids == each.ids == ("T2",)
+
+
+def test_union_of_exons_with_more_than_2_62_minus_1_bases_is_one_range():
+    got = derive_features(WIDE_ROWS, FeatureType.EXONS, PerGene.UNION)
+    assert ranges_of(got.to_frame(), "G1") == [(1, C)]
+
+
+def test_union_merges_a_range_inside_a_range_that_ends_at_the_coordinate_limit():
+    rows = hand_rows(
+        ("T1", "GA", 1, None, ((1, 10), (C - 10, C))),
+        ("T2", "GB", 1, None, ((C - 100, C),)),
+        ("T3", "GB", 1, None, ((C - 50, C - 40),)),
+    )
+    frame = derive_features(rows, FeatureType.EXONS, PerGene.UNION).to_frame()
+    assert ranges_of(frame, "GA") == [(1, 10), (C - 10, C)]
+    assert ranges_of(frame, "GB") == [(C - 100, C)]
+
+
+def test_union_near_the_coordinate_limit_keeps_the_ranges_of_a_later_gene_apart():
+    rows = hand_rows(
+        ("T1", "GA", 1, None, ((1, 10), (C - 10, C))),
+        ("T2", "GB", 1, None, ((1, 5), (10, 20))),
+    )
+    frame = derive_features(rows, FeatureType.EXONS, PerGene.UNION).to_frame()
+    assert ranges_of(frame, "GB") == [(1, 5), (10, 20)]
+
+
+# ENSSYNT00000000001 has 3 exons. New exons keep the exons that other transcripts share.
+# The statements hold constants of this test, so no input reaches them.
+WIDE_T01 = (
+    *(f"INSERT INTO exon VALUES ('BIG{k}', 1, {C})" for k in (1, 2, 3)),  # noqa: S608
+    "UPDATE tx2exon SET exon_id = 'BIG' || exon_idx WHERE tx_id = 'ENSSYNT00000000001'",
+    f"UPDATE tx SET tx_seq_start = 1, tx_seq_end = {C} WHERE tx_id = 'ENSSYNT00000000001'",  # noqa: S608
+)
+
+
+@pytest.mark.parametrize("per_gene", [PerGene.EACH_TRANSCRIPT, PerGene.LONGEST])
+def test_sequences_reject_a_transcript_with_more_than_2_62_minus_1_bases(tmp_path, per_gene):
+    path = copy_ensdb(tmp_path, *WIDE_T01)
+    with (
+        Reference.from_paths(ensdb=path, genome=ANNOTATION / "synthetic.2bit") as reference,
+        pytest.raises(InputError, match=re.escape(f"feature '{T01}' {TOO_WIDE}")),
+    ):
+        reference.sequences(FeatureType.EXONS, ALL, per_gene=per_gene)
 
 
 def test_features_arrays_are_read_only():

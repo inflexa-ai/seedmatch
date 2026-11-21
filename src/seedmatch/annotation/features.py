@@ -1,5 +1,6 @@
 """The ranges of a feature of each transcript, and the selection of the transcripts of a gene."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import compress
 from typing import assert_never
@@ -9,6 +10,7 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from seedmatch._checks import check_offsets, check_vector
+from seedmatch._io import COORDINATE_MAX, limit_text
 from seedmatch.annotation.ensdb import ExonRows
 from seedmatch.annotation.filters import FeatureType, PerGene
 from seedmatch.errors import InputError
@@ -22,7 +24,8 @@ class Features:
 
     Feature i has the ranges `starts[k]` to `ends[k]` for k in `offsets[i]:offsets[i + 1]`, in
     transcript order. Thus the ranges descend on the minus strand (-1). A feature can have no range,
-    for example a transcript without a 3' UTR. The arrays are read-only.
+    for example a transcript without a 3' UTR. The arrays are read-only. The ranges of a feature
+    hold at most 2^62 - 1 bases, and a feature with more bases raises `InputError`.
     """
 
     ids: tuple[str, ...]
@@ -71,6 +74,7 @@ class Features:
                 "expected a start that is not after the end"
             )
             raise InputError(message)
+        range_totals(self.ends - self.starts + 1, self.offsets, self.ids)
         for array in (self.strands, self.starts, self.ends, self.offsets):
             array.flags.writeable = False
 
@@ -134,8 +138,13 @@ def derive_features(rows: ExonRows, feature: FeatureType, per_gene: PerGene) -> 
         case PerGene.EACH_TRANSCRIPT:
             chosen = candidates
         case PerGene.LONGEST:
-            row_widths = np.where(in_feature, ends - starts + 1, 0)
-            chosen = _longest(rows, bounds, candidates, np.diff(running_sum(row_widths)[bounds]))
+            # EACH_TRANSCRIPT skips a transcript outside the candidates, thus its width counts as 0.
+            is_candidate = np.zeros(len(bounds) - 1, dtype=np.bool_)
+            is_candidate[candidates] = True
+            counted = in_feature & np.repeat(is_candidate, np.diff(bounds))
+            row_widths = np.where(counted, ends - starts + 1, 0)
+            widths = range_totals(row_widths, bounds, rows.tx_id[bounds[:-1]])
+            chosen = _longest(rows, bounds, candidates, widths)
         case PerGene.UNION:
             return _union(rows, bounds, candidates, (starts, ends), in_feature)
         case _:
@@ -247,9 +256,18 @@ def _merge(
     order = np.lexsort((starts, gene))
     gene, starts, ends = gene[order], starts[order], ends[order]
     # Each gene gets its own band of values, above the bands of the genes before it. Thus the
-    # running maximum of the shifted ends is the running maximum of the ends of the same gene.
-    band = gene * (int(ends.max()) + 2)
-    reach = np.maximum.accumulate(ends + band) - band
+    # running maximum of the shifted values is the running maximum of the same gene. If the band of
+    # the ends leaves int64, the dense ranks of the ends take their place, at the cost of a sort. A
+    # rank and a band of ranks are below the square of the range count. Thus they fit in int64 for
+    # fewer than 3e9 ranges.
+    span = int(ends.max()) + 2
+    if (int(gene[-1]) + 1) * span <= np.iinfo(np.int64).max:
+        band = gene * span
+        reach = np.maximum.accumulate(ends + band) - band
+    else:
+        levels, rank = np.unique(ends, return_inverse=True)
+        band = gene * len(levels)
+        reach = levels[np.maximum.accumulate(rank + band) - band]
     new = np.ones(len(starts), dtype=np.bool_)
     new[1:] = (gene[1:] != gene[:-1]) | (starts[1:] > reach[:-1] + 1)
     first = np.flatnonzero(new)
@@ -279,6 +297,33 @@ def _runs(starts: NDArray[np.int64], stops: NDArray[np.int64]) -> NDArray[np.int
     lengths = stops - starts
     run_starts = running_sum(lengths)[:-1]
     return np.arange(int(lengths.sum())) - np.repeat(run_starts - starts, lengths)
+
+
+def range_totals(
+    widths: NDArray[np.int64],
+    offsets: NDArray[np.int64],
+    ids: Sequence[str] | NDArray[np.object_],
+) -> NDArray[np.int64]:
+    """Return the sum of `widths[offsets[i]:offsets[i + 1]]` for each group i.
+
+    Each width is from 0 to 2^63 - 1. `offsets` goes from 0 to `len(widths)` and does not decrease.
+    A group with a sum above `COORDINATE_MAX` raises `InputError`, and the message gives the ID of
+    the group from `ids`.
+    """
+    total = running_sum(widths)
+    partial = total[1:] - np.repeat(total[offsets[:-1]], np.diff(offsets))
+    # A width is at most 2^63 - 1. Thus the partial sums of a group are exact up to the first one
+    # above COORDINATE_MAX, and that one is exact or negative after the wrap.
+    over = (partial > COORDINATE_MAX) | (partial < 0)
+    too_wide = np.diff(running_sum(over.astype(np.int64))[offsets]) > 0
+    if (i := _first(too_wide)) is not None:
+        limit = limit_text(COORDINATE_MAX)
+        message = (
+            f"feature {ids[i]!r} has more than {limit} bases in its ranges; "
+            f"expected at most {limit}"
+        )
+        raise InputError(message)
+    return np.diff(total[offsets])
 
 
 def running_sum(values: NDArray[np.int64]) -> NDArray[np.int64]:
