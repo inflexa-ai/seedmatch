@@ -251,7 +251,7 @@ def wobble_bulge_matches(
 
 
 # Each keyword-only parameter is an independent option of the search, so no parameter object fits.
-def annotate_wobble_bulge_counts(  # noqa: PLR0913
+def annotate_wobble_bulge_counts(
     de: pd.DataFrame,
     sequences: SequenceSet,
     guide: Guide,
@@ -284,7 +284,7 @@ def annotate_wobble_bulge_counts(  # noqa: PLR0913
 
 
 # Each keyword-only parameter is an independent option of the null, so no parameter object fits.
-def wobble_bulge_null(  # noqa: PLR0913
+def wobble_bulge_null(
     guide: Guide,
     sequences: SequenceSet,
     options: WobbleBulgeOptions = WobbleBulgeOptions(),

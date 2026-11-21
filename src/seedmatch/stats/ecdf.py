@@ -63,7 +63,7 @@ class EcdfTestResult:
 
 
 # Each keyword-only argument is an independent option of `ecdf_stat_test` or of one of its tests.
-def ecdf_test(  # noqa: PLR0913
+def ecdf_test(
     de: pd.DataFrame,
     *,
     target: Iterable[str],

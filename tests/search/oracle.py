@@ -6,7 +6,7 @@ min.mismatch, fixed)`, and the kernel tests pass them in this order.
 The module also holds the "best local match" definition of the Biostrings documentation. Biostrings
 does not obey it, so only a test of the R corpus uses it.
 """
-# ruff: noqa: FBT001, PLR0913, PLR0917
+# ruff: noqa: FBT001, PLR0917
 
 from dataclasses import dataclass
 

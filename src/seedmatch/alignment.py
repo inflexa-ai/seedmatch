@@ -57,7 +57,7 @@ def _window(codes: NDArray[np.uint8], first: int, last: int) -> str:
 
 
 # Each argument is an independent input of the text, so no parameter object fits.
-def alignment_text(  # noqa: PLR0913
+def alignment_text(
     match: pd.Series | Mapping[str, object],
     guide: Guide,
     sequences: SequenceSet,

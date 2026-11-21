@@ -71,7 +71,7 @@ def add_gene_counts(
 
 
 # Each keyword-only parameter is an independent option of SeedMatchR, so no parameter object fits.
-def annotate_seed_counts(  # noqa: PLR0913
+def annotate_seed_counts(
     de: pd.DataFrame,
     sequences: SequenceSet,
     target: Target,

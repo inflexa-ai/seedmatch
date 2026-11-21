@@ -40,7 +40,7 @@ _THREE_DECIMALS_FROM: Final = 0.001
 
 
 # Each keyword-only argument is an independent option of the figure of `.plot_ecdf`.
-def plot_ecdf(  # noqa: PLR0913
+def plot_ecdf(
     de: pd.DataFrame,
     groups: Mapping[str, Iterable[str]],
     result: EcdfTestResult,

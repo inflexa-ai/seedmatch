@@ -32,7 +32,7 @@ _MAX_POSITION: Final = 2**52
 
 
 # Each keyword-only argument is an option of `plotIRanges` or of `plotRangesDF`.
-def plot_ranges(  # noqa: PLR0913
+def plot_ranges(
     ranges: pd.DataFrame,
     *,
     x_limits: tuple[float, float] | None = None,

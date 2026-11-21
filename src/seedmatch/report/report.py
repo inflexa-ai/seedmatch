@@ -113,7 +113,7 @@ def _gene_table(matches: pd.DataFrame, searched: pd.DataFrame) -> pd.DataFrame:
 
 
 # Each argument is an independent input of SeedMatchReport, and the options are in ReportOptions.
-def seed_match_report(  # noqa: PLR0913
+def seed_match_report(
     de: pd.DataFrame,
     sequences: SequenceSet,
     guide: Guide,

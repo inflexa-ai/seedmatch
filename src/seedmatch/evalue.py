@@ -47,7 +47,7 @@ def _is_count(values: NDArray[np.float64]) -> NDArray[np.bool_]:
 
 # The draw, the pool, and the result are the same for each null. Each keyword-only parameter is an
 # independent option, so no parameter object fits.
-def shuffle_null(  # noqa: PLR0913
+def shuffle_null(
     guide: Guide,
     sequences: SequenceSet,
     target_of: Callable[[Guide], Target],
@@ -105,7 +105,7 @@ def shuffle_null(  # noqa: PLR0913
 
 
 # Each keyword-only parameter is an independent option of the null, so no parameter object fits.
-def e_value_null(  # noqa: PLR0913
+def e_value_null(
     guide: Guide,
     sequences: SequenceSet,
     *,

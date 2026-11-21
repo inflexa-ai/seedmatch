@@ -110,7 +110,7 @@ def as_text(name: str, value: object) -> str:
 
 
 # Each argument is an independent part of the message or of the check, so no parameter object fits.
-def as_items[T](  # noqa: PLR0913
+def as_items[T](
     name: str,
     value: Iterable[object],
     as_item: Callable[[str, object], T],

@@ -76,6 +76,7 @@ ignore = [
     "D213",   # conflicts with D212 (the summary starts on the first docstring line)
     "COM812", # conflicts with the formatter
     "ISC001", # conflicts with the formatter
+    "PLR0913", # counts keyword-only options too; PLR0917 limits the positional arguments
 ]
 
 [tool.ruff.lint.flake8-bugbear]
@@ -117,7 +118,7 @@ extend-immutable-calls = [
 "src/seedmatch/fetch/**" = ["TID251"]
 "tests/fetch/**" = ["TID251"]
 # Numba cannot compile a dataclass argument, so each kernel takes its arrays and scalars one by one.
-"src/seedmatch/search/kernels.py" = ["PLR0913", "PLR0917"]
+"src/seedmatch/search/kernels.py" = ["PLR0917"]
 # A test name can carry a divergence ID such as D001, and N802 requires a lowercase function name.
 "tests/**" = ["S101", "PLR2004", "D", "ANN", "INP001", "N802"]
 "tools/**" = ["T201", "INP001", "D"]

@@ -71,7 +71,7 @@ class DataLines(NamedTuple):
     error: InputError | None
 
 
-def field_lines(  # noqa: PLR0913
+def field_lines(
     chunk: list[str], first: int, source: str, *, separator: str, fields: int, described: str
 ) -> DataLines:
     """Return the data lines of the chunk and the error of its first bad line.
