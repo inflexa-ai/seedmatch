@@ -1,6 +1,6 @@
 # Map from R names to Python names
 
-This table maps each SeedMatchR function to its Python replacement. If a column gets a new name or a value gets a new type, this table records the change. Such a change is not a divergence. A change of behavior goes in `docs/divergences.md`.
+This table maps each SeedMatchR function to its Python replacement. A test makes sure that each exported R function has a row. If a column gets a new name or a value gets a new type, this table records the change. Such a change is not a divergence. A change of behavior goes in `docs/divergences.md`.
 
 | R function | Python | Notes |
 | --- | --- | --- |

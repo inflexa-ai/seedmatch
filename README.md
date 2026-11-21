@@ -16,7 +16,7 @@ A sandbox such as the Inflexa sandbox has no network egress, and an agent correc
 
 - **No network in the core.** The core modules never use the network. Each function reads its input from a path or an object that you give. The separate module `seedmatch.fetch` downloads the resources (see [Resources](#resources)).
 - **Python only.** The package is pure Python on numpy, pandas, numba, and scipy. It does not use R or a system library. The extra `plot` adds matplotlib.
-- **Errors that an agent can use.** Each `InputError` names the bad value and the expected value. Thus an agent can correct the call. Each exception class that seedmatch defines is a `SeedMatchError`, and `InputError` is also a `ValueError`. A missing file raises `FileNotFoundError`.
+- **Errors that an agent can use.** Each `InputError` names the bad value and the expected value. Thus an agent can correct the call. Each error class that seedmatch defines is a `SeedMatchError`, and `InputError` is also a `ValueError`. If a file does not exist, the function raises `FileNotFoundError`.
 
 ## Example
 
@@ -59,7 +59,7 @@ matches = report.matches
 
 If a gene has more than one sequence, make the set with `SequenceSet.from_records(records, gene_ids=...)`.
 
-`write_fasta(sequences, path)` writes a set to a FASTA file, with the ID of each sequence in its header line.
+`write_fasta(sequences, path)` writes a set to a FASTA file, with the ID of each sequence in its header line. The file does not hold the gene IDs. `read_fasta` gives each record its ID as the gene ID.
 
 `ecdf_test` compares the `log2FoldChange` values of two gene sets. This example compares the genes with a seed match to the genes without a match. With the default KS test, a small p-value shows that the genes with a seed match go down.
 
@@ -79,7 +79,7 @@ Import the members with `from seedmatch import EcdfTest`. Then use `test=EcdfTes
 
 The default alternative `GREATER` has another meaning for `EcdfTest.KS` and for `EcdfTest.WILCOXON`. With KS, a small p-value shows that the target values are lower. With WILCOXON, a small p-value shows that the target values are higher. To find lower target values with WILCOXON, set `alternative=Alternative.LESS`. Import `Alternative` from `seedmatch`.
 
-In the test table of this repository (`tests/data/DESEQ2_results.tsv`), the genes with a seed match have lower values. The table has a column `mer7m8`. With this column and without `filter_de`, KS with `GREATER` gives p = 1.04e-4, but WILCOXON with `GREATER` gives p = 0.9996. WILCOXON with `Alternative.LESS` gives the small p-value 3.9e-4. For the `de` of the example above, the p-values are 0.0011, 0.9986, and 0.0015, as in R.
+In the test table of this repository (`tests/data/DESEQ2_results.tsv`), the genes with a seed match have lower values. The table has a column `mer7m8`. With this column and without `filter_de`, KS with `GREATER` gives p = 1.04e-4, but WILCOXON with `GREATER` gives p = 0.9996. WILCOXON with `Alternative.LESS` gives the small p-value 3.9e-4. If the example reads `tests/data/Test_seqs.fa` and the test table without its column `mer7m8`, the p-values are 0.0011, 0.9986, and 0.0015, as in R.
 
 To get the sequences from an annotation, open a `Reference`. A `Reference` joins an EnsDb file and a genome file of the same build. The genome file is a 2bit file, or a FASTA file with its index files.
 

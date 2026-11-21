@@ -29,7 +29,7 @@ This document records the wall time and the peak memory of `seed_match_report` o
 
 ## The commands
 
-Run the commands from the repository root. `SEEDMATCH_TEST_REFS` is the directory of the `refs` tests. On Linux, use `/usr/bin/time -v` for the peak memory of the R process.
+Run the commands from the repository root. The R command reads the R library `tools/golden/.rlib`. Make this library first with `Rscript tools/golden/install.R`. `SEEDMATCH_TEST_REFS` is the directory of the `refs` tests. On Linux, use `/usr/bin/time -v` for the peak memory of the R process.
 
 ```bash
 # The canonical 3' UTRs of rnor7, with the gene ID as the record ID.
@@ -63,4 +63,7 @@ Each cell gives the values of two runs. `workers=1` has only runs with a filled 
 - After the JIT compilation, R takes 4.5 to 5.4 times the Python time. Thus the target holds.
 - With `workers=1`, Python takes 0.92 to 0.93 times the R time. Thus the target also holds on one thread.
 - The JIT compilation adds about 0.9 seconds to the first call. `import seedmatch` takes 0.42 to 0.63 seconds, and it compiles no kernel.
-- The memory above the start is the work memory of the call and its result. The empty cache adds the memory of the compiler.
+- The row "Peak above the memory before the first call" also holds a part that does not grow with the input. A probe on `tests/data/Test_seqs.fa` gives this part:
+  - In R, the first call loads the SeedMatchR namespace, and the load adds about 111 MiB.
+  - In Python, the first call adds about 33 MiB, and the second call adds none.
+- The empty cache adds the memory of the compiler.

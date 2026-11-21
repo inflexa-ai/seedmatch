@@ -115,7 +115,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
   - The 2bit reader uses `mmap` and decodes only the requested ranges.
   - The EnsDb reader puts the filter in the SQL `WHERE` clause.
 - Options are frozen dataclasses. Modes are enums. No function takes a string mode flag.
-- All errors derive from one base class, `SeedMatchError`. Each message names the bad value and the expected value.
+- Each error class of seedmatch is a subclass of `SeedMatchError`. If a file does not exist, the function raises `FileNotFoundError`. Each message names the bad value and the expected value.
 - A function validates untrusted input at the boundary only: the guide alphabet and length, the seed window, and the DE table columns.
 
 ### Public API example
@@ -461,7 +461,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `match_distances` | A sequence with one match gives `c(NA, 0)` (`R/match_distances.R:33-34`). | A sequence with one match gives no distances. A sequence with n matches gives each of the n(n − 1)/2 pair distances. |
 | `.get_best_match` | Stops if the search did not make each expected column, for example with other edit distances (`R/full_search.R:96-125`). | The best match uses only the columns that the search made. The default output does not change. |
 | `get_stringPPI_to_stringGGI` | Maps the STRING protein IDs through BioMart on the network. The human query uses the GRCh37 archive (`R/get_stringPPI_to_stringGGI.R:32-60`). | Maps the protein IDs with the `protein` table of the EnsDb of the same build. |
-| Documentation | The vignettes call functions that do not exist: `filter_deseq`, `de_fc_ecdf`, `get_feature_seqs`. The network vignette omits `organism`. | The Python documentation uses only functions that exist. A test runs each Python example of `README.md`. |
+| Documentation | The vignettes call functions that do not exist: `filter_deseq`, `de_fc_ecdf`, `get_feature_seqs`. The network vignette omits `organism`. | The Python examples of `README.md` and the `seedmatch.` names of `docs/r-map.md` use only functions that exist. A test runs each Python example of `README.md`. |
 | `.get_counts_column` (used by `SeedMatchR`) | If the DE table has a column with the seed name, the result has two columns with this name (`R/SeedMatchR.R:214-217`). Then `res$mer7m8` reads the old column. | The counts replace the values of the column with the same name. A new column goes at the end. |
 | `Biostrings::readDNAStringSet` (the sequences of SeedMatchR) | The name of a sequence is the complete header line after `>`. Then a header with a description does not match a `gene_id`. | The ID of a FASTA record ends at the first white space. |
 | `Biostrings::DNAString`, `Biostrings::readDNAStringSet` | The gap letter `-`, the mask letter `+`, and `.` are kept in a sequence. | These letters raise `InputError` with the letter and its position. |
