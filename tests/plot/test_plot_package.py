@@ -33,6 +33,7 @@ import pandas as pd
 import seedmatch as sm
 from seedmatch.plot import (
     plot_alignment,
+    plot_benchmark,
     plot_ecdf,
     plot_kmer_histogram,
     plot_ranges,
@@ -44,6 +45,8 @@ de = pd.DataFrame(
     {"gene_id": [f"G{i}" for i in range(40)], "log2FoldChange": rng.normal(size=40)}
 )
 target, background = list(de["gene_id"][:10]), list(de["gene_id"][10:])
+benchmark_de = de.assign(padj=[0.01] * 10 + [1.0] * 30, mer7m8=np.arange(40) % 4)
+benchmark_de.loc[:9, "log2FoldChange"] = -1.0
 result = sm.ecdf_test(de, target=target, background=background)
 PLOT_CALLS = {
     "plot_ecdf": lambda: plot_ecdf(de, {"Background": background, "target": target}, result),
@@ -55,6 +58,7 @@ PLOT_CALLS = {
     ),
     "plot_alignment": lambda: plot_alignment("3'-UUU-5'\\n    |  \\n5'-...AAA...-3'"),
     "plot_ranges": lambda: plot_ranges(pd.DataFrame({"start": [1, 5, 20], "end": [3, 9, 20]})),
+    "plot_benchmark": lambda: plot_benchmark(sm.benchmark_predictions(benchmark_de)),
 }
 """
 
@@ -122,7 +126,7 @@ def test_plot_functions_keep_the_rc_params():
     assert done.returncode == 0, done.stderr
     assert done.stdout.strip() == (
         "{'plot_ecdf': [], 'plot_wasserstein': [], 'plot_kmer_histogram': [], "
-        "'plot_alignment': [], 'plot_ranges': []}"
+        "'plot_alignment': [], 'plot_ranges': [], 'plot_benchmark': []}"
     )
 
 

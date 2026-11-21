@@ -850,3 +850,17 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `plot_ranges` draws one bar for each row, at the position of the row in the table. A bar goes from `start - 0.5` to `end + 0.5`, and each option has an effect.
 - Reason: the figure must show each range, and a range of one base covers one position.
 - Test: `test_plot_ranges_draws_each_row_D068`, `test_plot_ranges_uses_the_options_D068`, `test_plot_ranges_puts_each_row_at_its_position_D068`, and `test_plot_ranges_shows_a_range_of_one_base_D068` in `tests/plot/test_plot_ranges.py`.
+
+## D-069: plot_benchmark colors the curve of one distinct score and of an infinite score
+
+- ID: `D-069`
+- R location: `plot.PRROC` and `getColor` of PRROC 1.4, for the curves of `benchmark_preds` (`R/benchmark.R:32-40`).
+- R behavior: for one distinct score s, the color range goes from 0.9 s to s + 0.09 s. For s = 0, each color is NA.
+  - For s = 0 and for s < 0, `image` stops R with `increasing 'x' and 'y' values expected`. Evidence: the notes `one score 0` and `one score -3` of `tests/golden/plots/benchmark_plot.tsv`.
+- R behavior: an infinite score gives the color NA to its threshold, and R stops with `'to' must be a finite number`.
+  - Evidence: the note `an Inf score` of `tests/golden/plots/benchmark_plot.tsv`.
+- New behavior: the color range comes from the finite thresholds, and an infinite threshold gets the color of the nearest end of the scale.
+- New behavior: without two distinct finite thresholds, each segment gets the middle color `#00ff60`, and the color bar goes from c - 0.5 to c + 0.5. For s = 2, R gives `#00FF85` (the case `one_score_2`).
+- New behavior: a finite threshold outside -9e305 to 9e305 raises `InputError`. Inside this bound, each position on the scale and each boundary of the color bar is finite.
+- Reason: each result of `benchmark_predictions` must give a figure. A seed count of 0 for each gene is a valid input.
+- Test: `test_plot_benchmark_colors_one_distinct_score_D069`, `test_plot_benchmark_colors_an_infinite_score_D069`, `test_plot_benchmark_colors_a_negative_infinite_score_D069`, `test_plot_benchmark_rejects_a_threshold_that_is_too_large_D069`, and `test_plot_benchmark_takes_a_threshold_just_inside_the_bound_D069` in `tests/plot/test_plot_benchmark.py`.
