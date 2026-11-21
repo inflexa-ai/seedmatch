@@ -19,7 +19,14 @@ type Range = tuple[int, int]
 def _compatible(
     pattern: str, subject: str, fixed_pattern: bool, fixed_subject: bool
 ) -> list[list[bool]]:
-    """`[a][j]` is true if letter `a` of the pattern matches letter `j` of the subject."""
+    """`[a][j]` is true if letter `a` of the pattern matches letter `j` of the subject.
+
+    An empty pattern raises `ValueError`, because the search rules start from a letter of the
+    pattern.
+    """
+    if not pattern:
+        message = "the pattern is empty"
+        raise ValueError(message)
     table = compat_table(fixed_pattern=fixed_pattern, fixed_subject=fixed_subject).tolist()
     return [[table[MASKS[p]][MASKS[s]] for s in subject] for p in pattern]
 

@@ -29,7 +29,7 @@ This document records the wall time and the peak memory of `seed_match_report` o
 
 ## The commands
 
-Run the commands from the repository root. The R command reads the R library `tools/golden/.rlib`. Make this library first with `Rscript tools/golden/install.R`. `SEEDMATCH_TEST_REFS` is the directory of the `refs` tests. On Linux, use `/usr/bin/time -v` for the peak memory of the R process.
+Run the commands from the repository root. The R command reads the R library `tools/golden/.rlib`. Make this library first with `tools/golden/run.sh tools/golden/install.R`. `SEEDMATCH_TEST_REFS` is the directory of the `refs` tests. On Linux, use `/usr/bin/time -v` for the peak memory of the R process.
 
 ```bash
 # The canonical 3' UTRs of rnor7, with the gene ID as the record ID.

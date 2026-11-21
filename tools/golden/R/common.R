@@ -21,7 +21,40 @@ stop_on_nan <- function(df) {
   stopifnot(!any(vapply(df, function(col) is.double(col) && any(is.nan(col)), logical(1))))
 }
 
+# golden in tests/helpers.py splits a line at each tab, reads a line that starts with # as a note, and
+# reads the text NA as a missing value. write_golden stops on a value that this reader changes.
+stop_on_unreadable_text <- function(df, notes) {
+  text <- lapply(df, function(col) if (is.character(col) || is.factor(col)) as.character(col)[!is.na(col)])
+  columns_with <- function(test) names(Filter(function(col) any(test(col)), text))
+  if (any(grepl("[\t\r\n]", names(df)))) stop("a column name holds a tab or a line break")
+  broken <- columns_with(function(col) grepl("[\t\r\n]", col))
+  if (length(broken) > 0) stop("a text cell of the columns ", toString(broken), " holds a tab or a line break")
+  if (any(grepl("[\r\n]", notes))) stop("a note holds a line break")
+  na_text <- columns_with(function(col) col == "NA")
+  if (length(na_text) > 0) {
+    stop("a text cell of the columns ", toString(na_text), " is the text NA, which the reader reads as a missing value; use NA")
+  }
+  starts <- c(names(df)[1], if (ncol(df) > 0) as.character(df[[1]]))
+  if (any(startsWith(starts[!is.na(starts)], "#"))) stop("a line starts with #, which the reader reads as a note")
+}
+
+# install.R writes the commit of ../SeedMatchR into the installed package. Each golden file names
+# SEEDMATCHR_COMMIT, thus write_golden stops if the installed package comes from another commit.
+stop_on_other_commit <- function() {
+  file <- system.file("COMMIT", package = "SeedMatchR")
+  commit <- if (nzchar(file)) readLines(file, n = 1, warn = FALSE) else character(0)
+  if (length(commit) == 0 || !startsWith(commit, SEEDMATCHR_COMMIT)) {
+    stop(
+      "the installed SeedMatchR has the commit ", if (length(commit) > 0) commit else "unknown",
+      ", expected a commit that starts with ", SEEDMATCHR_COMMIT,
+      "; run tools/golden/run.sh tools/golden/install.R"
+    )
+  }
+}
+
 write_golden <- function(df, path, script, notes = character(0)) {
+  stop_on_other_commit()
+  stop_on_unreadable_text(df, notes)
   df[] <- lapply(df, function(col) if (is.double(col) && !is.object(col)) double_to_string(col) else col)
   out <- file.path(GOLDEN_DIR, path)
   dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)

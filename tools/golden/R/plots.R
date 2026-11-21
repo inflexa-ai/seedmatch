@@ -185,7 +185,7 @@ p_values <- list(0.05, 0.0149, 0.0105, 0.01, 0.0099999, 0.00999, 0.005, 0.0025, 
 label_res <- res
 label_res$Group <- factor(ifelse(label_res$mer7m8 >= 1, "mer7m8", "Background"), levels = c("Background", "mer7m8"))
 p_value_text <- function(p) {
-  if (is.null(p)) "NULL" else if (is.nan(p)) "NaN" else if (is.na(p)) "NA" else double_to_string(p)
+  if (is.null(p)) "NULL" else if (is.nan(p)) "NaN" else if (is.na(p)) NA_character_ else double_to_string(p)
 }
 p_value_label <- function(p) {
   tryCatch({

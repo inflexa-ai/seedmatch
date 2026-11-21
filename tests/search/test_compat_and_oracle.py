@@ -6,7 +6,7 @@ import numpy as np
 import oracle
 import pytest
 from corpus import Group, Options, Range
-from helpers import golden_rows
+from helpers import exactly, golden_rows
 
 from seedmatch.search.compat import compat_table
 from seedmatch.sequence.alphabet import MASKS
@@ -84,22 +84,13 @@ def test_hamming_oracle_matches_biostrings_on_corpus():
 
 @pytest.mark.parametrize("name", list(OPTION_SETS))
 def test_indel_oracle_matches_biostrings_on_corpus(name):
-    candidates: dict[tuple[str, bool, bool], list[oracle.Candidate]] = {}
     mismatches = []
     for group in corpus.groups(name):
         case, opts, expected = group
         if not opts.indels:
             continue
         fixed = (opts.fixed_pattern, opts.fixed_subject)
-        if opts.max_mm == 0 or opts.max_mm >= len(case.pattern):
-            found = oracle.indels(case.pattern, case.subject, opts.max_mm, *fixed)
-        else:
-            key = (case.case_id, *fixed)
-            if key not in candidates:
-                candidates[key] = oracle.indel_candidates(
-                    case.pattern, case.subject, MAX_MM, *fixed
-                )
-            found = oracle.scan(candidates[key], opts.max_mm)
+        found = oracle.indels(case.pattern, case.subject, opts.max_mm, *fixed)
         if found != expected:
             mismatches.append(mismatch_report(group, found))
     assert mismatches == []
@@ -176,6 +167,24 @@ def test_oracle_gives_the_ranges_of_r_probes(probe):
     else:
         found = oracle.indels(probe.pattern, probe.subject, probe.max_mm, *probe.fixed)
     assert found == probe.r
+
+
+FIXED_KEYWORDS = {"fixed_pattern": True, "fixed_subject": True}
+
+
+@pytest.mark.parametrize(
+    "search",
+    [
+        lambda: oracle.hamming("", "ACGT", 1, 0, **FIXED_KEYWORDS),
+        lambda: oracle.indels("", "ACGT", 1, **FIXED_KEYWORDS),
+        lambda: oracle.indel_candidates("", "ACGT", 1, **FIXED_KEYWORDS),
+        lambda: oracle.edit_distances("", "ACGT", 1, **FIXED_KEYWORDS),
+    ],
+    ids=["hamming", "indels", "indel_candidates", "edit_distances"],
+)
+def test_oracle_rejects_an_empty_pattern(search):
+    with pytest.raises(ValueError, match=exactly("the pattern is empty")):
+        search()
 
 
 def test_documented_best_local_matches_rejects_a_limit_above_the_table_limit():

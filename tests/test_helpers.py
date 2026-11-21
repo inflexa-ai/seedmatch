@@ -3,13 +3,31 @@ import gzip
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import R_COLUMNS, assert_frame_matches_golden, golden
+from helpers import R_COLUMNS, assert_frame_matches_golden, exactly, golden, golden_rows
 
 
 def write(tmp_path, text):
     path = tmp_path / "case.tsv"
     path.write_text("# generated-by: test\n" + text)
     return str(path)
+
+
+def test_golden_reads_a_quote_as_data(tmp_path):
+    path = write(tmp_path, 'a\tb\n"x\ty"\nz\tw\n')
+    assert golden(path).to_dict("records") == [{"a": '"x', "b": 'y"'}, {"a": "z", "b": "w"}]
+
+
+def test_golden_rows_give_a_named_tuple_for_each_row(tmp_path):
+    path = write(tmp_path, "case\tvalue\nx\t1\ny\t2\n")
+    assert [(row.case, row.value) for row in golden_rows(path)] == [("x", "1"), ("y", "2")]
+
+
+@pytest.mark.parametrize("name", ["best.match", "class", "_hidden", "2fold"])
+def test_golden_rows_reject_a_column_that_itertuples_renames(tmp_path, name):
+    path = write(tmp_path, f"case\t{name}\nx\t1\n")
+    message = f"{path}: itertuples renames the columns ['{name}']; read them with golden"
+    with pytest.raises(AssertionError, match=exactly(message)):
+        golden_rows(path)
 
 
 def test_r_columns_rename_the_r_names_to_the_python_names():

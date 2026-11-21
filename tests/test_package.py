@@ -1,3 +1,4 @@
+import ast
 import re
 import subprocess
 import sys
@@ -14,9 +15,36 @@ DIVERGENCE_FIELDS = ("ID", "R location", "R behavior", "New behavior", "Reason",
 TESTS = Path(__file__).parent
 
 
-def ids_without_test(ids: list[str], test_text: str) -> list[str]:
-    # A Python name cannot hold a hyphen, so a test can name D-001 as D001.
-    return [i for i in ids if i not in test_text and i.replace("-", "") not in test_text]
+def labels_of_tests(source: str) -> list[str]:
+    """Return the name and the docstring of each test function in the source of a test file."""
+    functions = (
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    )
+    return [
+        label
+        for node in functions
+        if node.name.startswith("test_")
+        for label in (node.name, ast.get_docstring(node) or "")
+    ]
+
+
+def names_id(label: str, entry_id: str) -> bool:
+    # A Python name cannot hold a hyphen, so a test can name D-001 as D001 or d001.
+    number = entry_id.removeprefix("D-")
+    return re.search(rf"(?<![A-Za-z0-9])D-?{number}(?!\d)", label, flags=re.IGNORECASE) is not None
+
+
+def ids_without_test(ids: list[str], labels: list[str]) -> list[str]:
+    return [i for i in ids if not any(names_id(label, i) for label in labels)]
+
+
+def bad_entry_headings(text: str) -> list[str]:
+    """Return each heading after `## Entries` that does not have the form `## D-NNN: <title>`."""
+    entries = text.split("\n## Entries\n", 1)[1]
+    headings = re.findall(r"^#.*$", entries, flags=re.MULTILINE)
+    return [line for line in headings if not re.fullmatch(r"## D-\d{3}: \S.*", line)]
 
 
 def test_import_loads_no_fetch_and_no_plot_modules():
@@ -25,21 +53,30 @@ def test_import_loads_no_fetch_and_no_plot_modules():
         "if m.startswith(('seedmatch.fetch', 'seedmatch.plot', 'matplotlib', 'pysam'))))"
     )
     # The arguments are the interpreter path and a constant script, so no input reaches the command.
-    out = subprocess.run(  # noqa: S603
+    result = subprocess.run(  # noqa: S603
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout.strip()
-    assert out == "[]"
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "[]"
+
+
+def test_each_heading_of_the_entries_has_the_form_of_an_entry():
+    assert bad_entry_headings(DIVERGENCES.read_text(encoding="utf-8")) == []
 
 
 def test_each_divergence_id_is_unique_and_has_a_test():
-    ids = re.findall(r"^## (D-\d{3}):", DIVERGENCES.read_text(), flags=re.MULTILINE)
+    text = DIVERGENCES.read_text(encoding="utf-8")
+    ids = re.findall(r"^## (D-\d{3}):", text, flags=re.MULTILINE)
     assert len(ids) == len(set(ids))
-    # This file names a probe ID in its own matcher test, so it must not count as a divergence test.
-    test_text = "\n".join(p.read_text() for p in TESTS.rglob("test_*.py") if p != Path(__file__))
-    assert ids_without_test(ids, test_text) == []
+    labels = [
+        label
+        for path in TESTS.rglob("test_*.py")
+        for label in labels_of_tests(path.read_text(encoding="utf-8"))
+    ]
+    assert ids_without_test(ids, labels) == []
 
 
 def test_each_divergence_row_of_the_design_has_an_entry_with_each_field():
@@ -58,10 +95,33 @@ def test_each_divergence_row_of_the_design_has_an_entry_with_each_field():
         assert f"\n- ID: `{entry_id}`\n" in entry, entry_id
 
 
-def test_divergence_id_counts_with_or_without_hyphen_in_test_text():
-    assert ids_without_test(["D-999"], "def test_x_D999(): ...") == []
-    assert ids_without_test(["D-999"], '"""D-999 keeps the fix."""') == []
-    assert ids_without_test(["D-999"], "def test_x(): ...") == ["D-999"]
+def test_a_divergence_id_counts_only_in_the_name_or_the_docstring_of_a_test():
+    source = """
+def test_x_D999(): ...
+def test_y():
+    '''D-998 keeps the fix.'''
+def test_d997_lowercase(): ...
+def test_z():
+    assert "D-996"  # D-995
+def helper_D994(): ...
+def test_D9930(): ...
+"""
+    ids = ["D-999", "D-998", "D-997", "D-996", "D-995", "D-994", "D-993"]
+    assert ids_without_test(ids, labels_of_tests(source)) == ["D-996", "D-995", "D-994", "D-993"]
+
+
+def test_bad_entry_headings_finds_each_heading_without_the_form_of_an_entry():
+    text = (
+        "# Divergences\n\n## Entries\n\n## D-001: Good\n\n## D-02: Short\n\n"
+        "## D-003 No colon\n\n# D-004: Level 1\n\n##D-005: No space\n\n### D-006: Level 3\n"
+    )
+    assert bad_entry_headings(text) == [
+        "## D-02: Short",
+        "## D-003 No colon",
+        "# D-004: Level 1",
+        "##D-005: No space",
+        "### D-006: Level 3",
+    ]
 
 
 @pytest.mark.parametrize("base", [ValueError, SeedMatchError])

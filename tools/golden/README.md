@@ -8,10 +8,10 @@ The tests never run R. Run the commands below only to make or to update a golden
 
 Run each command from the repository root.
 
-Install the R packages into `tools/golden/.rlib`. The script stops if `../SeedMatchR` is not at commit `2fc0c4f` or if it has a change to a tracked file:
+Install the R packages into `tools/golden/.rlib`. The script stops if `../SeedMatchR` is not at commit `2fc0c4f` or if it has a change to a tracked file. Run it with `run.sh`, as each golden script, thus it sees the same library paths. The script then writes the commit into the installed SeedMatchR:
 
 ```bash
-Rscript tools/golden/install.R
+tools/golden/run.sh tools/golden/install.R
 ```
 
 Make sure that the environment is correct. The last line of the output is `golden environment OK` and the versions:
@@ -561,7 +561,7 @@ The case `benchmark_1` uses `tools/golden/patches/benchmark_preds.R` (`D-006`). 
 A script in `tools/golden/R/` starts with `source("tools/golden/R/common.R")`. Then it calls these functions:
 
 - `load_test_data()` returns the list `res`, `seqs`, and `guide` from `tests/data/`.
-- `write_golden(df, path, script, notes)` writes the data frame `df` to `tests/golden/<path>`. The argument `script` is the file name of the script, for example `check_env.R`. Each text in the optional argument `notes` becomes one more comment line. If `path` ends with `.gz`, the file is gzip. The gzip header has no time stamp and no file name, thus each run writes the same bytes.
+- `write_golden(df, path, script, notes)` writes the data frame `df` to `tests/golden/<path>`. The argument `script` is the file name of the script, for example `check_env.R`. Each text in the optional argument `notes` becomes one more comment line. If `path` ends with `.gz`, the file is gzip. The gzip header has no time stamp and no file name, thus each run writes the same bytes. The function stops if the installed SeedMatchR has no commit from `install.R` that starts with `2fc0c4f`. It also stops on a value that `golden` reads differently: a tab or a line break in a name or in a text cell, a line break in a note, a line that starts with `#`, or a text cell with the text `NA`.
 - `with_seedmatchr_patch(patch, code)` puts each function of the file `patch` into the SeedMatchR namespace. Then it evaluates `code` and replaces the patched functions with the original functions.
 - `stop_on_nan(df)` stops the script if a double column of `df` holds `NaN`, because `write_golden` writes a `NaN` as text.
 - `one_line(text)` replaces each run of white space with one space, thus a note stays one comment line.
@@ -577,4 +577,4 @@ An annotation script also sources `tools/golden/R/annotation_common.R`, which ha
 
 A golden file is a TSV file. Its first lines are comments that give the script, the R version, the Biostrings version, and the SeedMatchR version. A test reads the rows with `golden` and the notes with `golden_note`, both from `tests/helpers.py`. A line that starts with `#` is a note, and a `#` inside a data line is data.
 
-A double in the file has 17 significant digits. A correctly rounded reader, for example Python `float()`, gives the same double as R.
+A double in the file has at most 17 significant digits. A correctly rounded reader, for example Python `float()`, gives the same double as R.

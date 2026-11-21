@@ -1,10 +1,11 @@
 import re
 import tracemalloc
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import numpy as np
 import pytest
-from helpers import DATA, sirna_seqs
+from helpers import DATA, exactly, sirna_seqs
 
 from seedmatch.errors import InputError
 from seedmatch.sequence import SequenceSet, read_fasta, write_fasta
@@ -86,7 +87,7 @@ def test_buffers_are_read_only():
 
 def test_set_cannot_be_reassigned():
     s = SequenceSet.from_records([("a", "ACGT")])
-    with pytest.raises(AttributeError):
+    with pytest.raises(FrozenInstanceError, match=exactly("cannot assign to field 'ids'")):
         s.ids = ("b",)
 
 

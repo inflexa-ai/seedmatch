@@ -1,6 +1,8 @@
 import bz2
+import csv
 import gzip
 import io
+import keyword
 import lzma
 import math
 import re
@@ -78,7 +80,7 @@ def exactly(message: str) -> str:
 
 
 # Only a line that starts with `#` is a note. The option comment="#" of pandas would also cut a data
-# cell such as the color #FF0000.
+# cell such as the color #FF0000. write_golden writes no quotes, thus a `"` is data.
 def golden(path: str) -> pd.DataFrame:
     file = GOLDEN / path
     if file.suffix == ".gz":
@@ -86,12 +88,28 @@ def golden(path: str) -> pd.DataFrame:
     else:
         text = file.read_text(encoding="utf-8")
     rows = "\n".join(line for line in text.split("\n") if not line.startswith("#"))
-    return pd.read_csv(io.StringIO(rows), sep="\t", dtype=str, keep_default_na=False)
+    return pd.read_csv(
+        io.StringIO(rows), sep="\t", dtype=str, keep_default_na=False, quoting=csv.QUOTE_NONE
+    )
 
 
 # The field names of each tuple are the columns of the golden file, so no static type can name them.
 def golden_rows(path: str) -> list[Any]:
-    return list(golden(path).itertuples(index=False))
+    """Return the rows of the golden file as named tuples.
+
+    `itertuples` gives the name `_<position>` to a column that is not a field name of a named tuple,
+    thus such a column raises `AssertionError`. Read it with `golden`.
+    """
+    table = golden(path)
+    renamed = [
+        name
+        for name in map(str, table.columns)
+        if not name.isidentifier() or keyword.iskeyword(name) or name.startswith("_")
+    ]
+    if renamed:
+        message = f"{path}: itertuples renames the columns {renamed}; read them with golden"
+        raise AssertionError(message)
+    return list(table.itertuples(index=False))
 
 
 def golden_row(path: str, case: str, alternative: str) -> Any:

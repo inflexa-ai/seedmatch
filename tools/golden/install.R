@@ -3,6 +3,14 @@ source("tools/golden/R/common.R")
 lib <- "tools/golden/.rlib"
 src <- "../SeedMatchR"
 
+dir.create(lib, recursive = TRUE, showWarnings = FALSE)
+lib <- normalizePath(lib)
+# run.sh sets R_LIBS_USER to lib and starts R with --vanilla, for this script and for each golden
+# script. Thus this script sees the library paths of a golden script, and no user library.
+if (normalizePath(Sys.getenv("R_LIBS_USER"), mustWork = FALSE) != lib) {
+  stop("run this script with tools/golden/run.sh tools/golden/install.R")
+}
+
 git <- function(...) {
   out <- suppressWarnings(system2("git", c("-C", src, ...), stdout = TRUE, stderr = TRUE))
   if (!is.null(attr(out, "status"))) {
@@ -20,8 +28,6 @@ if (length(changes) > 0) {
   stop("SeedMatchR has changes to tracked files:\n", paste(changes, collapse = "\n"))
 }
 
-dir.create(lib, recursive = TRUE, showWarnings = FALSE)
-lib <- normalizePath(lib)
 .libPaths(c(lib, .libPaths()))
 if (isTRUE(getOption("repos")["CRAN"] == "@CRAN@")) {
   options(repos = c(CRAN = "https://cloud.r-project.org"))
@@ -33,10 +39,10 @@ if (!requireNamespace("BiocManager", quietly = TRUE)) {
 
 imports <- read.dcf(file.path(src, "DESCRIPTION"), fields = "Imports")[1, 1]
 imports <- trimws(sub("\\(.*\\)", "", strsplit(imports, ",")[[1]]))
-missing <- setdiff(imports, rownames(installed.packages()))
-cat("Imports missing from the library path:", if (length(missing)) missing else "none", "\n")
-if (length(missing) > 0) {
-  BiocManager::install(missing, lib = lib, update = FALSE, ask = FALSE)
+absent <- setdiff(imports, rownames(installed.packages()))
+cat("Imports missing from the library path:", if (length(absent)) absent else "none", "\n")
+if (length(absent) > 0) {
+  BiocManager::install(absent, lib = lib, update = FALSE, ask = FALSE)
 }
 
 still_missing <- setdiff(imports, rownames(installed.packages()))
@@ -74,4 +80,11 @@ if (!("PRROC" %in% rownames(installed.packages(lib.loc = lib))) ||
   install.packages(tarball, repos = NULL, type = "source", lib = lib)
 }
 
+# A failed installation keeps the previous version, and install.packages gives only a warning. Thus
+# the script removes the previous version first, and it stops if no version exists after the call.
+unlink(file.path(lib, "SeedMatchR"), recursive = TRUE)
 install.packages(src, repos = NULL, type = "source", lib = lib, dependencies = FALSE)
+if (!file.exists(file.path(lib, "SeedMatchR", "DESCRIPTION"))) {
+  stop("SeedMatchR did not install into ", lib)
+}
+writeLines(commit, file.path(lib, "SeedMatchR", "COMMIT"))
