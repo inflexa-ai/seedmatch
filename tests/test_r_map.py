@@ -18,6 +18,7 @@ TICK = re.compile(r"`([^`]+)`")
 R_NAME = re.compile(r"(?:[A-Za-z][A-Za-z0-9.]*::)?([A-Za-z.][A-Za-z0-9._]*)")
 PYTHON_BLOCK = re.compile(r"^```python\n(.*?)^```$", re.MULTILINE | re.DOTALL)
 DOTTED = re.compile(r"seedmatch(?:\.\w+)+")
+SECTION = re.compile(r"^### (.+)\n\n((?:- .*\n?)+)", re.MULTILINE)
 
 
 def r_map_rows() -> list[list[str]]:
@@ -29,6 +30,16 @@ def r_map_rows() -> list[list[str]]:
     rows = [row for row in rows if row[0] != "---"]
     assert all(len(row) == 3 for row in rows)
     return rows
+
+
+def r_map_sections() -> dict[str, str]:
+    """Map the R names of each section of the notes to its vertical list."""
+    return dict(SECTION.findall(R_MAP.read_text(encoding="utf-8")))
+
+
+def github_anchor(heading: str) -> str:
+    """Return the anchor that GitHub gives to a heading of ASCII text."""
+    return re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
 
 
 def r_names(cell: str) -> set[str]:
@@ -101,10 +112,19 @@ def test_each_exported_r_function_has_a_row_of_the_r_map():
     assert sorted(set(exported) - named) == []
 
 
+def test_each_row_of_the_r_map_links_to_the_section_of_its_notes():
+    rows, sections = r_map_rows(), r_map_sections()
+    assert [row[0] for row in rows] == list(sections)
+    assert [row[2] for row in rows] == [f"[Notes](#{github_anchor(name)})" for name in sections]
+    assert len({github_anchor(name) for name in sections}) == len(sections)
+
+
 def test_each_python_name_of_the_r_map_exists_D014():
     missing = []
+    sections = r_map_sections()
     for row in r_map_rows():
-        for tick in (tick for cell in row[1:] for tick in TICK.findall(cell)):
+        cells = [row[1], *sections[row[0]].splitlines()]
+        for tick in (tick for cell in cells for tick in TICK.findall(cell)):
             name = tick.split("(")[0]
             if name.startswith("seedmatch-fetch"):
                 if not fetch_command_exists(name):

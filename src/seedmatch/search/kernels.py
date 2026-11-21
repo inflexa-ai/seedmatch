@@ -76,6 +76,23 @@ def _hamming_sequence(
 
 
 @njit(cache=True, nogil=True)
+def _hamming_counts(
+    codes: NDArray[np.uint8],
+    offsets: NDArray[np.int64],
+    ok: NDArray[np.bool_],
+    max_mm: int,
+    min_mm: int,
+) -> NDArray[np.int64]:
+    """Return the number of matches of search rule 2 in each sequence, for the letter table."""
+    counts = np.zeros(offsets.size - 1, dtype=np.int64)
+    for i in range(counts.size):
+        counts[i] = _hamming_sequence(
+            codes, offsets[i], offsets[i + 1], ok, max_mm, min_mm, None, 0
+        )
+    return counts
+
+
+@njit(cache=True, nogil=True)
 def hamming_counts(
     codes: NDArray[np.uint8],
     offsets: NDArray[np.int64],
@@ -85,13 +102,7 @@ def hamming_counts(
     min_mm: int,
 ) -> NDArray[np.int64]:
     """Return the number of matches of search rule 2 in each sequence."""
-    ok = _letter_table(pattern, compat)
-    counts = np.zeros(offsets.size - 1, dtype=np.int64)
-    for i in range(counts.size):
-        counts[i] = _hamming_sequence(
-            codes, offsets[i], offsets[i + 1], ok, max_mm, min_mm, None, 0
-        )
-    return counts
+    return _hamming_counts(codes, offsets, _letter_table(pattern, compat), max_mm, min_mm)
 
 
 @njit(cache=True, nogil=True)
@@ -107,10 +118,10 @@ def hamming_ranges(
 
     The end of a match is its start + len(pattern) - 1.
     """
-    counts = hamming_counts(codes, offsets, pattern, compat, max_mm, min_mm)
+    ok = _letter_table(pattern, compat)
+    counts = _hamming_counts(codes, offsets, ok, max_mm, min_mm)
     index = _sequence_index(counts)
     starts = np.empty(index.size, dtype=np.int64)
-    ok = _letter_table(pattern, compat)
     at = 0
     for i in range(counts.size):
         at += _hamming_sequence(codes, offsets[i], offsets[i + 1], ok, max_mm, min_mm, starts, at)
@@ -260,6 +271,24 @@ def _indel_tables(
 
 
 @njit(cache=True, nogil=True)
+def _indel_counts(
+    codes: NDArray[np.uint8],
+    offsets: NDArray[np.int64],
+    ok: NDArray[np.bool_],
+    first: NDArray[np.int64],
+    max_mm: int,
+    row: NDArray[np.int64],
+) -> NDArray[np.int64]:
+    """Return the number of matches of the indel search in each sequence, for the tables."""
+    counts = np.zeros(offsets.size - 1, dtype=np.int64)
+    for i in range(counts.size):
+        counts[i] = _indel_sequence(
+            codes, offsets[i], offsets[i + 1], ok, first, max_mm, row, None, None, 0
+        )
+    return counts
+
+
+@njit(cache=True, nogil=True)
 def indel_counts(
     codes: NDArray[np.uint8],
     offsets: NDArray[np.int64],
@@ -271,12 +300,7 @@ def indel_counts(
     if max_mm == 0 or max_mm >= pattern.size:
         return hamming_counts(codes, offsets, pattern, compat, max_mm, 0)
     ok, first, row = _indel_tables(pattern, compat, max_mm)
-    counts = np.zeros(offsets.size - 1, dtype=np.int64)
-    for i in range(counts.size):
-        counts[i] = _indel_sequence(
-            codes, offsets[i], offsets[i + 1], ok, first, max_mm, row, None, None, 0
-        )
-    return counts
+    return _indel_counts(codes, offsets, ok, first, max_mm, row)
 
 
 @njit(cache=True, nogil=True)
@@ -291,11 +315,11 @@ def indel_ranges(
     if max_mm == 0 or max_mm >= pattern.size:
         index, starts = hamming_ranges(codes, offsets, pattern, compat, max_mm, 0)
         return index, starts, starts + (pattern.size - 1)
-    counts = indel_counts(codes, offsets, pattern, compat, max_mm)
+    ok, first, row = _indel_tables(pattern, compat, max_mm)
+    counts = _indel_counts(codes, offsets, ok, first, max_mm, row)
     index = _sequence_index(counts)
     starts = np.empty(index.size, dtype=np.int64)
     ends = np.empty(index.size, dtype=np.int64)
-    ok, first, row = _indel_tables(pattern, compat, max_mm)
     at = 0
     for i in range(counts.size):
         at += _indel_sequence(

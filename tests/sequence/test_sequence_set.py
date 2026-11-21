@@ -140,11 +140,14 @@ def make_parts():
     return {"ids": ("a", "b"), "gene_ids": ("a", "b"), "codes": codes, "offsets": offsets}
 
 
-def test_direct_construction_with_consistent_parts_gives_a_read_only_set():
-    s = SequenceSet(**make_parts())
+def test_direct_construction_keeps_the_arrays_of_the_caller_and_makes_them_read_only():
+    parts = make_parts()
+    s = SequenceSet(**parts)
     assert [s.sequence(0), s.sequence(1)] == ["AC", "GT"]
-    assert not s.codes.flags.writeable
-    assert not s.offsets.flags.writeable
+    assert s.codes is parts["codes"]
+    assert s.offsets is parts["offsets"]
+    assert not parts["codes"].flags.writeable
+    assert not parts["offsets"].flags.writeable
 
 
 @pytest.mark.parametrize(

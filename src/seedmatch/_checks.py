@@ -20,14 +20,15 @@ def shown(value: object) -> str:
     """Return the repr of the value for an error message.
 
     Python refuses the text form of an int above its digit limit, and a message must not raise
-    another error. Such an int is named by its size.
+    another error. Such an int is named by its size. Another value that holds such an int, for
+    example a list, is named by its type.
     """
     try:
         return repr(value)
     except ValueError:
         if isinstance(value, int):
             return f"<an int of {value.bit_length()} bits>"
-        raise
+        return f"<a value of type {type(value).__name__} that is too large to show>"
 
 
 def as_limit(name: str, value: object) -> int:

@@ -161,7 +161,7 @@ Biostrings 2.78.0 shows these rules. Each rule is normative for the port.
 3. The `fixed` argument is a pair (pattern, subject). If a side is not fixed, its IUPAC codes are ambiguous. For example, with `fixed = FALSE`, an `N` in the subject matches each base. An R script makes the complete table of letter compatibility for each `fixed` pair. The port uses this table.
 4. If `with_indels` is on and `0 < max_mismatch < m`, the search does these steps. Biostrings does them in `_match_pattern_indels` (`src/match_pattern_indels.c`).
    1. Each sequence position j can give one candidate that starts at j. Find the first pattern letter that matches the sequence letter at j. Let i0 be the number of pattern letters before it. If no pattern letter matches, or if i0 > `max_mismatch`, position j gives no candidate.
-   2. Align the pattern letters after this letter to a substring that starts at j + 1. The substring can have each width, also 0. Find the least edit distance d, and the shortest width with this distance.
+   2. Align the pattern letters after this letter to a substring that starts at j + 1. The substring can have each width, also 0. A substring of width 0 ends at j, thus the candidate then holds only the letter at j. Find the least edit distance d, and the shortest width with this distance.
    3. The cost of the candidate is i0 + d. The candidate starts at j and ends at the end of this substring. If the cost is greater than `max_mismatch`, discard the candidate.
    4. Examine the candidates in the order of their starts, and hold one candidate. If the end of the next candidate is not after the held end, compare the two costs. If the cost of the next candidate is not greater, the next candidate replaces the held candidate. Else, discard the next candidate. If the next candidate ends after the held candidate, report the held candidate, and then hold the next candidate. At the end, report the held candidate.
 
@@ -528,6 +528,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `plot.PRROC` (the curves of `benchmark_preds`) | For one distinct score s, the color range goes from 0.9 s to s + 0.09 s, and for s = 0 each color is NA. For s <= 0, `image` stops R. An infinite score gives the color NA to its threshold, and R stops (`R/benchmark.R:32-40`). | `plot_benchmark` takes the color range from the finite thresholds, and an infinite threshold gets the color of the nearest end of the scale. Without two distinct finite thresholds, each segment gets the middle color, and the color bar goes from c - 0.5 to c + 0.5. If c - 0.5 and c + 0.5 round to c, matplotlib widens the color bar by 10% of |c| on each side (0.9 c to 1.1 c for c above 0, and 1.1 c to 0.9 c for c below 0). |
 | `.make_table` (the labels and the ID of the report table) | The labels of the windows are fixed texts: `Full Guide Strand (g2:g23)`, `18-mer (g2:g19)`, and `15-mer (g2:g19)` (`R/SeedMatchReport.R:158`, `:162`, `:166`). The window of `15mer` is g2 to g16 (`R/get_seed.R:121-123`), and a guide of another length than 23 bases has another `Full` window. `gt::gt(..., id = "mygt")` gives each table the element ID `mygt` (`:145`). | `report_html` gives the labels from `seed_window` for the guide. The table has the class `seedmatch-report` and no ID. |
 | `Biostrings::readDNAStringSet` (a byte order mark) | A FASTA file that starts with a UTF-8 byte order mark stops the read. | `read_fasta` skips the mark at the start of the file. |
+| `get_seed` (a canonical name with a window) | A canonical `seed.name` gives the canonical seed, and R ignores `start.pos` and `stop.pos`. | `CustomSeed` raises `InputError` for the name of a canonical seed. |
 
 ## Tests
 
@@ -552,7 +553,8 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 
 - Compatibility table: R gives the match result for each pair of IUPAC letters, for each `fixed` pair. A test compares the complete table.
 - Random corpus: a seeded generator makes patterns and subjects. They contain IUPAC codes, runs of `N`, repeats, and matches near the ends. R gives the match ranges for each case and each option set: mismatches 0 to 4, indels on and off, each `fixed` pair, and `min_mismatch`. A test compares the ranges exactly.
-- Oracle: a slow Python version of each rule, written from the definitions. Hypothesis property tests compare the numba kernels with the oracle on generated input. The R corpus also does a test of the oracle.
+- Seed corpus: a second seeded generator makes patterns with the lengths of the seeds. Each subject is longer than the pattern, and it holds edited copies of the pattern. An edit is a substitution, an insertion, or a deletion. R gives the match ranges for each case with indels on, mismatches 1 to 4, and each `fixed` pair. A test compares the ranges exactly. `tools/golden/make_corpus.py` writes the cases of the two corpora.
+- Oracle: a slow Python version of each rule, written from the definitions. Hypothesis property tests compare the numba kernels with the oracle on generated input. The random corpus also does a test of each oracle, and the seed corpus does a test of the indel oracle.
 - Invariants: the count equals the number of ranges. An independent edit-distance function gives each reported range a distance that is not more than the limit.
 
 ### Statistics

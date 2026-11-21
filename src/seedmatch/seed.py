@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final, assert_never
+from typing import Final, NoReturn, assert_never
 
 from seedmatch._checks import as_flag, as_limit, shown
 from seedmatch.errors import InputError
@@ -25,17 +25,39 @@ class Seed(StrEnum):
     MER18 = "18mer"
     MER15 = "15mer"
 
+    @classmethod
+    def _missing_(cls, value: object) -> NoReturn:
+        """Raise `InputError` for a value that is not a seed name."""
+        names = ", ".join(seed.value for seed in cls)
+        message = (
+            f"seed {shown(value)} is not the name of a canonical seed; expected one of {names}"
+        )
+        raise InputError(message)
+
+
+_SEED_NAMES: Final = tuple(seed.value for seed in Seed)
+
 
 @dataclass(frozen=True)
 class CustomSeed:
-    """A window of the guide from `start` to `stop`, 1-based and inclusive."""
+    """A window of the guide from `start` to `stop`, 1-based and inclusive.
+
+    The name of a canonical seed raises `InputError` (`D-072`). The comparison uses the case, as
+    in R.
+    """
 
     name: str
     start: int
     stop: int
 
     def __post_init__(self) -> None:
-        """Store `start` and `stop` as plain ints."""
+        """Reject a canonical name, and store `start` and `stop` as plain ints."""
+        if self.name in _SEED_NAMES:
+            message = (
+                f"custom seed name {self.name!r} is the name of a canonical seed; "
+                f"expected another name, or Seed.{Seed(self.name).name}"
+            )
+            raise InputError(message)
         # The dataclass is frozen, so the constructor is the one writer of the normalized values.
         object.__setattr__(self, "start", as_limit("start", self.start))
         object.__setattr__(self, "stop", as_limit("stop", self.stop))

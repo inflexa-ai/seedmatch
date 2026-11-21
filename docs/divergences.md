@@ -902,3 +902,12 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `read_fasta` skips a byte order mark at the start of the file. A U+FEFF after the start is not a DNA letter, thus it raises `InputError`. An incomplete mark is not valid UTF-8, thus it also raises `InputError`.
 - Reason: some text editors write the mark at the start of a file. The table readers of the port also skip it at the start of a file, as R does for a table file.
 - Test: `test_d071_read_fasta_skips_a_byte_order_mark_at_the_start_of_the_file` in `tests/sequence/test_sequence_set.py`.
+
+## D-072: A custom seed with the name of a canonical seed causes an error
+
+- ID: `D-072`
+- R location: `get_seed`. The function compares `seed.name` with the canonical names before it reads `start.pos` and `stop.pos` (`R/get_seed.R:55-58`).
+- R behavior: a canonical name gives the canonical seed, and R ignores the window. R probe with R 4.5.3 and Biostrings 2.78.0: `get_seed("UUAUAGAGCAAGAACACUGUUUU", "mer8", start.pos = 2, stop.pos = 5)` gives the `Target.Seq` `CTCTATAA` of `mer8`.
+- New behavior: `CustomSeed` raises `InputError` for the name of a canonical seed. The message names the `Seed` member. The comparison uses the case, as in R. Thus `CustomSeed("MER8", 2, 8)` is valid.
+- Reason: a result names its rows with the seed name. Thus a reader cannot tell the rows of a custom window with a canonical name from the rows of the canonical seed. R gives no message.
+- Test: `test_d072_custom_seed_rejects_the_name_of_a_canonical_seed` in `tests/test_seed.py`.

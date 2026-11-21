@@ -18,6 +18,7 @@ MIN_GUIDE_LENGTH = {
     Seed.MER18: 19,
     Seed.MER15: 16,
 }
+SEED_NAMES = ["mer7m8", "mer8", "mer6", "mer7A1", "Full", "18mer", "15mer"]
 
 
 def row_id(row):
@@ -33,7 +34,34 @@ def test_target_matches_r(row):
 
 
 def test_seed_values_are_the_r_seed_names():
-    assert [s.value for s in Seed] == ["mer7m8", "mer8", "mer6", "mer7A1", "Full", "18mer", "15mer"]
+    assert [s.value for s in Seed] == SEED_NAMES
+
+
+@pytest.mark.parametrize("value", ["bogus", "MER8", "full", 8, None])
+def test_seed_rejects_a_value_that_is_not_a_seed_name(value):
+    message = (
+        f"seed {value!r} is not the name of a canonical seed; "
+        f"expected one of {', '.join(SEED_NAMES)}"
+    )
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        Seed(value)
+
+
+@pytest.mark.parametrize("seed", list(Seed))
+def test_d072_custom_seed_rejects_the_name_of_a_canonical_seed(seed):
+    """D-072: R uses the canonical seed and ignores the window, but the port stops."""
+    message = (
+        f"custom seed name {seed.value!r} is the name of a canonical seed; "
+        f"expected another name, or Seed.{seed.name}"
+    )
+    with pytest.raises(InputError, match=f"^{re.escape(message)}$"):
+        CustomSeed(seed.value, 2, 5)
+
+
+def test_custom_seed_accepts_a_canonical_name_in_another_case():
+    """R compares the seed name with the canonical names with the case."""
+    target = Guide(GUIDE).target(CustomSeed("MER8", 2, 8))
+    assert (target.name, target.sequence) == ("MER8", "CTCTATA")
 
 
 def test_top_level_package_exports_the_seed_types():

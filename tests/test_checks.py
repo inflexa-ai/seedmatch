@@ -3,6 +3,7 @@ import re
 import sys
 import warnings
 from enum import StrEnum
+from fractions import Fraction
 
 import numpy as np
 import pandas as pd
@@ -30,6 +31,7 @@ from seedmatch._checks import (
     column_values,
     concatenate_and_clear,
     number_text,
+    shown,
 )
 from seedmatch.errors import InputError
 from seedmatch.report import FullSearchOptions
@@ -82,6 +84,25 @@ def test_a_huge_negative_int_is_a_limit_that_check_at_least_rejects():
     limit = as_limit("n_boot", -HUGE)
     with pytest.raises(InputError, match=r"n_boot .*\d+ bits.* is less than 1; expected 1 or more"):
         check_at_least("n_boot", limit, 1)
+
+
+@pytest.mark.parametrize(
+    ("value", "kind"),
+    [
+        ([HUGE], "list"),
+        ((1, HUGE), "tuple"),
+        (Fraction(HUGE, 3), "Fraction"),
+        (np.array([HUGE], dtype=object), "ndarray"),
+    ],
+)
+def test_shown_names_a_value_that_holds_a_huge_int_by_its_type(value, kind):
+    assert shown(value) == f"<a value of type {kind} that is too large to show>"
+
+
+def test_as_limit_gives_input_error_for_a_list_that_holds_a_huge_int():
+    message = "start <a value of type list that is too large to show> has type list; "
+    with pytest.raises(InputError, match=f"^{re.escape(message)}expected an integer$"):
+        as_limit("start", [HUGE])
 
 
 def test_as_flag_gives_input_error_for_a_huge_int():
