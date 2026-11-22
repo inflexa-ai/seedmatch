@@ -922,3 +922,15 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `read_deseq2_table` raises `InputError` for a quoted field without its closing quote. The message gives the first line of the row. A field of more than `csv.field_size_limit()` characters raises `InputError` with the line. The default limit is 131,072 characters.
 - Reason: a quote without its end loses each row, and R gives only a warning. The `csv` module of Python limits the length of a field. The reader keeps this limit, because a change of the limit applies to the full process. A gene ID or a gene symbol has fewer characters.
 - Test: `test_read_deseq2_table_rejects_a_quoted_field_without_its_closing_quote_D073` and `test_read_deseq2_table_names_the_line_of_a_field_above_the_limit_of_the_csv_module_D073` in `tests/test_de.py`.
+
+## D-074: read_fasta reads bzip2 and xz, and it rejects damaged compressed data
+
+- ID: `D-074`
+- R location: `Biostrings::readDNAStringSet`. The tests of SeedMatchR call it (`tests/testthat/helper.R:10`).
+- R behavior: R probes with R 4.5.3 and Biostrings 2.78.0 show these results:
+  - `readDNAStringSet` reads a gzip FASTA file. The first bytes of the file, not the suffix, show the gzip format.
+  - For a bzip2 file, R stops with `has unsupported type: bzfile`. For an xz file, R stops with `has unsupported type: xzfile`.
+  - For a gzip file that stops after 30 bytes, R gives the bases before the damage, with no error. Thus the record `a` gets the bases `AC`, not `ACGTGG`.
+- New behavior: `read_fasta` reads a gzip, bzip2, or xz file. The first bytes of the file show the format. The file can hold more than one compressed stream. Damaged or truncated compressed data raises `InputError` with the path, also in a later stream.
+- Reason: the table readers of the port read the same formats, as `read.csv` does. A truncated file gives sequences that are too short, and R gives no message.
+- Test: `test_d074_read_fasta_reads_bzip2_and_xz` and `test_d074_read_fasta_names_the_file_of_damaged_compressed_data` in `tests/sequence/test_sequence_set.py`.

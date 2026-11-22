@@ -1,6 +1,5 @@
 """FASTA files."""
 
-import io
 import os
 import re
 from itertools import chain
@@ -10,7 +9,7 @@ from typing import Final
 import numpy as np
 
 from seedmatch._checks import as_limit, check_at_least
-from seedmatch._io import open_binary
+from seedmatch._io import open_text
 from seedmatch.errors import InputError
 from seedmatch.sequence.alphabet import encode_dna_bytes
 from seedmatch.sequence.sequence_set import SequenceSet
@@ -43,8 +42,7 @@ def _read(path: Path) -> SequenceSet:
     codes = bytearray()
     lines: list[str] = []
     first = size = 0
-    # The default newline=None turns each CRLF and CR into LF.
-    with io.TextIOWrapper(open_binary(path), encoding="utf-8") as handle:
+    with open_text(path, newline=None) as handle:
         # The skip of the mark (D-071). The codec utf-8-sig is not used, because it decodes an
         # incomplete mark at the end of the file to no text, with no error.
         start = handle.readline().removeprefix("\ufeff")
@@ -83,6 +81,11 @@ def _read(path: Path) -> SequenceSet:
 def read_fasta(path: str | os.PathLike[str]) -> SequenceSet:
     """Read a DNA FASTA file. The ID of a record is its header text up to the first white space.
 
+    The file is UTF-8 text, or gzip, bzip2, or xz of UTF-8 text. The first bytes of the file, not
+    the suffix, show the compression. R reads only gzip, and it reads a truncated gzip file up to
+    the damage, with no error. Here, damaged or truncated compressed data raises `InputError`
+    (`D-074`).
+
     The reader skips a byte order mark at the start of the file (`D-071`). A letter that is not
     DNA raises `InputError` with the path, the line, the position in the line, and the record.
 
@@ -96,7 +99,10 @@ def read_fasta(path: str | os.PathLike[str]) -> SequenceSet:
     try:
         return _read(path)
     except UnicodeDecodeError as exc:
-        message = f"{path} is not valid UTF-8 text ({exc.reason}); expected a text FASTA file"
+        message = (
+            f"{path} is not valid UTF-8 text ({exc.reason}); "
+            "expected UTF-8 text, or gzip, bzip2, or xz of UTF-8 text"
+        )
         raise InputError(message) from exc
 
 

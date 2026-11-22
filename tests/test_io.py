@@ -67,6 +67,18 @@ def test_open_text_reads_the_text_of_a_file_whatever_its_compression_and_suffix(
         assert handle.read() == "a\tb\r\nc\u00e9\n"
 
 
+@pytest.mark.parametrize(
+    "compress", [gzip.compress, bz2.compress, lzma.compress], ids=["gzip", "bz2", "xz"]
+)
+def test_open_text_reads_each_stream_of_a_file_and_skips_zero_bytes_after_a_stream(
+    tmp_path, compress
+):
+    path = tmp_path / "table.txt"
+    path.write_bytes(compress(b"a\n") + bytes(4) + compress(b"b\n") + bytes(9000))
+    with open_text(path) as handle:
+        assert handle.read() == "a\nb\n"
+
+
 def test_open_text_reads_the_lines_of_a_file_one_at_a_time(tmp_path):
     path = tmp_path / "table.txt.gz"
     path.write_bytes(gzip.compress(b"first\nsecond\n"))

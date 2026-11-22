@@ -53,6 +53,7 @@ NOT_UTF8 = (
 
 
 COMMENT_LINES = "".join(f"# comment {i}\n" for i in range(5000)).encode()
+XZ_BAD_BLOCK = b"\xfd7zXZ\x00" + b"\xff" * 40
 
 
 def damaged_compressed_files(
@@ -60,20 +61,25 @@ def damaged_compressed_files(
 ) -> dict[str, tuple[bytes, type[Exception]]]:
     """Map the name of a damaged file to its bytes and to the exception of its decompressor.
 
-    A truncated file holds the first part of `text`. A reader must accept the lines of `text`, so
-    that it reaches the damage. The default is 5000 comment lines, which a GTF reader skips.
+    A truncated file holds the first part of `text`, and a file with a bad later stream holds all
+    of `text` in its first stream. A reader must accept the lines of `text`, so that it reaches the
+    damage. The default is 5000 comment lines, which a GTF reader skips.
     """
     gzipped, bzipped, xzipped = (
         pack(text) for pack in (gzip.compress, bz2.compress, lzma.compress)
     )
+    bad_gzip, bad_bzip2, bad_xz = b"\x1f\x8b" + bytes(30), b"BZh9" + b"\xff" * 40, XZ_BAD_BLOCK
     return {
         "truncated gzip": (gzipped[: len(gzipped) // 2], EOFError),
-        "gzip with a bad header": (b"\x1f\x8b" + bytes(30), gzip.BadGzipFile),
+        "gzip with a bad header": (bad_gzip, gzip.BadGzipFile),
         "gzip with a bad block": (gzipped[:10] + b"\xff" * 40, zlib.error),
+        "gzip with a bad later stream": (gzipped + bad_gzip, gzip.BadGzipFile),
         "truncated bzip2": (bzipped[: len(bzipped) // 2], EOFError),
-        "bzip2 with a bad block": (b"BZh9" + b"\xff" * 40, OSError),
+        "bzip2 with a bad block": (bad_bzip2, OSError),
+        "bzip2 with a bad later stream": (bzipped + bad_bzip2, OSError),
         "truncated xz": (xzipped[: len(xzipped) // 2], EOFError),
-        "xz with a bad block": (b"\xfd7zXZ\x00" + b"\xff" * 40, lzma.LZMAError),
+        "xz with a bad block": (bad_xz, lzma.LZMAError),
+        "xz with a bad later stream": (xzipped + bad_xz, lzma.LZMAError),
     }
 
 

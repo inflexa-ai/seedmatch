@@ -59,7 +59,7 @@ matches = report.matches
 
 If a gene has more than one sequence, make the set with `SequenceSet.from_records(records, gene_ids=...)`.
 
-`write_fasta(sequences, path)` writes a set to a FASTA file, with the ID of each sequence in its header line. The file does not hold the gene IDs. `read_fasta` gives each record its ID as the gene ID.
+`write_fasta(sequences, path)` writes a set to a FASTA file, with the ID of each sequence in its header line. The file does not hold the gene IDs. `read_fasta` gives each record its ID as the gene ID. `read_fasta` also reads a gzip, bzip2, or xz FASTA file, for example a transcript FASTA file of Ensembl or GENCODE.
 
 `ecdf_test` compares the `log2FoldChange` values of two gene sets. This example compares the genes with a seed match to the genes without a match. With the default KS test, a small p-value shows that the genes with a seed match go down.
 

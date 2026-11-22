@@ -531,6 +531,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `Biostrings::readDNAStringSet` (a byte order mark) | A FASTA file that starts with a UTF-8 byte order mark stops the read. | `read_fasta` skips the mark at the start of the file. |
 | `get_seed` (a canonical name with a window) | A canonical `seed.name` gives the canonical seed, and R ignores `start.pos` and `stop.pos`. | `CustomSeed` raises `InputError` for the name of a canonical seed. |
 | `download_parse_file` (a quote without its end, a long field) | If a quoted field has no closing quote, `read.csv` gives no row, and R only warns (`R/get_data.R:74`). R reads a field of each length. | `read_deseq2_table` raises `InputError` for a quoted field without its closing quote, and for a field above the limit of the `csv` module. |
+| `Biostrings::readDNAStringSet` (a compressed file) | R reads a gzip FASTA file, but it stops for bzip2 and xz. R reads a truncated gzip file up to the damage, with no error. | `read_fasta` reads gzip, bzip2, and xz. Damaged or truncated compressed data raises `InputError`. |
 
 ## Tests
 

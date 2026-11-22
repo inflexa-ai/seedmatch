@@ -7,7 +7,7 @@ import lzma
 import os
 import re
 import zlib
-from collections.abc import Iterator
+from collections.abc import Buffer, Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Final, Literal, TextIO
@@ -78,37 +78,90 @@ def open_binary(path: Path) -> io.BufferedReader:
         raise InputError(message) from exc
 
 
-def _decompressed(
-    raw: io.BufferedReader,
-) -> gzip.GzipFile | bz2.BZ2File | lzma.LZMAFile | io.BufferedReader:
+class _Streams(io.RawIOBase):
+    """The bytes of the bzip2 or xz streams of a file, one stream after the other.
+
+    `bz2.BZ2File` and `lzma.LZMAFile` stop with no error at a later stream that the decompressor
+    rejects at its start, thus they lose the rest of the file. Here, the error of the
+    decompressor goes to the caller. Zero bytes after a stream are padding, as in the xz format
+    and in `gzip.GzipFile`.
+    """
+
+    def __init__(
+        self,
+        raw: io.BufferedReader,
+        decompressor: Callable[[], bz2.BZ2Decompressor | lzma.LZMADecompressor],
+    ) -> None:
+        super().__init__()
+        self._raw = raw
+        self._new = decompressor
+        self._decompressor = decompressor()
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer: Buffer) -> int:
+        with memoryview(buffer) as view, view.cast("B") as target:
+            data = self._next(len(target))
+            target[: len(data)] = data
+        return len(data)
+
+    def _next(self, size: int) -> bytes:
+        """Return 1 to `size` bytes of the decompressed data, or no bytes at the end of the file."""
+        while True:
+            if self._decompressor.eof:
+                block = self._decompressor.unused_data.lstrip(b"\0")
+                while not block:
+                    more = self._raw.read(io.DEFAULT_BUFFER_SIZE)
+                    if not more:
+                        return b""
+                    block = more.lstrip(b"\0")
+                self._decompressor = self._new()
+            elif self._decompressor.needs_input:
+                block = self._raw.read(io.DEFAULT_BUFFER_SIZE)
+                if not block:
+                    message = "Compressed file ended before the end-of-stream marker was reached"
+                    raise EOFError(message)
+            else:
+                block = b""
+            if data := self._decompressor.decompress(block, size):
+                return data
+
+
+def _decompressed(raw: io.BufferedReader) -> gzip.GzipFile | io.BufferedReader:
     """Return a reader of the bytes after the compression that the first bytes show, if any."""
     head = raw.peek(len(_XZ_MAGIC))
     if head.startswith(_GZIP_MAGIC):
         return gzip.GzipFile(fileobj=raw)
     if head.startswith(_BZIP2_MAGIC):
-        return bz2.BZ2File(raw)
+        return io.BufferedReader(_Streams(raw, bz2.BZ2Decompressor))
     if head.startswith(_XZ_MAGIC):
-        return lzma.LZMAFile(raw)
+        return io.BufferedReader(_Streams(raw, lzma.LZMADecompressor))
     return raw
 
 
 @contextmanager
 def open_text(
-    path: Path, *, errors: Literal["strict", "surrogateescape"] = "strict"
+    path: Path,
+    *,
+    errors: Literal["strict", "surrogateescape"] = "strict",
+    newline: Literal[""] | None = "",
 ) -> Iterator[TextIO]:
     """Open the file as UTF-8 text. The first bytes, not the suffix, show a compressed file.
 
     A directory, and compressed data that is damaged or truncated, raise `InputError`. The error
     for damaged data comes when the reader of the text reaches the damage. `errors` goes to the
     UTF-8 decoder. With `surrogateescape`, each byte that is not UTF-8 becomes a character from
-    U+DC80 to U+DCFF, and no `UnicodeDecodeError` occurs.
+    U+DC80 to U+DCFF, and no `UnicodeDecodeError` occurs. `newline` goes to `io.TextIOWrapper`:
+    with the default `""`, each line keeps its line end, and with `None`, each CRLF and CR
+    becomes LF.
     """
     shown = os.fspath(path)
     raw = open_binary(path)
     with raw:
         binary = _decompressed(raw)
         # pandas also opens a path with newline="", so its parser gets each line end unchanged.
-        with io.TextIOWrapper(binary, encoding="utf-8", errors=errors, newline="") as text:
+        with io.TextIOWrapper(binary, encoding="utf-8", errors=errors, newline=newline) as text:
             try:
                 yield text
             except _DAMAGED_DATA as exc:

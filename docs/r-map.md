@@ -80,6 +80,8 @@ This table maps each SeedMatchR function to its Python replacement. The third ce
 - A letter that is not an IUPAC DNA letter raises `InputError`.
 - R accepts `-`, `+`, and `.`, but the port does not (`D-017`).
 - The reader skips a byte order mark at the start of the file, but R stops (`D-071`).
+- As in R, the reader reads a gzip file, and the first bytes of the file show the format.
+- The reader also reads bzip2 and xz, but R stops. Damaged or truncated compressed data raises `InputError`, but R reads a truncated gzip file up to the damage (`D-074`).
 
 ### `Biostrings::reverseComplement`
 

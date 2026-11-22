@@ -1,3 +1,6 @@
+import bz2
+import gzip
+import lzma
 import re
 import tracemalloc
 from dataclasses import FrozenInstanceError
@@ -5,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from helpers import DATA, exactly, sirna_seqs
+from helpers import DATA, damaged_compressed_files, exactly, sirna_seqs
 
 from seedmatch.errors import InputError
 from seedmatch.sequence import SequenceSet, read_fasta, write_fasta
@@ -286,10 +289,11 @@ def test_read_fasta_keeps_the_bases_of_records_longer_than_one_batch(tmp_path):
     assert np.array_equal(got.codes, expected.codes)
 
 
-def test_read_fasta_keeps_the_peak_memory_near_the_size_of_the_bases(tmp_path):
+@pytest.mark.parametrize("pack", [bytes, gzip.compress], ids=["text", "gzip"])
+def test_read_fasta_keeps_the_peak_memory_near_the_size_of_the_bases(tmp_path, pack):
     path = tmp_path / "x.fa"
     bases = 60 * 2**16
-    path.write_text(">a\n" + ("ACGT" * 15 + "\n") * (bases // 60))
+    path.write_bytes(pack((">a\n" + ("ACGT" * 15 + "\n") * (bases // 60)).encode()))
     tracemalloc.start()
     try:
         seqs = read_fasta(path)
@@ -319,6 +323,52 @@ def test_read_fasta_rejects_a_file_that_is_not_utf8(tmp_path, data):
     (tmp_path / "x.fa").write_bytes(data)
     with pytest.raises(InputError, match=r"x\.fa is not valid UTF-8 text"):
         read_fasta(tmp_path / "x.fa")
+
+
+FASTA_BYTES = b">a desc\r\nACGT\r\nGG\n>b\nTTAA\n"
+
+
+@pytest.mark.parametrize("name", ["x.fa.gz", "x.fa"])
+def test_read_fasta_reads_a_gzip_file_from_its_content_as_r_does(tmp_path, name):
+    """readDNAStringSet of Biostrings 2.78.0 reads a gzip file, also a file without `.gz`."""
+    path = tmp_path / name
+    path.write_bytes(gzip.compress(FASTA_BYTES))
+    seqs = read_fasta(path)
+    assert seqs.ids == ("a", "b")
+    assert [seqs.sequence(i) for i in range(2)] == ["ACGTGG", "TTAA"]
+
+
+@pytest.mark.parametrize("compress", [bz2.compress, lzma.compress], ids=["bzip2", "xz"])
+def test_d074_read_fasta_reads_bzip2_and_xz(tmp_path, compress):
+    """D-074: readDNAStringSet stops for bzip2 and xz, but the port reads them."""
+    path = tmp_path / "x.fa"
+    path.write_bytes(compress(FASTA_BYTES))
+    seqs = read_fasta(path)
+    assert seqs.ids == ("a", "b")
+    assert [seqs.sequence(i) for i in range(2)] == ["ACGTGG", "TTAA"]
+
+
+@pytest.mark.parametrize("name", damaged_compressed_files())
+def test_d074_read_fasta_names_the_file_of_damaged_compressed_data(tmp_path, name):
+    """D-074: readDNAStringSet reads a truncated gzip file up to the damage, with no error."""
+    path = tmp_path / "x.fa"
+    text = b">a\n" + (b"ACGT" * 15 + b"\n") * 5000
+    path.write_bytes(damaged_compressed_files(text)[name][0])
+    prefix = f"{str(path)!r}: the compressed data is damaged or truncated ("
+    with pytest.raises(InputError, match=re.escape(prefix)) as raised:
+        read_fasta(path)
+    assert str(raised.value).endswith("); expected a complete gzip, bzip2, or xz file")
+
+
+def test_read_fasta_names_each_format_for_compressed_text_that_is_not_utf8(tmp_path):
+    path = tmp_path / "x.fa.gz"
+    path.write_bytes(gzip.compress(b">a\xff\nAC\n"))
+    message = (
+        f"{path} is not valid UTF-8 text (invalid start byte); "
+        "expected UTF-8 text, or gzip, bzip2, or xz of UTF-8 text"
+    )
+    with pytest.raises(InputError, match=exactly(message)):
+        read_fasta(path)
 
 
 def test_read_fasta_of_a_missing_file_raises_the_os_error(tmp_path):
