@@ -2,6 +2,7 @@ import ast
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -9,8 +10,9 @@ import pytest
 import seedmatch
 from seedmatch.errors import InputError, SeedMatchError
 
-DIVERGENCES = Path(__file__).parents[1] / "docs" / "divergences.md"
-DESIGN = Path(__file__).parents[1] / "docs" / "design.md"
+ROOT = Path(__file__).parents[1]
+DIVERGENCES = ROOT / "docs" / "divergences.md"
+DESIGN = ROOT / "docs" / "design.md"
 DIVERGENCE_FIELDS = ("ID", "R location", "R behavior", "New behavior", "Reason", "Test")
 TESTS = Path(__file__).parent
 
@@ -61,6 +63,19 @@ def test_import_loads_no_fetch_and_no_plot_modules():
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "[]"
+
+
+def test_dependabot_ignores_each_package_that_the_sandbox_pins():
+    tool = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]
+    pinned = {
+        re.split(r"[=<>!~]", pin, maxsplit=1)[0] for pin in tool["uv"]["constraint-dependencies"]
+    }
+    config = (ROOT / ".github" / "dependabot.yml").read_text()
+    uv = next(
+        block for block in config.split("- package-ecosystem: ")[1:] if block.startswith('"uv"')
+    )
+    ignored = set(re.findall(r'^ *- dependency-name: "([^"]+)"$', uv, flags=re.MULTILINE))
+    assert ignored == pinned
 
 
 def test_each_heading_of_the_entries_has_the_form_of_an_entry():
