@@ -1,11 +1,11 @@
 """The style that each figure of `seedmatch.plot` shares: the palette, the theme, and the checks."""
 
 import math
-import warnings
 from typing import TYPE_CHECKING, Final, cast
 
 import matplotlib as mpl
 import numpy as np
+from matplotlib import _constrained_layout
 from matplotlib.axes import Axes
 from matplotlib.axis import Axis
 from matplotlib.colors import is_color_like
@@ -16,7 +16,9 @@ from seedmatch._checks import as_text, shown
 from seedmatch.errors import InputError
 
 if TYPE_CHECKING:
-    from matplotlib.layout_engine import LayoutEngine
+    from collections.abc import Callable
+
+    from matplotlib.layout_engine import ConstrainedLayoutEngine
 
 PALETTE: Final = (
     "black",
@@ -48,6 +50,12 @@ AXIS_BOUND: Final = 9e306
 _MAX_SIDE: Final = 50.0
 # The start of the UserWarning of matplotlib 3.11.1 for a constrained layout that collapses.
 _COLLAPSE: Final = "constrained_layout not applied"
+# The constrained layout of matplotlib 3.8 to 3.11 calls this private function after each pass, and
+# it warns instead of moving the Axes when the result is False. The grids from the last pass keep
+# the solved sizes.
+_no_collapsed_axes: Final = cast(
+    "Callable[[object, Figure], bool]", _constrained_layout.check_no_collapsed_axes
+)
 _POINTS_PER_INCH: Final = 72
 _DPI_FROM: Final = "from matplotlib.rcParams['figure.dpi']"
 
@@ -226,21 +234,22 @@ def apply_layout(figure: Figure) -> Figure:
     """Apply the constrained layout of the figure one time, and keep the positions of the Axes.
 
     The positions stay for each later draw. Thus a save at each dpi gives no layout warning. A size
-    too small for the texts raises `InputError`, and so does a figure dpi too low for a text
-    (`check_text_pixels`).
+    too small for the texts raises `InputError` after the collapse warning of matplotlib, and so
+    does a figure dpi too low for a text (`check_text_pixels`). The function does not change the
+    warning filters, because they are global for the process.
     """
     check_text_pixels(figure)
     # new_figure gives each figure of a plot function a constrained layout engine.
-    engine = cast("LayoutEngine", figure.get_layout_engine())
-    with warnings.catch_warnings():
-        warnings.filterwarnings("error", message=_COLLAPSE, category=UserWarning)
-        try:
-            engine.execute(figure)
-        except UserWarning as warning:
-            # An outer filter can also raise a warning that is not the collapse.
-            if not str(warning).startswith(_COLLAPSE):
-                raise
-            raise _too_small(figure) from None
+    engine = cast("ConstrainedLayoutEngine", figure.get_layout_engine())
+    try:
+        grids = engine.execute(figure)
+    except UserWarning as warning:
+        # An outer filter can raise the collapse warning, or a different warning.
+        if not str(warning).startswith(_COLLAPSE):
+            raise
+        raise _too_small(figure) from None
+    if not _no_collapsed_axes(grids, figure):
+        raise _too_small(figure)
     figure.set_layout_engine("none")
     return figure
 

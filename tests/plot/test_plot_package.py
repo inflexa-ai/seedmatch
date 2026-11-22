@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 from helpers import exactly, sirna_de, sirna_seqs, wasserstein_samples
 from matplotlib.colors import to_hex
+from matplotlib.layout_engine import ConstrainedLayoutEngine
 
 from seedmatch import benchmark_predictions, ecdf_test, kmer_counts, kmer_gene_counts
 from seedmatch.errors import InputError
@@ -468,9 +469,15 @@ def too_small(size):
     )
 
 
+COLLAPSE = "^constrained_layout not applied because axes sizes collapsed to zero"
+
+
 @pytest.mark.parametrize("name", SIZED)
 def test_each_plot_function_rejects_a_size_too_small_for_its_texts(name):
-    with pytest.raises(InputError, match=exactly(too_small((0.3, 0.3)))):
+    with (
+        pytest.warns(UserWarning, match=COLLAPSE),
+        pytest.raises(InputError, match=exactly(too_small((0.3, 0.3)))),
+    ):
         sized_calls()[name](size=(0.3, 0.3))
 
 
@@ -479,12 +486,18 @@ def test_plot_ecdf_rejects_a_legend_too_wide_for_the_default_size():
     groups = {"g" * 60: de.loc[de["mer7m8"] >= 1, "gene_id"]}
     groups["Background"] = de.loc[de["mer7m8"] == 0, "gene_id"]
     result = ecdf_test(de, target=groups["g" * 60], background=groups["Background"])
-    with pytest.raises(InputError, match=exactly(too_small((5.0, 5.0)))):
+    with (
+        pytest.warns(UserWarning, match=COLLAPSE),
+        pytest.raises(InputError, match=exactly(too_small((5.0, 5.0)))),
+    ):
         plot_ecdf(de, groups, result)
 
 
 def test_the_too_small_message_shows_the_size_as_floats():
-    with pytest.raises(InputError, match=exactly(too_small((1.0, 1.0)))):
+    with (
+        pytest.warns(UserWarning, match=COLLAPSE),
+        pytest.raises(InputError, match=exactly(too_small((1.0, 1.0)))),
+    ):
         sized_calls()["plot_ecdf"](size=(1, 1))
 
 
@@ -512,15 +525,37 @@ def test_a_layout_warning_that_an_outer_filter_raises_is_not_a_size_error():
             plot_ranges(ranges, title="\u3042")
 
 
-def test_a_plot_function_restores_the_warning_filters_after_a_collapse():
+def test_a_plot_function_keeps_the_warning_filters_after_a_collapse():
     call = sized_calls()["plot_ranges"]
-    before = list(warnings.filters)
-    with pytest.raises(InputError, match=exactly(too_small((0.3, 0.3)))):
-        call(size=(0.3, 0.3))
-    assert warnings.filters == before
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=COLLAPSE, category=UserWarning)
+        before = list(warnings.filters)
+        with pytest.raises(InputError, match=exactly(too_small((0.3, 0.3)))):
+            call(size=(0.3, 0.3))
+        assert warnings.filters == before
 
 
-def test_a_plot_function_restores_the_warning_filters_after_a_layout():
+def test_a_plot_function_rejects_a_collapse_when_another_thread_resets_the_warning_filters(
+    monkeypatch,
+):
+    # Python 3.12 has one list of warning filters for the process. Another thread can reset it
+    # while the layout runs.
+    execute = ConstrainedLayoutEngine.execute
+
+    def execute_after_a_reset(self, figure):
+        warnings.resetwarnings()
+        return execute(self, figure)
+
+    monkeypatch.setattr(ConstrainedLayoutEngine, "execute", execute_after_a_reset)
+    with (
+        warnings.catch_warnings(),
+        pytest.warns(UserWarning, match=COLLAPSE),
+        pytest.raises(InputError, match=exactly(too_small((0.3, 0.3)))),
+    ):
+        sized_calls()["plot_ranges"](size=(0.3, 0.3))
+
+
+def test_a_plot_function_keeps_the_warning_filters_after_a_layout():
     call = sized_calls()["plot_ranges"]
     before = list(warnings.filters)
     call()
