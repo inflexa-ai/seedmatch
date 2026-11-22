@@ -380,6 +380,50 @@ def test_each_plot_function_rejects_a_dpi_too_low_for_its_texts_and_accepts_the_
         figure.savefig(io.BytesIO(), format="png")
 
 
+def too_high(dpi, size, bound):
+    return (
+        f"figure dpi {dpi:g} is too high for the size {size!r}; expected a figure dpi of at most "
+        f"{bound}, from matplotlib.rcParams['figure.dpi']. For a file at a higher dpi, give the "
+        "dpi to Figure.savefig"
+    )
+
+
+@pytest.mark.parametrize("name", SIZED)
+def test_each_plot_function_rejects_a_dpi_too_high_for_its_size_and_accepts_the_bound(name):
+    call = sized_calls()[name]
+    with (
+        mpl.rc_context({"figure.dpi": 1000.5}),
+        pytest.raises(InputError, match=exactly(too_high(1000.5, (5.0, 5.0), 1000))),
+    ):
+        call(size=(5, 5))
+    with mpl.rc_context({"figure.dpi": 1000}):
+        call(size=(5, 5))
+
+
+def test_the_too_high_message_gives_the_largest_dpi_for_a_size_that_is_not_square():
+    call = sized_calls()["plot_ranges"]
+    with (
+        mpl.rc_context({"figure.dpi": 1444}),
+        pytest.raises(InputError, match=exactly(too_high(1444, (4.0, 3.0), 1443))),
+    ):
+        call(size=(4, 3))
+    with mpl.rc_context({"figure.dpi": 1443}):
+        call(size=(4, 3))
+
+
+def test_a_plot_function_rejects_the_largest_dpi_with_no_overflow_warning():
+    call = sized_calls()["plot_ranges"]
+    with warnings.catch_warnings(), mpl.rc_context({"figure.dpi": 1.7e308}):
+        warnings.simplefilter("error")
+        with pytest.raises(InputError, match=exactly(too_high(1.7e308, (5.0, 5.0), 1000))):
+            call(size=(5, 5))
+
+
+def test_a_plot_function_permits_a_later_save_at_a_dpi_above_the_bound_of_the_layout():
+    figure = sized_calls()["plot_ranges"](size=(5, 5))
+    figure.savefig(io.BytesIO(), format="rgba", dpi=1001)
+
+
 def test_a_plot_function_rejects_a_font_size_of_the_rc_params_too_small_for_the_dpi():
     message = (
         "figure dpi 30 is too low for the font size 1 of a text of the figure; "

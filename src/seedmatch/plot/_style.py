@@ -1,6 +1,7 @@
 """The style that each figure of `seedmatch.plot` shares: the palette, the theme, and the checks."""
 
 import math
+from fractions import Fraction
 from typing import TYPE_CHECKING, Final, cast
 
 import matplotlib as mpl
@@ -45,9 +46,11 @@ _PAIR_LENGTH: Final = 2
 # count reaches 1e307, and the bin count can be 1. Near the largest float, the ticks after the end
 # of a view also overflow. The expansion of 5% on each side of a range of 9e306 gives 9.9e306.
 AXIS_BOUND: Final = 9e306
-# ggsave of ggplot2 4.0.2 rejects a side of 50 inches or more. The bound also keeps the canvas of
-# apply_layout below about 95 MiB at 100 dpi.
+# ggsave of ggplot2 4.0.2 rejects a side of 50 inches or more.
 _MAX_SIDE: Final = 50.0
+# The layout canvas of apply_layout holds 4 bytes for each pixel at the figure dpi. The bound is the
+# area of a square with a side of 50 inches at 100 dpi, about 95 MiB.
+_MAX_LAYOUT_PIXELS: Final = 25_000_000
 # The start of the UserWarning of matplotlib 3.11.1 for a constrained layout that collapses.
 _COLLAPSE: Final = "constrained_layout not applied"
 # The constrained layout of matplotlib 3.8 to 3.11 calls this private function after each pass, and
@@ -179,6 +182,22 @@ def _too_small(figure: Figure) -> InputError:
     return InputError(message)
 
 
+def _check_layout_pixels(figure: Figure) -> None:
+    # A Fraction keeps the area and the bound exact. The product of two float sides can underflow
+    # to 0, because a side can be near the smallest float at a high dpi.
+    width, height = (Fraction(side) for side in figure.get_size_inches().tolist())
+    if width * height * Fraction(figure.dpi) ** 2 <= _MAX_LAYOUT_PIXELS:
+        return
+    bound = math.isqrt(math.floor(_MAX_LAYOUT_PIXELS / (width * height)))
+    size = (float(width), float(height))
+    message = (
+        f"figure dpi {figure.dpi:g} is too high for the size {shown(size)}; "
+        f"expected a figure dpi of at most {bound}, {_DPI_FROM}. "
+        "For a file at a higher dpi, give the dpi to Figure.savefig"
+    )
+    raise InputError(message)
+
+
 def new_figure(size: tuple[float, float]) -> Figure:
     """Return an empty `Figure` of the size in inches. It does not use `matplotlib.pyplot`.
 
@@ -194,7 +213,7 @@ def new_figure(size: tuple[float, float]) -> Figure:
     figure = Figure(figsize=size, dpi=dpi, layout="constrained", facecolor="white")
     # Such a side makes the transforms of matplotlib divide to infinity. Then the first artist
     # warns in np.dot on some platforms, and the layout raises a raw error.
-    if figure.get_size_inches().min() * figure.dpi < 1:
+    if float(figure.get_size_inches().min()) * figure.dpi < 1:
         raise _too_small(figure)
     return figure
 
@@ -235,9 +254,11 @@ def apply_layout(figure: Figure) -> Figure:
 
     The positions stay for each later draw. Thus a save at each dpi gives no layout warning. A size
     too small for the texts raises `InputError` after the collapse warning of matplotlib, and so
-    does a figure dpi too low for a text (`check_text_pixels`). The function does not change the
-    warning filters, because they are global for the process.
+    does a figure dpi too low for a text (`check_text_pixels`). A layout canvas of more than
+    25,000,000 pixels at the figure dpi raises `InputError` before the layout. The function does
+    not change the warning filters, because they are global for the process.
     """
+    _check_layout_pixels(figure)
     check_text_pixels(figure)
     # new_figure gives each figure of a plot function a constrained layout engine.
     engine = cast("ConstrainedLayoutEngine", figure.get_layout_engine())

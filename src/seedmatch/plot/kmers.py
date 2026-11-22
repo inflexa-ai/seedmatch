@@ -39,8 +39,10 @@ def plot_kmer_histogram(
     `title` is the title of the Axes.
 
     `size` is the width and the height in inches, each above 0 and below 50, as in `ggsave`. A size
-    too small for the texts, the legends, and the labels raises `InputError`. The layout does not
-    count the width of a title, thus the figure cuts a title that is wider than the figure. The
+    too small for the texts, the legends, and the labels raises `InputError`. A figure of more
+    than 25,000,000 pixels at `rcParams["figure.dpi"]` also raises `InputError`, but a later
+    `Figure.savefig` at a higher dpi is permitted. The layout does not count the width of a
+    title, thus the figure cuts a title that is wider than the figure. The
     figure keeps its layout, thus a later change of the figure does not move the Axes. To apply the
     layout again, call `figure.set_layout_engine("constrained")`.
 
