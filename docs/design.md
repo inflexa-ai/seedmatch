@@ -530,6 +530,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `.make_table` (the labels and the ID of the report table) | The labels of the windows are fixed texts: `Full Guide Strand (g2:g23)`, `18-mer (g2:g19)`, and `15-mer (g2:g19)` (`R/SeedMatchReport.R:158`, `:162`, `:166`). The window of `15mer` is g2 to g16 (`R/get_seed.R:121-123`), and a guide of another length than 23 bases has another `Full` window. `gt::gt(..., id = "mygt")` gives each table the element ID `mygt` (`:145`). | `report_html` gives the labels from `seed_window` for the guide. The table has the class `seedmatch-report` and no ID. |
 | `Biostrings::readDNAStringSet` (a byte order mark) | A FASTA file that starts with a UTF-8 byte order mark stops the read. | `read_fasta` skips the mark at the start of the file. |
 | `get_seed` (a canonical name with a window) | A canonical `seed.name` gives the canonical seed, and R ignores `start.pos` and `stop.pos`. | `CustomSeed` raises `InputError` for the name of a canonical seed. |
+| `download_parse_file` (a quote without its end, a long field) | If a quoted field has no closing quote, `read.csv` gives no row, and R only warns (`R/get_data.R:74`). R reads a field of each length. | `read_deseq2_table` raises `InputError` for a quoted field without its closing quote, and for a field above the limit of the `csv` module. |
 
 ## Tests
 

@@ -55,13 +55,16 @@ NOT_UTF8 = (
 COMMENT_LINES = "".join(f"# comment {i}\n" for i in range(5000)).encode()
 
 
-def damaged_compressed_files() -> dict[str, tuple[bytes, type[Exception]]]:
+def damaged_compressed_files(
+    text: bytes = COMMENT_LINES,
+) -> dict[str, tuple[bytes, type[Exception]]]:
     """Map the name of a damaged file to its bytes and to the exception of its decompressor.
 
-    The file holds 5000 comment lines, which a GTF reader skips, so a reader reaches the damage.
+    A truncated file holds the first part of `text`. A reader must accept the lines of `text`, so
+    that it reaches the damage. The default is 5000 comment lines, which a GTF reader skips.
     """
     gzipped, bzipped, xzipped = (
-        pack(COMMENT_LINES) for pack in (gzip.compress, bz2.compress, lzma.compress)
+        pack(text) for pack in (gzip.compress, bz2.compress, lzma.compress)
     )
     return {
         "truncated gzip": (gzipped[: len(gzipped) // 2], EOFError),

@@ -166,6 +166,8 @@ This table maps each SeedMatchR function to its Python replacement. The third ce
 - R reads a column of digits as numbers, but the port reads `gene_id` as text.
 - As in `read.csv`, only `NA` is missing in a text column, and `NA` or an empty field is missing in a number column.
 - A table that does not have exactly 8 columns raises `InputError` that gives the count found (`D-021`). These tables also raise `InputError`: an empty file, a row with more fields than the header, and a number column with a value that is not a number.
+- As in `read.csv`, a blank line is no row, and after the header, a line `""` is also no row. A line of spaces is a row.
+- A quoted field without its closing quote raises `InputError`, but R reads no row and only warns. A field above the limit of the `csv` module raises `InputError`, but R reads it (`D-073`).
 
 ### `get_example_data`
 

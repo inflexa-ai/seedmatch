@@ -911,3 +911,14 @@ The IDs of the known divergences have the same order as the rows of the table in
 - New behavior: `CustomSeed` raises `InputError` for the name of a canonical seed. The message names the `Seed` member. The comparison uses the case, as in R. Thus `CustomSeed("MER8", 2, 8)` is valid.
 - Reason: a result names its rows with the seed name. Thus a reader cannot tell the rows of a custom window with a canonical name from the rows of the canonical seed. R gives no message.
 - Test: `test_d072_custom_seed_rejects_the_name_of_a_canonical_seed` in `tests/test_seed.py`.
+
+## D-073: read_deseq2_table rejects a quoted field without its closing quote, and a long field
+
+- ID: `D-073`
+- R location: `download_parse_file` (`R/get_data.R:74`), which reads the file with `read.csv`.
+- R behavior: R probes with R 4.5.3 show these results:
+  - If the last row starts a quoted field and no line closes it, `read.csv` gives no row. This includes each complete row before it. R only warns `incomplete final line found by readTableHeader`.
+  - `read.csv` reads a field of 200,000 characters.
+- New behavior: `read_deseq2_table` raises `InputError` for a quoted field without its closing quote. The message gives the first line of the row. A field of more than `csv.field_size_limit()` characters raises `InputError` with the line. The default limit is 131,072 characters.
+- Reason: a quote without its end loses each row, and R gives only a warning. The `csv` module of Python limits the length of a field. The reader keeps this limit, because a change of the limit applies to the full process. A gene ID or a gene symbol has fewer characters.
+- Test: `test_read_deseq2_table_rejects_a_quoted_field_without_its_closing_quote_D073` and `test_read_deseq2_table_names_the_line_of_a_field_above_the_limit_of_the_csv_module_D073` in `tests/test_de.py`.

@@ -1,7 +1,10 @@
 """The table of DESeq2 results: the reader for the GEO files and the filter."""
 
+import csv
 import os
-from typing import Final
+from collections.abc import Iterator, Sequence
+from itertools import batched, repeat
+from typing import Final, TextIO
 
 import pandas as pd
 
@@ -22,7 +25,88 @@ _DESEQ2_COLUMNS: Final = (
     "symbol",
 )
 _NUMERIC_COLUMNS: Final = ("baseMean", "log2FoldChange", "lfcSE", "stat", "pvalue", "padj")
+_TEXT_COLUMNS: Final = ("gene_id", "symbol")
 _FILTER_COLUMNS: Final = ("baseMean", "log2FoldChange", "pvalue", "padj")
+_BATCH_ROWS: Final = 2**15
+
+
+class _Lines:
+    """The lines of a text handle. `ended` is true after the last line."""
+
+    def __init__(self, handle: TextIO) -> None:
+        self._handle = handle
+        self.ended = False
+
+    def __iter__(self) -> Iterator[str]:
+        yield from self._handle
+        self.ended = True
+
+
+def _data_rows(handle: TextIO, shown: str) -> Iterator[list[str]]:
+    """Yield the fields of each data row, with an empty field for each field after the last.
+
+    The header is the first line that is not blank. After the header, a line `""` is also no row.
+    """
+    width = len(_DESEQ2_COLUMNS)
+    lines = _Lines(handle)
+    # The default dialect reads a quote as read.csv does. In strict mode, the reader also rejects
+    # a field such as `"ab"c`, which read.csv and pandas read as `abc`.
+    reader = csv.reader(lines, delimiter="\t")
+    header = False
+    start = 1
+    try:
+        for row in reader:
+            line, start = start, reader.line_num + 1
+            # Each row ends at the end of a line. Only a quoted field without its closing quote
+            # makes the reader read past the last line, and it then gives the rest of the file as
+            # the field, with no error.
+            if lines.ended:
+                message = (
+                    f"{shown!r}: line {line}: the quoted field has no closing quote; "
+                    "expected a closing quote before the end of the file"
+                )
+                raise InputError(message)
+            if not row or (header and row == [""]):
+                continue
+            if not header:
+                if len(row) != width:
+                    message = (
+                        f"{shown!r}: table has {len(row)} columns; "
+                        f"expected {width}: {', '.join(_DESEQ2_COLUMNS)}"
+                    )
+                    raise InputError(message)
+                header = True
+            elif len(row) > width:
+                message = (
+                    f"{shown!r}: line {line} has {len(row)} fields; "
+                    f"expected at most {width}, as in the header"
+                )
+                raise InputError(message)
+            else:
+                row.extend(repeat("", width - len(row)))
+                yield row
+    except csv.Error as exc:
+        message = f"{shown!r}: line {reader.line_num}: {exc}"
+        raise InputError(message) from exc
+    if not header:
+        message = f"{shown!r}: the file has no header line; expected a header line and rows"
+        raise InputError(message)
+
+
+def _table(rows: Sequence[list[str]], shown: str) -> pd.DataFrame:
+    """Return the rows as a table with the DESeq2 columns and their types."""
+    table = pd.DataFrame(rows, columns=pd.Index(_DESEQ2_COLUMNS), dtype=object)
+    for name in _TEXT_COLUMNS:
+        table[name] = table[name].where(table[name] != "NA")
+    for name in _NUMERIC_COLUMNS:
+        field = table[name]
+        try:
+            # read.csv of R also reads an empty field as missing, but only in a number column.
+            table[name] = field.where(~field.isin(("NA", ""))).astype("float64")
+        except ValueError as exc:
+            message = f"{shown!r}: column {name!r}: {exc}; expected a number, NA, or an empty field"
+            raise InputError(message) from exc
+    return table
 
 
 def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
@@ -34,53 +118,31 @@ def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
     `download_parse_file` of R does. `gene_id` and `symbol` are text, and the other columns are
     `float64`. As in `read.csv` of R, only `NA` is missing in a text column, and `NA` or an empty
     field is missing in a number column.
+
+    The reader obeys the rules of `read.csv` for the lines. A quoted field can hold a tab or a line
+    end. A blank line is no row, and after the header, a line `""` is also no row. A line of spaces
+    is a row. A row with fewer than 8 fields gets an empty field for each field after its last
+    field. A quoted field without its closing quote, a row with more than 8 fields, and a field of
+    more than `csv.field_size_limit()` characters raise `InputError`.
     """
     shown = os.fspath(path)
     file = local_path(shown)
     try:
-        # pandas gets an open handle and no path, so it cannot open a URL or guess a compression.
         with open_text(file) as handle:
-            # The header is a data row, thus it sets the field count, and pandas raises for each
-            # row with more fields. With a header row, pandas reads the extra fields of the first
-            # row as an index, and with index_col=False it drops them and only warns.
-            table = pd.read_csv(
-                handle,
-                sep="\t",
-                header=None,
-                dtype=str,
-                na_values=["NA"],
-                keep_default_na=False,
-                compression=None,
-            )
+            # The text of a parsed row takes more memory than its row in the table, thus a batch
+            # bounds the memory of the text.
+            parts = [
+                _table(rows, shown) for rows in batched(_data_rows(handle, shown), _BATCH_ROWS)
+            ]
     except UnicodeDecodeError as exc:
         message = (
             f"{shown!r}: the file is not valid UTF-8 text ({exc.reason}); "
             "expected a text or gzip DESeq2 table"
         )
         raise InputError(message) from exc
-    except pd.errors.EmptyDataError as exc:
-        message = f"{shown!r}: the file has no header line; expected a header line and rows"
-        raise InputError(message) from exc
-    except pd.errors.ParserError as exc:
-        message = f"{shown!r}: {str(exc).strip()}"
-        raise InputError(message) from exc
-    if table.shape[1] != len(_DESEQ2_COLUMNS):
-        message = (
-            f"{shown!r}: table has {table.shape[1]} columns; "
-            f"expected {len(_DESEQ2_COLUMNS)}: {', '.join(_DESEQ2_COLUMNS)}"
-        )
-        raise InputError(message)
-    table = table.iloc[1:].reset_index(drop=True)
-    table.columns = pd.Index(_DESEQ2_COLUMNS)
-    for name in _NUMERIC_COLUMNS:
-        field = table[name]
-        try:
-            # read.csv of R also reads an empty field as missing, but only in a number column.
-            table[name] = field.where(field != "").astype("float64")
-        except ValueError as exc:
-            message = f"{shown!r}: column {name!r}: {exc}; expected a number, NA, or an empty field"
-            raise InputError(message) from exc
-    return table
+    if not parts:
+        return _table((), shown)
+    return pd.concat(parts, ignore_index=True)
 
 
 def filter_de(

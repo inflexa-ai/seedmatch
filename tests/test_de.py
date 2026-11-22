@@ -1,4 +1,5 @@
 import bz2
+import csv
 import gzip
 import io
 import lzma
@@ -7,7 +8,14 @@ import warnings
 
 import pandas as pd
 import pytest
-from helpers import DATA, NOT_A_DATA_FRAME, damaged_compressed_files, golden_rows, sirna_de
+from helpers import (
+    DATA,
+    NOT_A_DATA_FRAME,
+    damaged_compressed_files,
+    exactly,
+    golden_rows,
+    sirna_de,
+)
 
 import seedmatch
 from seedmatch import de
@@ -202,12 +210,12 @@ def test_read_deseq2_table_rejects_a_row_with_more_fields_than_the_header_D021(
     row = ["g1", "1", "1", "1", "1", "1", "1", "x"]
     rows = [[*row, "y"], *[row] * (extra_rows - 1)]
     text = "\n".join("\t".join(r) for r in [DESEQ2_COLUMNS, *rows]) + "\n"
-    with pytest.raises(InputError, match=r"table\.tsv.*Expected 8 fields in line 2, saw 9"):
+    with pytest.raises(InputError, match=r"table\.tsv.*line 2 has 9 fields; expected at most 8"):
         read_deseq2_table(write_text(tmp_path, text))
 
 
 class FiltersResetOnRead(io.StringIO):
-    """A handle whose read resets the warning filters, as another thread can do at that time.
+    """A handle whose reads reset the warning filters, as another thread can do at that time.
 
     `warnings.catch_warnings` of Python 3.12 restores the filters of the process at its exit.
     """
@@ -215,6 +223,10 @@ class FiltersResetOnRead(io.StringIO):
     def read(self, size=-1):
         warnings.resetwarnings()
         return super().read(size)
+
+    def readline(self, size=-1):
+        warnings.resetwarnings()
+        return super().readline(size)
 
 
 def test_read_deseq2_table_rejects_a_row_with_more_fields_when_another_thread_resets_the_filters(
@@ -226,7 +238,7 @@ def test_read_deseq2_table_rejects_a_row_with_more_fields_when_another_thread_re
     monkeypatch.setattr(de, "open_text", lambda _file: FiltersResetOnRead(text))
     with (
         warnings.catch_warnings(),
-        pytest.raises(InputError, match=r"table\.tsv.*Expected 8 fields in line 2, saw 9"),
+        pytest.raises(InputError, match=r"table\.tsv.*line 2 has 9 fields; expected at most 8"),
     ):
         read_deseq2_table(path)
 
@@ -234,8 +246,121 @@ def test_read_deseq2_table_rejects_a_row_with_more_fields_when_another_thread_re
 def test_read_deseq2_table_rejects_a_later_row_with_more_fields_than_the_header(tmp_path):
     row = ["g1", "1", "1", "1", "1", "1", "1", "x"]
     text = "\n".join("\t".join(r) for r in [DESEQ2_COLUMNS, row, [*row, "y"]]) + "\n"
-    with pytest.raises(InputError, match=r"table\.tsv.*Expected 8 fields in line 3, saw 9"):
+    with pytest.raises(InputError, match=r"table\.tsv.*line 3 has 9 fields; expected at most 8"):
         read_deseq2_table(write_text(tmp_path, text))
+
+
+HEADER_LINE = "\t".join(DESEQ2_COLUMNS)
+
+
+def de_line(gene_id):
+    return f"{gene_id}\t1\t1\t1\t1\t1\t1\tx"
+
+
+def test_read_deseq2_table_names_the_first_line_of_a_row_with_a_quoted_line_end(tmp_path):
+    text = "\n".join([HEADER_LINE, de_line('"A\nB"'), de_line("g2") + "\ty"]) + "\n"
+    with pytest.raises(InputError, match=r"table\.tsv.*line 4 has 9 fields; expected at most 8"):
+        read_deseq2_table(write_text(tmp_path, text))
+
+
+@pytest.mark.parametrize("before", range(8))
+def test_read_deseq2_table_keeps_the_leading_spaces_of_a_field_at_the_end_of_a_parser_buffer(
+    tmp_path, before
+):
+    # The C parser of pandas 2.3.3 reads its input in buffers of 262,144 bytes. With the option
+    # skip_blank_lines, it lost the spaces of a line that starts 1 to 4 bytes before the end.
+    start = 262_144 - before
+    plain = de_line("g") + "\n"
+    space = start - len(HEADER_LINE) - 1
+    count = space // len(plain) - 1
+    last = space - count * len(plain)
+    lines = [
+        HEADER_LINE,
+        *[de_line("g")] * count,
+        de_line("f") + "y" * (last - len(plain)),
+        de_line("    G"),
+        de_line("g"),
+    ]
+    text = "\n".join(lines) + "\n"
+    assert text.index("    G") == start
+    got = read_deseq2_table(write_text(tmp_path, text))
+    assert got["gene_id"].tolist() == ["g"] * count + ["f", "    G", "g"]
+
+
+@pytest.mark.parametrize("line_end", ["\n", "\r\n"])
+def test_read_deseq2_table_skips_only_the_blank_lines_that_r_skips(tmp_path, line_end):
+    # R 4.5.3 `read.csv(path, sep = "\t")` skips a blank line and a line `""`. It reads a row from
+    # a line of spaces or of empty fields.
+    lines = [HEADER_LINE, de_line("g1"), "", '""', "   ", "\t", " \t", de_line("g2")]
+    path = tmp_path / "table.tsv"
+    path.write_bytes((line_end.join(lines) + line_end).encode())
+    got = read_deseq2_table(path)
+    assert got["gene_id"].tolist() == ["g1", "   ", "", " ", "g2"]
+    assert got["baseMean"].isna().tolist() == [False, True, True, True, False]
+
+
+@pytest.mark.parametrize("line_end", ["\n", "\r\n"])
+def test_read_deseq2_table_skips_the_blank_lines_before_the_header(tmp_path, line_end):
+    path = tmp_path / "table.tsv"
+    path.write_bytes((line_end.join(["", "", HEADER_LINE, de_line("g1")]) + line_end).encode())
+    assert read_deseq2_table(path)["gene_id"].tolist() == ["g1"]
+
+
+@pytest.mark.parametrize(
+    ("line", "count"), [('""', 1), ("   ", 1), ("\t", 2), ("\ufeff", 1)], ids=repr
+)
+def test_read_deseq2_table_rejects_a_line_before_the_header_that_r_does_not_skip(
+    tmp_path, line, count
+):
+    # R 4.5.3 `read.csv` reads the line as the header, also a line with only a byte order mark, and
+    # it stops with "more columns than column names".
+    text = "\n".join([line, HEADER_LINE, de_line("g1")]) + "\n"
+    with pytest.raises(InputError, match=rf"table\.tsv.*table has {count} columns; expected 8"):
+        read_deseq2_table(write_text(tmp_path, text))
+
+
+def test_read_deseq2_table_keeps_a_blank_line_in_a_quoted_field(tmp_path):
+    text = "\n".join([HEADER_LINE, de_line('"A\n\nB"'), de_line("g2")]) + "\n"
+    assert read_deseq2_table(write_text(tmp_path, text))["gene_id"].tolist() == ["A\n\nB", "g2"]
+
+
+def test_read_deseq2_table_rejects_a_quoted_field_without_its_closing_quote_D073(tmp_path):
+    path = write_text(tmp_path, "\n".join([HEADER_LINE, de_line("g1"), de_line('"g2')]) + "\n")
+    message = (
+        f"{str(path)!r}: line 3: the quoted field has no closing quote; "
+        "expected a closing quote before the end of the file"
+    )
+    with pytest.raises(InputError, match=exactly(message)):
+        read_deseq2_table(path)
+
+
+def test_read_deseq2_table_gives_the_same_table_from_batches_of_rows(tmp_path, monkeypatch):
+    rows = [de_line("g1"), "NA\tNA\t1\t1\t1\t1\t1\tNA", "", de_line("g3"), "g4\t4", de_line("g5")]
+    path = write_text(tmp_path, "\n".join([HEADER_LINE, *rows]) + "\n")
+    whole = read_deseq2_table(path)
+    monkeypatch.setattr(de, "_BATCH_ROWS", 2)
+    pd.testing.assert_frame_equal(read_deseq2_table(path), whole)
+    assert whole["gene_id"].tolist()[2:] == ["g3", "g4", "g5"]
+    assert whole["symbol"].isna().tolist() == [False, True, False, False, False]
+
+
+def test_read_deseq2_table_fills_a_short_row_as_r_does(tmp_path):
+    # R 4.5.3 `read.csv` gives NA in each number column after the last field, and "" as symbol.
+    got = read_deseq2_table(write_text(tmp_path, f"{HEADER_LINE}\ng3\t3\n"))
+    assert got.iloc[0, :2].tolist() == ["g3", 3.0]
+    assert got.iloc[0, 2:7].isna().all()
+    assert got["symbol"].tolist() == [""]
+
+
+def test_read_deseq2_table_names_the_line_of_a_field_above_the_limit_of_the_csv_module_D073(
+    tmp_path,
+):
+    limit = csv.field_size_limit()
+    lines = [HEADER_LINE, de_line("g" * limit), de_line("g" * (limit + 1))]
+    path = write_text(tmp_path, "\n".join(lines) + "\n")
+    message = f"{str(path)!r}: line 3: field larger than field limit ({limit})"
+    with pytest.raises(InputError, match=exactly(message)):
+        read_deseq2_table(path)
 
 
 @pytest.mark.parametrize("column", ["baseMean", "log2FoldChange", "pvalue", "padj"])
@@ -323,7 +448,8 @@ def test_read_deseq2_table_reads_bzip2_and_xz_from_the_content_as_r_does(tmp_pat
 @pytest.mark.parametrize("name", damaged_compressed_files())
 def test_read_deseq2_table_names_the_file_of_a_damaged_compressed_table(tmp_path, name):
     path = tmp_path / "table.tsv"
-    path.write_bytes(damaged_compressed_files()[name][0])
+    table = "\n".join([HEADER_LINE, *[de_line("g")] * 5000]) + "\n"
+    path.write_bytes(damaged_compressed_files(table.encode())[name][0])
     prefix = f"{str(path)!r}: the compressed data is damaged or truncated ("
     with pytest.raises(InputError, match=re.escape(prefix)) as raised:
         read_deseq2_table(path)
