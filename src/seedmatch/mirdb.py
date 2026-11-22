@@ -37,10 +37,11 @@ def read_mirdb(path: str | os.PathLike[str], *, species: str | None = None) -> p
 
     The columns are `mirdb_id`, `target_refseq_id`, `target_score` (`float64`), `species`, and
     `mirna_name`, as `R/get_data.R` of SeedMatchR names them, and the rows keep the order of the
-    file. The text columns have the dtype `object`. `species` is the text of the ID before the
-    first `-`, and `mirna_name` is the text after it. An ID without `-` gives the full ID as
-    `species` and an empty `mirna_name`. With `species`, the result keeps only the rows of this
-    species code. A code without a row raises `InputError` that lists the codes of the file.
+    file. The text columns have the text dtype of pandas, `object` on pandas 2 and `str` on pandas
+    3. `species` is the text of the ID before the first `-`, and `mirna_name` is the text after
+    it. An ID without `-` gives the full ID as `species` and an empty `mirna_name`. With
+    `species`, the result keeps only the rows of this species code. A code without a row raises
+    `InputError` that lists the codes of the file.
 
     The score is a decimal number with an optional sign and exponent, for example `96.4` or
     `1e2`, and it is finite. Spaces before and after the number are valid, as in R. Another score

@@ -22,6 +22,7 @@ from seedmatch._checks import (
     number_text,
     shown,
 )
+from seedmatch._frames import text_dtype
 from seedmatch._pool import map_in_pool, pool_width
 from seedmatch.errors import InputError
 from seedmatch.search import SearchOptions, count_matches
@@ -100,7 +101,10 @@ def shuffle_null(
     for j, found in enumerate(map_in_pool(count_genes, targets, width)):
         table[j] = found
     return pd.DataFrame(
-        table.T, index=pd.Index(genes, name="gene_id"), columns=pd.RangeIndex(shuffles), copy=False
+        table.T,
+        index=pd.Index(genes, name="gene_id", dtype=text_dtype()),
+        columns=pd.RangeIndex(shuffles),
+        copy=False,
     )
 
 

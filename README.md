@@ -404,7 +404,7 @@ This version has these parts:
 
 ## Installation
 
-Python 3.12 or later is necessary. seedmatch uses pandas 2.2 or later, but not pandas 3, because pandas 3 changes the dtype of a text column. Install seedmatch from GitHub:
+Python 3.12 or later is necessary. seedmatch uses pandas 2.2 or later. A text column of a table that seedmatch returns has the dtype that the installed pandas gives a column of text: `object` on pandas 2, and `str` on pandas 3. Install seedmatch from GitHub:
 
 ```bash
 uv pip install git+https://github.com/inflexa-ai/seedmatch.git

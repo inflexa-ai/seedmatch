@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from annotation_cases import fixture_reference
-from helpers import DATA, exactly, golden
+from helpers import DATA, TEXT_DTYPE, exactly, golden
 
 import seedmatch
 from seedmatch.errors import InputError, SeedMatchWarning
@@ -48,7 +48,7 @@ def counts_of(*rows):
 def expected_frame(aggregator):
     return pd.DataFrame(
         {
-            "gene_id": pd.Series([gene(n) for n in EXPECTED["gene_id"]], dtype=object),
+            "gene_id": pd.Series([gene(n) for n in EXPECTED["gene_id"]], dtype=TEXT_DTYPE),
             "seed_count": pd.Series(EXPECTED["seed_count"], dtype=np.float64),
             "neighbors": pd.Series(EXPECTED["neighbors"], dtype=np.int64),
             "score": pd.Series(EXPECTED[aggregator], dtype=np.float64),
@@ -71,7 +71,7 @@ def symmetric(*pairs):
 def test_string_scores_give_the_mean_of_the_neighbors():
     got = string_scores(sample_network(percentile=0), sample_de(), column=COLUMN)
     pd.testing.assert_frame_equal(got, expected_frame(Aggregator.MEAN), check_exact=True)
-    assert [str(dtype) for dtype in got.dtypes] == ["object", "float64", "int64", "float64"]
+    assert [str(dtype) for dtype in got.dtypes] == [TEXT_DTYPE, "float64", "int64", "float64"]
     assert isinstance(got.index, pd.RangeIndex)
 
 
@@ -396,7 +396,7 @@ def test_string_scores_reject_a_network_with_a_column_twice():
         ({"de": [1, 2]}, "de has type list; expected a pandas.DataFrame"),
         (
             {"de": sample_de().assign(**{COLUMN: ["a", "b", "c", "d"]})},
-            "column 'mer7m8' has dtype object; expected a numeric dtype",
+            f"column 'mer7m8' has dtype {TEXT_DTYPE}; expected a numeric dtype",
         ),
         (
             {"de": sample_de().assign(gene_id=[1, 2, 3, 4])},

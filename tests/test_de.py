@@ -11,6 +11,7 @@ import pytest
 from helpers import (
     DATA,
     NOT_A_DATA_FRAME,
+    TEXT_DTYPE,
     damaged_compressed_files,
     exactly,
     golden_rows,
@@ -183,6 +184,7 @@ def test_read_deseq2_table_reads_gene_id_and_symbol_as_text(tmp_path):
     got = read_deseq2_table(write_text(tmp_path, text))
     assert got["gene_id"].tolist() == ["0012", "34"]
     assert got["symbol"].tolist() == ["5", "6"]
+    assert [str(got[name].dtype) for name in ("gene_id", "symbol")] == [TEXT_DTYPE] * 2
 
 
 def test_read_deseq2_table_names_the_column_with_a_value_that_is_not_a_number_D021(tmp_path):

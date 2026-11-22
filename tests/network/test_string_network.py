@@ -4,7 +4,7 @@ import re
 import pandas as pd
 import pytest
 from annotation_cases import ANNOTATION, ENSDB, copy_ensdb, fixture_reference
-from helpers import DATA, exactly, golden
+from helpers import DATA, TEXT_DTYPE, exactly, golden
 
 import seedmatch
 from seedmatch.annotation.reference import Reference
@@ -99,7 +99,7 @@ def test_string_gene_network_gives_the_table_of_the_documentation():
     got = network_of(percentile=0)
     assert isinstance(got, GeneNetwork)
     assert list(got.edges.columns) == ["gene1", "gene2", "combined_score"]
-    assert [str(dtype) for dtype in got.edges.dtypes] == ["object", "object", "int64"]
+    assert [str(dtype) for dtype in got.edges.dtypes] == [TEXT_DTYPE, TEXT_DTYPE, "int64"]
     assert isinstance(got.edges.index, pd.RangeIndex)
     assert type(got.unmapped_proteins) is tuple
     with pytest.raises(dataclasses.FrozenInstanceError):

@@ -4,7 +4,7 @@ from typing import assert_never
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import GUIDE, NOT_A_DATA_FRAME, exactly, golden, sirna_seqs
+from helpers import GUIDE, NOT_A_DATA_FRAME, TEXT_DTYPE, exactly, golden, sirna_seqs
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -201,9 +201,20 @@ def test_match_distances_rejects_an_anchor_as_text():
         match_distances(case_matches("synthetic"), anchor="center")
 
 
+def test_ids_that_are_not_text_keep_their_values():
+    matches = pd.DataFrame(
+        {"seq_id": [7, 7], "gene_id": [70, 70], "start": [1, 9], "end": [5, 13], "width": [5, 5]}
+    )
+    got = match_distances(matches)
+    assert got["seq_id"].tolist() == [7]
+    assert got["gene_id"].tolist() == [70]
+    assert type(got["seq_id"][0]) is int
+
+
 def test_an_empty_table_gives_an_empty_result():
     got = match_distances(case_matches("synthetic").iloc[:0])
     assert list(got.columns) == COLUMNS
     assert len(got) == 0
+    assert [str(got[name].dtype) for name in ("seq_id", "gene_id")] == [TEXT_DTYPE] * 2
     assert got["distance"].dtype == np.float64
     assert isinstance(got.index, pd.RangeIndex)

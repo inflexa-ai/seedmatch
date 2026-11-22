@@ -17,6 +17,7 @@ from seedmatch._checks import (
     concatenate_and_clear,
     shown,
 )
+from seedmatch._frames import with_text_dtype
 from seedmatch._pool import map_in_pool, pool_width
 from seedmatch.errors import InputError
 from seedmatch.evalue import shuffle_null
@@ -128,7 +129,7 @@ def wobble_bulge_patterns(
     check_type("options", options, WobbleBulgeOptions)
     target = _wobble_target(guide).sequence
     after, size = _shapes(options)
-    return pd.DataFrame(
+    patterns = pd.DataFrame(
         {
             "pattern": [
                 _pattern(target, a, s) for a, s in zip(after.tolist(), size.tolist(), strict=True)
@@ -137,6 +138,7 @@ def wobble_bulge_patterns(
             "bulge_size": size,
         }
     )
+    return with_text_dtype(patterns, ("pattern",))
 
 
 def _search_pattern(
@@ -237,7 +239,7 @@ def wobble_bulge_matches(
     seq_ids = np.array(sequences.ids, dtype=object)
     gene_ids = np.array(sequences.gene_ids, dtype=object)
     width = _TARGET_LENGTH + size[number]
-    return pd.DataFrame(
+    matches = pd.DataFrame(
         {
             "seq_id": seq_ids[index],
             "gene_id": gene_ids[index],
@@ -248,6 +250,7 @@ def wobble_bulge_matches(
             "bulge_size": size[number],
         }
     )
+    return with_text_dtype(matches, ("seq_id", "gene_id"))
 
 
 # Each keyword-only parameter is an independent option of the search, so no parameter object fits.

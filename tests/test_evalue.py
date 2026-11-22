@@ -1,9 +1,10 @@
+import contextlib
 import inspect
 
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import GUIDE, NOT_A_DATA_FRAME, exactly, golden, sirna_seqs
+from helpers import GUIDE, NOT_A_DATA_FRAME, TEXT_DTYPE, exactly, golden, sirna_seqs
 
 from seedmatch import (
     Guide,
@@ -206,6 +207,7 @@ def test_e_value_null_of_a_set_without_sequences_has_no_row():
     null = e_value_null(Guide(GUIDE), empty, rng=1, n_random=3)
     assert null.shape == (0, 3)
     assert null.index.name == "gene_id"
+    assert str(null.index.dtype) == TEXT_DTYPE
     assert (null.dtypes == np.int32).all()
 
 
@@ -216,11 +218,17 @@ def test_e_value_null_gives_one_int32_block():
 
 
 def test_e_value_null_gives_the_frame_the_memory_of_the_table_under_copy_on_write(monkeypatch):
-    """Pandas 3 has copy-on-write by default, and then a frame made without `copy=False` copies."""
+    """pandas 3 always has copy-on-write, and then a frame made without `copy=False` copies."""
     sequences = sirna_seqs()
     table = np.empty((4, len(set(sequences.gene_ids))), dtype=np.int32)
     monkeypatch.setattr(evalue_module, "_result_table", lambda *_: table)
-    with pd.option_context("mode.copy_on_write", True):  # noqa: FBT003 - the API takes pairs
+    # pandas 2 has copy-on-write only with the option, and pandas 3 deprecates the option.
+    copy_on_write = (
+        pd.option_context("mode.copy_on_write", True)  # noqa: FBT003 - the API takes pairs
+        if pd.__version__.startswith("2.")
+        else contextlib.nullcontext()
+    )
+    with copy_on_write:
         null = e_value_null(Guide(GUIDE), sequences, rng=1, n_random=4)
     assert np.shares_memory(null.to_numpy(), table)
 
@@ -559,7 +567,7 @@ def test_e_values_reject_gene_ids_that_are_not_text():
 
 def test_e_values_reject_a_count_column_that_is_not_numeric():
     de = pd.DataFrame({"gene_id": ["a"], "mer7m8": ["1"]})
-    message = "column 'mer7m8' has dtype object; expected a numeric dtype"
+    message = f"column 'mer7m8' has dtype {TEXT_DTYPE}; expected a numeric dtype"
     with pytest.raises(InputError, match=exactly(message)):
         e_values(de, make_null(NOTE_NULL), column="mer7m8")
 
@@ -594,6 +602,6 @@ def test_e_values_reject_a_null_that_repeats_a_column_label():
 
 def test_e_values_reject_a_null_with_a_column_that_is_not_numeric():
     null = pd.DataFrame({0: [1, 2], 1: ["x", "y"]}, index=pd.Index(["a", "b"], name="gene_id"))
-    message = "column 1 has dtype object; expected a numeric dtype"
+    message = f"column 1 has dtype {TEXT_DTYPE}; expected a numeric dtype"
     with pytest.raises(InputError, match=exactly(message)):
         e_values(make_de(["a"], [1]), null, column="mer7m8")

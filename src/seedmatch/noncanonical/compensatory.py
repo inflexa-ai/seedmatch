@@ -16,6 +16,7 @@ from seedmatch._checks import (
     concatenate_and_clear,
     shown,
 )
+from seedmatch._frames import with_text_dtype
 from seedmatch._pool import map_in_pool, pool_width
 from seedmatch.errors import InputError
 from seedmatch.search import MAX_PATTERN_LENGTH, SearchOptions, match_ranges
@@ -288,7 +289,7 @@ def _frame(
     percent = [(text.count("G") + text.count("C")) / len(text) * 100 for text in targets]
     seed_start = seeds.start[seed]
     index = seeds.sequence[seed]
-    return pd.DataFrame(
+    sites = pd.DataFrame(
         {
             "seq_id": np.array(sequences.ids, dtype=object)[index],
             "gene_id": np.array(sequences.gene_ids, dtype=object)[index],
@@ -305,6 +306,7 @@ def _frame(
             "gc_content": np.array(percent, dtype=np.float64)[inverse],
         }
     )
+    return with_text_dtype(sites, ("seq_id", "gene_id", "region_target"))
 
 
 def compensatory_sites(
@@ -335,14 +337,15 @@ def compensatory_sites(
 
     The columns are `seq_id`, `gene_id`, `seed_start`, `seed_end`, `seed_mismatches`,
     `region_start`, `region_end`, `region_length`, `guide_start`, `guide_end`, `region_target`,
-    `distance`, and `gc_content`. The text columns are `object`, `gc_content` is `float64`, and the
-    other columns are `int64`. The coordinates are 1-based and inclusive. `region_target` is the
-    reverse complement of the DNA text of the window, the pattern of the search, and `gc_content` is
-    its percentage of `G` and `C`. With `max_region_mismatch` above 0, the text in the sequence can
-    differ from `region_target`. The columns `guide_start` and `guide_end` give the window of the
-    row (`D-054`). The rows come in the order of the set, and then of `seed_start`, `region_start`,
-    `region_end`, and `guide_start`, with a `RangeIndex`. `workers` is the width of the thread pool,
-    and `None` is the number of CPUs. The result does not depend on `workers`.
+    `distance`, and `gc_content`. The text columns have the text dtype of pandas, `gc_content` is
+    `float64`, and the other columns are `int64`. The coordinates are 1-based and inclusive.
+    `region_target` is the reverse complement of the DNA text of the window, the pattern of the
+    search, and `gc_content` is its percentage of `G` and `C`. With `max_region_mismatch` above 0,
+    the text in the sequence can differ from `region_target`. The columns `guide_start` and
+    `guide_end` give the window of the row (`D-054`). The rows come in the order of the set, and
+    then of `seed_start`, `region_start`, `region_end`, and `guide_start`, with a `RangeIndex`.
+    `workers` is the width of the thread pool, and `None` is the number of CPUs. The result does not
+    depend on `workers`.
 
     The function does `options.max_seed_mismatch` + 1 searches for the seed matches, and then one
     search for each window. A guide of N bases has W windows, the sum of N - `first_position` - l +

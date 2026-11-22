@@ -28,6 +28,16 @@ uv run mypy
 uv run pytest
 ```
 
+`uv sync` installs the versions of the inflexa sandbox, which `constraint-dependencies` in `pyproject.toml` pins. The CI also runs the tests with the latest versions, for example pandas 3. To do this test on your machine, run these commands:
+
+```bash
+uv venv tmp/latest
+VIRTUAL_ENV=tmp/latest uv pip install --no-config -e ".[plot]" --group dev pyarrow
+tmp/latest/bin/python -m pytest
+```
+
+`--no-config` makes uv skip the pins in `pyproject.toml`.
+
 The tests disable the sockets. A test that opens a network connection fails.
 
 ### Do the tests on a real reference

@@ -6,7 +6,16 @@ import warnings
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import DATA, NOT_UTF8, assert_frame_matches_golden, exactly, golden, golden_note
+from helpers import (
+    DATA,
+    NOT_UTF8,
+    OBJECT_TEXT_ONLY,
+    TEXT_DTYPE,
+    assert_frame_matches_golden,
+    exactly,
+    golden,
+    golden_note,
+)
 
 import seedmatch
 from seedmatch.errors import InputError, SeedMatchWarning
@@ -53,7 +62,7 @@ def note_lines(case):
 def expected_scores(*, seed, repressors, repression, activators, activation):
     return pd.DataFrame(
         {
-            "gene": pd.Series(GENES, dtype=object),
+            "gene": pd.Series(GENES, dtype=TEXT_DTYPE),
             "seed": pd.Series(seed, dtype=bool),
             "repressors": pd.Series(repressors, dtype=np.int64),
             "repression_score": pd.Series(repression, dtype=np.float64),
@@ -80,7 +89,7 @@ def test_read_trrust_matches_r_without_a_header():
     got = read_trrust(SAMPLE)
     assert len(got) == 10
     assert list(got.columns) == ["source", "target", "edge_type", "evidence"]
-    assert [str(dtype) for dtype in got.dtypes] == ["object"] * 4
+    assert [str(dtype) for dtype in got.dtypes] == [TEXT_DTYPE] * 4
     assert isinstance(got.index, pd.RangeIndex)
     assert_frame_matches_golden(got, ROWS)
 
@@ -290,6 +299,7 @@ def test_read_trrust_keeps_a_u_feff_after_the_start_of_the_file(
     assert read_trrust(path)["source"].tolist() == sources
 
 
+@OBJECT_TEXT_ONLY
 @pytest.mark.parametrize("chunk", [None, 1])
 def test_read_trrust_shares_equal_texts(monkeypatch, chunk):
     if chunk is not None:

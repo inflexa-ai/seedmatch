@@ -12,6 +12,7 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from seedmatch._checks import as_flag, as_limit, check_not_negative, check_type
+from seedmatch._frames import with_text_dtype
 from seedmatch.errors import InputError
 from seedmatch.search import kernels
 from seedmatch.search.compat import compat_table
@@ -163,7 +164,7 @@ def find_matches(
     index, starts, ends = match_ranges(pattern, sequences, options)
     seq_ids = np.array(sequences.ids, dtype=object)
     gene_ids = np.array(sequences.gene_ids, dtype=object)
-    return pd.DataFrame(
+    matches = pd.DataFrame(
         {
             "seq_id": seq_ids[index],
             "gene_id": gene_ids[index],
@@ -172,3 +173,4 @@ def find_matches(
             "width": ends - starts + 1,
         }
     )
+    return with_text_dtype(matches, ("seq_id", "gene_id"))

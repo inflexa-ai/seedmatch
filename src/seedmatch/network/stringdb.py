@@ -51,10 +51,10 @@ _CHUNK_LINES: Final = 2**16
 class StringLinks:
     """The links of the STRING network with a score above the cutoff, and the cutoff.
 
-    `links` has the columns `protein1` and `protein2` (`object`, equal texts are one object) and
-    `combined_score` (`int64`), and a `RangeIndex`. The rows keep the order of the file. `cutoff`
-    is the percentile of the scores of the links that the file holds with the score threshold or
-    more.
+    `links` has the text columns `protein1` and `protein2`, the column `combined_score` (`int64`),
+    and a `RangeIndex`. On pandas 2, equal texts are one object. The rows keep the order of the
+    file. `cutoff` is the percentile of the scores of the links that the file holds with the score
+    threshold or more.
     """
 
     links: pd.DataFrame
@@ -301,7 +301,7 @@ def _check_rows(
 class GeneNetwork:
     """The gene pairs of STRING links, and the proteins that have no gene.
 
-    `edges` has the columns `gene1` and `gene2` (`object`) and `combined_score` (`int64`), and a
+    `edges` has the text columns `gene1` and `gene2`, the column `combined_score` (`int64`), and a
     `RangeIndex`. It has a row for each order of each gene pair. `unmapped_proteins` holds the
     STRING ID of each protein that the annotation maps to no gene, in the order of their first
     occurrence in `protein1` and then in `protein2`.
@@ -465,7 +465,7 @@ def string_scores(
     neighbors. A gene of the network has a neighbor, thus no score is NaN.
 
     The result has one row for each gene, in the order of the first occurrence of the gene in
-    `gene1` and then in `gene2`, and a `RangeIndex`. The columns are `gene_id` (`object`),
+    `gene1` and then in `gene2`, and a `RangeIndex`. The columns are `gene_id` (text),
     `seed_count` (`float64`), `neighbors` (`int64`), and `score` (`float64`).
 
     These inputs raise `InputError`:

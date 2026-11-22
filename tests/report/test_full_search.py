@@ -3,7 +3,7 @@ import dataclasses
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import GUIDE, assert_frame_matches_golden, golden, sirna_seqs
+from helpers import GUIDE, TEXT_DTYPE, assert_frame_matches_golden, golden, sirna_seqs
 
 import seedmatch
 from seedmatch import (
@@ -87,7 +87,9 @@ def test_best_match_of_a_frame_without_count_columns_is_no_matches_D012():
 
 
 def test_best_match_of_a_frame_without_rows_is_empty_D012():
-    assert best_match(pd.DataFrame({"Full.mm0": pd.Series(dtype="int64")})).tolist() == []
+    got = best_match(pd.DataFrame({"Full.mm0": pd.Series(dtype="int64")}))
+    assert got.tolist() == []
+    assert str(got.dtype) == TEXT_DTYPE
 
 
 def test_best_match_ranks_the_columns_in_the_order_of_r():
@@ -429,8 +431,8 @@ def test_full_search_of_an_empty_set_has_the_dtypes_of_a_set_with_sequences():
     empty = full_search(Guide(GUIDE), SequenceSet.from_records([]))
     full = full_search(Guide(GUIDE), seqs_of(SUBJECT_WITH_EVERY_SEED))
     assert empty.dtypes.to_dict() == full.dtypes.to_dict()
-    assert empty["seq_id"].dtype == object
-    assert empty["gene_id"].dtype == object
+    assert str(empty["seq_id"].dtype) == TEXT_DTYPE
+    assert str(empty["gene_id"].dtype) == TEXT_DTYPE
 
 
 def test_full_search_ranges_order_follows_the_grid_of_r():
@@ -486,16 +488,16 @@ def test_full_search_ranges_row_fields():
         ["t0", "t0", 19, 25, 7, "mer7m8.mm0.indelFALSE", "CTCTATA", 0, False, "g"],
     ]
     assert got.dtypes.astype(str).to_dict() == {
-        "seq_id": "object",
-        "gene_id": "object",
+        "seq_id": TEXT_DTYPE,
+        "gene_id": TEXT_DTYPE,
         "start": "int64",
         "end": "int64",
         "width": "int64",
-        "query": "object",
-        "target_seq": "object",
+        "query": TEXT_DTYPE,
+        "target_seq": TEXT_DTYPE,
         "edit_distance": "int64",
         "indels": "bool",
-        "group": "object",
+        "group": TEXT_DTYPE,
     }
 
 

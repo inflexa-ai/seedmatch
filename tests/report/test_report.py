@@ -8,6 +8,7 @@ import pytest
 from helpers import (
     GUIDE,
     NOT_A_DATA_FRAME,
+    TEXT_DTYPE,
     assert_frame_matches_golden,
     sirna_de,
     sirna_seqs,
@@ -258,6 +259,8 @@ def test_a_gene_with_no_match_is_in_no_row():
 def test_an_empty_sequence_set_and_a_typed_empty_de_table_give_zero_counts():
     got = seed_match_report(empty_de(), seqs_of(), Guide(GUIDE))
     assert got.matches.empty
+    text_columns = got.matches[["seq_id", "gene_id", "group", "best_match"]]
+    assert [str(dtype) for dtype in text_columns.dtypes] == [TEXT_DTYPE] * 4
     assert (got.report[[*REPORT_CATEGORIES, "Total"]] == 0).all().all()
 
 
@@ -297,7 +300,7 @@ def test_gene_ids_of_a_text_dtype_match(dtype):
     de = de_of(("a", FOLD_CHANGE, PADJ, 5.0)).astype({"gene_id": dtype})
     got = seed_match_report(de, seqs_of(("a", SITE_8MER)), Guide(GUIDE))
     assert got.matches["detected"].tolist() == [True]
-    assert got.matches["gene_id"].dtype == object
+    assert str(got.matches["gene_id"].dtype) == TEXT_DTYPE
 
 
 def test_the_de_columns_of_integers_become_float64():
@@ -431,7 +434,8 @@ def test_a_gene_id_column_that_is_not_text_is_an_error_that_names_the_dtype():
 def test_a_column_that_is_not_numeric_is_an_error_that_names_the_column_and_the_dtype_D024(column):
     de = de_of(("a", FOLD_CHANGE, PADJ, 5.0)).astype({column: "object"})
     de[column] = "x"
-    with pytest.raises(InputError, match=f"column '{column}' has dtype object; expected a numeric"):
+    message = f"column '{column}' has dtype {TEXT_DTYPE}; expected a numeric"
+    with pytest.raises(InputError, match=message):
         seed_match_report(de, seqs_of(("a", SITE_8MER)), Guide(GUIDE))
 
 

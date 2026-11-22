@@ -4,7 +4,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import DATA, GUIDE, exactly, golden_note, golden_rows, sirna_seqs
+from helpers import DATA, GUIDE, TEXT_DTYPE, exactly, golden_note, golden_rows, sirna_seqs
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -198,7 +198,7 @@ def test_a_set_without_a_site_gives_an_empty_frame():
     assert got.empty
     assert list(got.columns) == COLUMNS
     assert got[INTEGER_COLUMNS].dtypes.tolist() == [np.int64] * len(INTEGER_COLUMNS)
-    assert got[TEXT_COLUMNS].dtypes.tolist() == [object] * 3
+    assert [str(dtype) for dtype in got[TEXT_COLUMNS].dtypes] == [TEXT_DTYPE] * 3
     assert got["gc_content"].dtype == np.float64
     assert isinstance(got.index, pd.RangeIndex)
 
@@ -208,7 +208,7 @@ def test_a_seed_match_without_a_region_gives_an_empty_frame():
     assert got.empty
     assert list(got.columns) == COLUMNS
     assert got[INTEGER_COLUMNS].dtypes.tolist() == [np.int64] * len(INTEGER_COLUMNS)
-    assert got[TEXT_COLUMNS].dtypes.tolist() == [object] * 3
+    assert [str(dtype) for dtype in got[TEXT_COLUMNS].dtypes] == [TEXT_DTYPE] * 3
     assert got["gc_content"].dtype == np.float64
 
 
@@ -222,7 +222,7 @@ def test_an_empty_set_an_empty_sequence_and_a_short_sequence_give_an_empty_frame
     assert got.empty
     assert list(got.columns) == COLUMNS
     assert got[INTEGER_COLUMNS].dtypes.tolist() == [np.int64] * len(INTEGER_COLUMNS)
-    assert got[TEXT_COLUMNS].dtypes.tolist() == [object] * 3
+    assert [str(dtype) for dtype in got[TEXT_COLUMNS].dtypes] == [TEXT_DTYPE] * 3
     assert got["gc_content"].dtype == np.float64
     assert isinstance(got.index, pd.RangeIndex)
 
@@ -233,7 +233,7 @@ def test_the_columns_the_dtypes_and_the_gene_ids_of_a_site():
     got = compensatory_sites(Guide(GUIDE), sequences, options=CompensatoryOptions(first_position=8))
     assert list(got.columns) == COLUMNS
     assert got[INTEGER_COLUMNS].dtypes.tolist() == [np.int64] * len(INTEGER_COLUMNS)
-    assert got[TEXT_COLUMNS].dtypes.tolist() == [object] * 3
+    assert [str(dtype) for dtype in got[TEXT_COLUMNS].dtypes] == [TEXT_DTYPE] * 3
     assert got["gc_content"].dtype == np.float64
     assert got.to_dict("records") == [
         {

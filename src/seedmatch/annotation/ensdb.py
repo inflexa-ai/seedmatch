@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from seedmatch._frames import with_text_dtype
 from seedmatch._io import COORDINATE_MAX, limit_text, local_path
 from seedmatch.annotation.filters import STANDARD_CHROMOSOMES, TranscriptFilter
 from seedmatch.errors import InputError
@@ -96,6 +97,7 @@ _DTYPES: Final = {
     "support_level": "Int64",
     "canonical": "boolean",
 }
+_TEXT_COLUMNS: Final = tuple(name for name in _COLUMNS if name not in _DTYPES)
 STRAND_SYMBOLS: Final = {1: "+", -1: "-"}
 
 
@@ -410,7 +412,7 @@ class AnnotationDb:
         if unknown.any():
             position = int(unknown.to_numpy().argmax())
             raise self._strand_error(frame["tx_id"].iloc[position], frame["strand"].iloc[position])
-        return frame.assign(strand=strand).astype(_DTYPES)
+        return with_text_dtype(frame.assign(strand=strand).astype(_DTYPES), _TEXT_COLUMNS)
 
     def _check_exon_columns(self, columns: Sequence[tuple[object, ...]]) -> None:
         """Raise `InputError` for a number of a chunk of `exon_rows` that is not valid.

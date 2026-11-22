@@ -3,7 +3,7 @@ import re
 
 import numpy as np
 import pytest
-from helpers import NOT_UTF8
+from helpers import NOT_UTF8, OBJECT_TEXT_ONLY, TEXT_DTYPE
 
 from seedmatch._lines import (
     LINE_LIMIT,
@@ -204,17 +204,23 @@ def test_field_lines_name_the_line_and_the_reason_of_text_that_is_not_utf8(line,
     assert str(lines.error) == f"'f': line 13: {NOT_UTF8.format(reason)}"
 
 
-def test_frame_of_keeps_the_memory_and_the_dtype_of_each_array():
+def test_frame_of_gives_an_object_array_the_text_dtype_and_keeps_a_number_array():
+    texts = np.array(["a", "b"], dtype=object)
+    scores = np.array([1.5, 2.5])
+    frame = frame_of({"first": texts, "score": scores})
+    assert list(frame.columns) == ["first", "score"]
+    assert str(frame["first"].dtype) == TEXT_DTYPE
+    assert frame["score"].dtype == np.dtype(np.float64)
+    assert np.shares_memory(frame["score"].to_numpy(), scores)
+
+
+@OBJECT_TEXT_ONLY
+def test_frame_of_keeps_the_memory_of_each_text_array_on_pandas_2():
     first_texts = np.array(["a", "b"], dtype=object)
     second_texts = np.array(["c", "d"], dtype=object)
-    scores = np.array([1.5, 2.5])
-    frame = frame_of({"first": first_texts, "second": second_texts, "score": scores})
-    assert list(frame.columns) == ["first", "second", "score"]
-    assert frame["first"].dtype == np.dtype(object)
-    assert frame["score"].dtype == np.dtype(np.float64)
+    frame = frame_of({"first": first_texts, "second": second_texts})
     assert np.shares_memory(frame["first"].to_numpy(), first_texts)
     assert np.shares_memory(frame["second"].to_numpy(), second_texts)
-    assert np.shares_memory(frame["score"].to_numpy(), scores)
 
 
 def test_read_chunks_give_the_first_line_number_of_each_chunk():
@@ -323,7 +329,7 @@ def test_parse_data_lines_keep_hash_quote_and_na_as_text():
         "y": ["'b", '"d', "", '"g'],
         "z": ['"c', "NA", "#", "h'"],
     }
-    assert [str(dtype) for dtype in frame.dtypes] == ["object"] * 3
+    assert [str(dtype) for dtype in frame.dtypes] == [TEXT_DTYPE] * 3
 
 
 def test_parse_data_lines_give_the_dtype_to_the_parser():
@@ -335,7 +341,7 @@ def test_parse_data_lines_give_the_dtype_to_the_parser():
         names=["x", "y", "z"],
         dtype={"x": str, "y": np.int64, "z": np.float64},
     )
-    assert [str(dtype) for dtype in frame.dtypes] == ["object", "int64", "float64"]
+    assert [str(dtype) for dtype in frame.dtypes] == [TEXT_DTYPE, "int64", "float64"]
     assert frame["y"].tolist() == [5, 6]
 
 

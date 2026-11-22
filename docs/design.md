@@ -43,7 +43,9 @@ The source of truth for behavior is the SeedMatchR repository at commit `2fc0c4f
 - The runtime dependencies come only from the inflexa package-store lock (`../inflexa/images/package-store/lock.amd64.json`):
   - required: `numpy`, `pandas`, `scipy`, `numba`
   - extra `plot`: `matplotlib`
-- `pyproject.toml` sets `pandas<3`. pandas 3 gives a text column the dtype `str`, not `object`, thus the tables of the port change their dtypes and some messages.
+- A text column of a table that the port returns has the dtype that the installed pandas gives a column of text: `object` on pandas 2, and `str` on pandas 3. An empty table has the same dtype. pandas 3 gives `object` to an empty column, thus each function that makes a table sets the dtype with `_frames.with_text_dtype`.
+- A message that names the dtype of a column of the caller names the dtype that the column has, for example `str` on pandas 3.
+- The CI tests the versions of the sandbox lock. One more job installs the latest versions without `constraint-dependencies`, for example pandas 3.
 - The genome readers use only the standard library (`mmap`, `zlib`, `sqlite3`) and numpy. Thus the port reads a BGZF FASTA genome without an extra.
 - A new runtime dependency must have an entry in the inflexa manifest. Thus, do not add one.
 - The wheel is pure Python. The inflexa build images have no Rust toolchain. Numba compiles the search kernels at run time.

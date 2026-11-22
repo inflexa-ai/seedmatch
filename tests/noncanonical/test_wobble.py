@@ -3,7 +3,7 @@ import inspect
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import GUIDE, exactly, golden_note, golden_rows, sirna_de, sirna_seqs
+from helpers import GUIDE, TEXT_DTYPE, exactly, golden_note, golden_rows, sirna_de, sirna_seqs
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -314,7 +314,7 @@ def test_empty_and_short_sequences_give_an_empty_frame(records):
     assert got.empty
     assert list(got.columns) == MATCH_COLUMNS
     assert got[INTEGER_COLUMNS].dtypes.tolist() == [np.int64] * 5
-    assert got[["seq_id", "gene_id"]].dtypes.tolist() == [object, object]
+    assert [str(dtype) for dtype in got[["seq_id", "gene_id"]].dtypes] == [TEXT_DTYPE] * 2
     assert isinstance(got.index, pd.RangeIndex)
 
 
@@ -626,6 +626,7 @@ def test_wobble_bulge_null_of_a_set_without_sequences_has_no_row():
     null = wobble_bulge_null(Guide(GUIDE), empty, rng=1, n_random=3)
     assert null.shape == (0, 3)
     assert null.index.name == "gene_id"
+    assert str(null.index.dtype) == TEXT_DTYPE
     assert (null.dtypes == np.int32).all()
 
 

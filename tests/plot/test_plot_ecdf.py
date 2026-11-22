@@ -8,7 +8,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import exactly, golden_note, golden_rows, sirna_de
+from helpers import TEXT_DTYPE, exactly, golden_note, golden_rows, sirna_de
 from matplotlib.colors import to_hex
 from matplotlib.text import Text
 
@@ -470,7 +470,7 @@ def test_plot_ecdf_rejects_a_de_without_log2_fold_change():
 
 def test_plot_ecdf_rejects_a_text_log2_fold_change():
     de = sirna_de().astype({"log2FoldChange": str})
-    message = "column 'log2FoldChange' has dtype object; expected a numeric dtype"
+    message = f"column 'log2FoldChange' has dtype {TEXT_DTYPE}; expected a numeric dtype"
     with pytest.raises(InputError, match=exactly(message)):
         plot_ecdf(de, groups_of(sirna_de()), ks_result(sirna_de()))
 

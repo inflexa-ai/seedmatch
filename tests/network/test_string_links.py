@@ -5,7 +5,16 @@ import warnings
 
 import pandas as pd
 import pytest
-from helpers import DATA, NOT_UTF8, exactly, golden, golden_note, golden_rows
+from helpers import (
+    DATA,
+    NOT_UTF8,
+    OBJECT_TEXT_ONLY,
+    TEXT_DTYPE,
+    exactly,
+    golden,
+    golden_note,
+    golden_rows,
+)
 
 import seedmatch
 from seedmatch.errors import InputError
@@ -64,7 +73,7 @@ def test_read_string_links_give_the_table_of_the_documentation():
     assert got.cutoff == 897.4999999999999
     assert type(got.cutoff) is float
     assert list(got.links.columns) == ["protein1", "protein2", "combined_score"]
-    assert [str(dtype) for dtype in got.links.dtypes] == ["object", "object", "int64"]
+    assert [str(dtype) for dtype in got.links.dtypes] == [TEXT_DTYPE, TEXT_DTYPE, "int64"]
     assert isinstance(got.links.index, pd.RangeIndex)
     assert got.links.to_numpy().tolist() == [
         [PROTEIN_1, PROTEIN_6, 900],
@@ -445,6 +454,7 @@ def test_read_string_links_name_a_bad_header_before_a_later_bad_line(tmp_path, m
         read_string_links(path)
 
 
+@OBJECT_TEXT_ONLY
 def test_read_string_links_share_equal_texts():
     links = read_string_links(SAMPLE, percentile=0.5).links
     assert links["protein1"][0] is links["protein2"][2]

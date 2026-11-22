@@ -10,6 +10,7 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from seedmatch._checks import check_offsets, check_vector
+from seedmatch._frames import with_text_dtype
 from seedmatch._io import COORDINATE_MAX, limit_text
 from seedmatch.annotation.ensdb import ExonRows
 from seedmatch.annotation.filters import FeatureType, PerGene
@@ -108,7 +109,7 @@ class Features:
         """Return one row for each range, with the rank of the range in its feature from 1."""
         feature = np.repeat(np.arange(len(self)), np.diff(self.offsets))
         rank = np.arange(len(self.starts)) - self.offsets[feature] + 1
-        return pd.DataFrame(
+        frame = pd.DataFrame(
             {
                 "id": np.array(self.ids, dtype=object)[feature],
                 "gene_id": np.array(self.gene_ids, dtype=object)[feature],
@@ -119,6 +120,7 @@ class Features:
                 "end": self.ends,
             }
         )
+        return with_text_dtype(frame, ("id", "gene_id", "contig", "strand"))
 
 
 def derive_features(rows: ExonRows, feature: FeatureType, per_gene: PerGene) -> Features:

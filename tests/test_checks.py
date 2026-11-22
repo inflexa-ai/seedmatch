@@ -8,7 +8,7 @@ from fractions import Fraction
 import numpy as np
 import pandas as pd
 import pytest
-from helpers import NOT_A_DATA_FRAME, exactly
+from helpers import NOT_A_DATA_FRAME, TEXT_DTYPE, exactly
 
 from seedmatch import Guide
 from seedmatch._checks import (
@@ -234,7 +234,7 @@ def test_as_items_names_a_value_that_is_not_iterable_and_the_index_of_a_bad_item
         (np.array([True, False]), "bool"),
         (np.array([1 + 2j, 3 + 0j]), "complex128"),
         (pd.array([True, None], dtype="boolean"), "boolean"),
-        (["a", "b"], "object"),
+        (["a", "b"], TEXT_DTYPE),
     ],
 )
 def test_check_numeric_columns_rejects_a_bool_column_a_complex_column_and_text(column, dtype):
@@ -391,7 +391,7 @@ def test_check_text_columns_name_the_first_value_that_is_not_text():
 @pytest.mark.parametrize(
     ("column", "shown_value"),
     [
-        (pd.Series(["x", "y", None]), "None"),
+        (pd.Series(["x", "y", None], dtype=object), "None"),
         (pd.Series(["x", "y", math.nan]), "nan"),
         (pd.Series(["x", "y", pd.NA], dtype="string"), "<NA>"),
         (pd.Series(["x", "y", None], dtype="category"), "nan"),

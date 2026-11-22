@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from seedmatch._checks import as_flag, as_limit, check_not_negative, shown
+from seedmatch._frames import text_dtype, with_text_dtype
 from seedmatch._pool import map_in_pool, pool_width
 from seedmatch.errors import InputError
 from seedmatch.search import SearchOptions, count_matches, find_matches
@@ -209,7 +210,7 @@ def best_match(counts: pd.DataFrame) -> pd.Series:
     # The loop goes from the lowest rank to the highest, so the highest rank writes last.
     for column, label in reversed(present):
         labels[(counts[column] >= 1).fillna(value=False).to_numpy(dtype=bool)] = label
-    return pd.Series(labels, index=counts.index, name="best_match")
+    return pd.Series(labels, index=counts.index, name="best_match", dtype=text_dtype())
 
 
 def full_search(
@@ -260,7 +261,7 @@ def full_search(
     )
     result["group"] = group
     result["best_match"] = best_match(result)
-    return result
+    return with_text_dtype(result, ("seq_id", "gene_id", "group"))
 
 
 def full_search_ranges(
@@ -317,4 +318,4 @@ def full_search_ranges(
             {name: pd.Series(dtype=kind) for name, kind in _RANGES_DTYPES.items()}
         )
     result["group"] = group
-    return result
+    return with_text_dtype(result, ("seq_id", "gene_id", "query", "target_seq", "group"))

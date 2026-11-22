@@ -47,11 +47,11 @@ def read_trrust(path: str | os.PathLike[str]) -> pd.DataFrame:
     file has no header. Each line has 4 fields with a tab between them: the regulator, the target,
     the mode, and the PubMed IDs. A blank line is skipped.
 
-    The columns are `source`, `target`, `edge_type`, and `evidence`, as `R/get_network_matches.R`
-    of SeedMatchR names them. The dtype is `object`, equal texts are one object, and the rows keep
-    the order of the file. Each line is a row, also line 1. R reads line 1 as the column names
-    (`D-057`). A quote character, `#`, and the text `NA` are text (`D-057`). The mode is
-    `Activation`, `Repression`, or `Unknown`.
+    The columns are `source`, `target`, `edge_type`, and `evidence`, as `R/get_network_matches.R` of
+    SeedMatchR names them. The columns have the text dtype of pandas, and on pandas 2 equal texts
+    are one object. The rows keep the order of the file. Each line is a row, also line 1. R reads
+    line 1 as the column names (`D-057`). A quote character, `#`, and the text `NA` are text
+    (`D-057`). The mode is `Activation`, `Repression`, or `Unknown`.
 
     These inputs raise `InputError`:
 
@@ -239,7 +239,8 @@ def trrust_scores(
 def _mode_codes(column: pd.Series) -> NDArray[np.int64]:
     """Return the code of each mode. A mode that is not in `TRRUST_MODES` raises `InputError`."""
     values = column.to_numpy(dtype=object)
-    codes = pd.Categorical(values, categories=list(TRRUST_MODES)).codes.astype(np.int64)
+    modes = pd.Index(list(TRRUST_MODES))
+    codes = modes.get_indexer(pd.Index(values, dtype=object)).astype(np.int64, copy=False)
     invalid = np.flatnonzero(codes < 0)
     if invalid.size:
         row = int(invalid[0])

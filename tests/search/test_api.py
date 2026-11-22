@@ -3,7 +3,7 @@ from dataclasses import FrozenInstanceError
 
 import numpy as np
 import pytest
-from helpers import GUIDE, sirna_seqs
+from helpers import GUIDE, TEXT_DTYPE, sirna_seqs
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from strategies import subjects_for
@@ -142,6 +142,7 @@ def test_no_match_gives_an_empty_frame_with_the_columns_and_dtypes(seqs):
     assert got.empty
     assert list(got.columns) == ["seq_id", "gene_id", "start", "end", "width"]
     assert got[["start", "end", "width"]].dtypes.tolist() == [np.int64] * 3
+    assert [str(dtype) for dtype in got[["seq_id", "gene_id"]].dtypes] == [TEXT_DTYPE] * 2
     assert count_matches("ACGT", seqs).tolist() == [0] * len(seqs)
 
 

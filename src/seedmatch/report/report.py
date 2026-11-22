@@ -14,6 +14,7 @@ from seedmatch._checks import (
     check_gene_ids_are_text,
     check_numeric_columns,
 )
+from seedmatch._frames import with_text_dtype
 from seedmatch.report.grid import FullSearchOptions, best_match, full_search
 from seedmatch.seed import Guide
 from seedmatch.sequence import SequenceSet
@@ -96,7 +97,8 @@ def _matches(searched: pd.DataFrame, de: pd.DataFrame) -> pd.DataFrame:
     first_rows = de.drop_duplicates("gene_id")[list(_DE_COLUMNS)]
     values = first_rows.astype(dict.fromkeys(_DE_VALUE_COLUMNS, "float64"))
     detected = searched["gene_id"].isin(values["gene_id"])
-    return searched.assign(detected=detected).merge(values, on="gene_id", how="left")
+    matches = searched.assign(detected=detected).merge(values, on="gene_id", how="left")
+    return with_text_dtype(matches, ("seq_id", "gene_id", "group", "best_match"))
 
 
 def _gene_table(matches: pd.DataFrame, searched: pd.DataFrame) -> pd.DataFrame:

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pytest
 
 from seedmatch import (
     FeatureType,
@@ -40,10 +41,15 @@ from seedmatch import (
     wasserstein_difference,
     wobble_bulge_matches,
 )
+from seedmatch._frames import text_dtype
 from seedmatch.sequence import SequenceSet, read_fasta
 
 DATA = Path(__file__).parent / "data"
 GOLDEN = Path(__file__).parent / "golden"
+TEXT_DTYPE = str(text_dtype())
+OBJECT_TEXT_ONLY = pytest.mark.skipif(
+    TEXT_DTYPE != "object", reason="the str dtype of pandas 3 does not keep the text objects"
+)
 GUIDE = "UUAUAGAGCAAGAACACUGUUUU"
 # The message of a table line that is not UTF-8, without the source and the line. {} is the reason.
 NOT_UTF8 = (

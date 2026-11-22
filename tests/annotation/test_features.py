@@ -12,7 +12,7 @@ from annotation_cases import (
     copy_ensdb,
     fixture_reference,
 )
-from helpers import GOLDEN, golden
+from helpers import GOLDEN, TEXT_DTYPE, golden
 
 import seedmatch.annotation.ensdb
 from seedmatch.annotation.ensdb import AnnotationDb, ExonRows
@@ -456,6 +456,8 @@ def test_a_filter_without_a_match_gives_no_feature(feature, per_gene):
     frame = got.to_frame()
     assert len(frame) == 0
     assert list(frame.columns) == ["id", "gene_id", "contig", "strand", "rank", "start", "end"]
+    text_columns = frame[["id", "gene_id", "contig", "strand"]]
+    assert [str(dtype) for dtype in text_columns.dtypes] == [TEXT_DTYPE] * 4
 
 
 def test_to_frame_gives_one_row_for_each_range():
@@ -463,10 +465,10 @@ def test_to_frame_gives_one_row_for_each_range():
         got = ref.features(FeatureType.UTR3, ALL, per_gene=PerGene.UNION)
     frame = got.to_frame()
     assert {name: str(dtype) for name, dtype in frame.dtypes.items()} == {
-        "id": "object",
-        "gene_id": "object",
-        "contig": "object",
-        "strand": "object",
+        "id": TEXT_DTYPE,
+        "gene_id": TEXT_DTYPE,
+        "contig": TEXT_DTYPE,
+        "strand": TEXT_DTYPE,
         "rank": "int64",
         "start": "int64",
         "end": "int64",

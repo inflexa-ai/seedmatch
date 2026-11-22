@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
+from seedmatch._frames import text_dtype
 from seedmatch.errors import InputError
 
 LINE_LIMIT: Final = 2**10
@@ -194,13 +195,15 @@ def shared_texts(texts: Iterable[str]) -> NDArray[np.object_]:
 
 
 def frame_of(columns: Mapping[str, NDArray[Any]]) -> pd.DataFrame:
-    """Return the table of the columns, without a copy of the arrays."""
-    # A dict of object arrays makes pandas scan each array for dates, which allocates a copy of
-    # the table. A Series with its dtype set skips the scan.
-    return pd.DataFrame(
-        {
-            name: pd.Series(values, dtype=values.dtype, copy=False)
-            for name, values in columns.items()
-        },
-        copy=False,
-    )
+    """Return the table of the columns. An object array is a column of text with `text_dtype`.
+
+    pandas 2 keeps each array without a copy. pandas 3 copies a column of text to the dtype `str`.
+    """
+    text = text_dtype()
+
+    def column(values: NDArray[Any]) -> pd.Series:
+        # A dict of object arrays makes pandas scan each array for dates, which allocates a copy of
+        # the table. A Series with its dtype set skips the scan.
+        return pd.Series(values, dtype=text if values.dtype == object else values.dtype, copy=False)
+
+    return pd.DataFrame({name: column(values) for name, values in columns.items()}, copy=False)

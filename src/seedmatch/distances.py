@@ -8,6 +8,7 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from seedmatch._checks import as_data_frame, as_member, check_columns, check_integer_columns
+from seedmatch._frames import with_text_dtype
 
 _COLUMNS: Final = ("seq_id", "gene_id", "start", "end", "width")
 _INTEGER_COLUMNS: Final = ("start", "end", "width")
@@ -95,7 +96,7 @@ def match_distances(
     # The sort is stable, so the first sorted row of a sequence is its first row in the table.
     first_rows = order[np.cumsum(sizes) - sizes]
     # copy=False keeps the peak memory at the size of the result. A copy doubles it.
-    return pd.DataFrame(
+    result = pd.DataFrame(
         {
             "seq_id": np.repeat(ids.to_numpy(dtype=object), pairs),
             "gene_id": np.repeat(table["gene_id"].iloc[first_rows].to_numpy(dtype=object), pairs),
@@ -103,3 +104,4 @@ def match_distances(
         },
         copy=False,
     )
+    return with_text_dtype(result, ("seq_id", "gene_id"))

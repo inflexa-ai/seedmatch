@@ -8,7 +8,7 @@ import stat
 import pandas as pd
 import pytest
 from annotation_cases import ANNOTATION, CASES, ENSDB, copy_ensdb, fixture_reference
-from helpers import GOLDEN, golden
+from helpers import GOLDEN, TEXT_DTYPE, golden
 
 from seedmatch.annotation.ensdb import AnnotationDb
 from seedmatch.annotation.fasta_genome import FastaGenome
@@ -147,15 +147,15 @@ def test_transcripts_have_the_columns_and_dtypes_of_the_port():
     with fixture_reference() as ref:
         got = ref.transcripts(EVERYTHING)
     assert {name: str(dtype) for name, dtype in got.dtypes.items()} == {
-        "tx_id": "object",
-        "gene_id": "object",
-        "gene_name": "object",
-        "contig": "object",
+        "tx_id": TEXT_DTYPE,
+        "gene_id": TEXT_DTYPE,
+        "gene_name": TEXT_DTYPE,
+        "contig": TEXT_DTYPE,
         "start": "int64",
         "end": "int64",
-        "strand": "object",
-        "tx_biotype": "object",
-        "gene_biotype": "object",
+        "strand": TEXT_DTYPE,
+        "tx_biotype": TEXT_DTYPE,
+        "gene_biotype": TEXT_DTYPE,
         "cds_start": "Int64",
         "cds_end": "Int64",
         "support_level": "Int64",

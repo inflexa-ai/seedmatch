@@ -4,7 +4,14 @@ import re
 
 import pandas as pd
 import pytest
-from helpers import DATA, NOT_UTF8, assert_frame_matches_golden, golden_note
+from helpers import (
+    DATA,
+    NOT_UTF8,
+    OBJECT_TEXT_ONLY,
+    TEXT_DTYPE,
+    assert_frame_matches_golden,
+    golden_note,
+)
 
 import seedmatch
 from seedmatch.errors import InputError
@@ -43,11 +50,11 @@ def test_read_mirdb_matches_r():
         "mirna_name",
     ]
     assert [str(dtype) for dtype in got.dtypes] == [
-        "object",
-        "object",
+        TEXT_DTYPE,
+        TEXT_DTYPE,
         "float64",
-        "object",
-        "object",
+        TEXT_DTYPE,
+        TEXT_DTYPE,
     ]
     assert isinstance(got.index, pd.RangeIndex)
     assert_frame_matches_golden(got.rename(columns=R_NAMES), "analyses/mirdb.tsv")
@@ -432,6 +439,7 @@ def test_read_mirdb_names_the_first_bad_line_for_each_chunk_size(
         read_mirdb(path)
 
 
+@OBJECT_TEXT_ONLY
 @pytest.mark.parametrize("chunk", [None, 1])
 def test_equal_text_values_share_one_object(tmp_path, monkeypatch, chunk):
     lines = [

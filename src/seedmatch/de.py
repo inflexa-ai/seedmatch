@@ -9,6 +9,7 @@ from typing import Final, TextIO
 import pandas as pd
 
 from seedmatch._checks import as_cutoff, check_columns, check_numeric_columns
+from seedmatch._frames import with_text_dtype
 from seedmatch._io import local_path, open_text
 from seedmatch.errors import InputError
 
@@ -106,7 +107,7 @@ def _table(rows: Sequence[list[str]], shown: str) -> pd.DataFrame:
         except ValueError as exc:
             message = f"{shown!r}: column {name!r}: {exc}; expected a number, NA, or an empty field"
             raise InputError(message) from exc
-    return table
+    return with_text_dtype(table, _TEXT_COLUMNS)
 
 
 def read_deseq2_table(path: str | os.PathLike[str]) -> pd.DataFrame:
