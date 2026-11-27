@@ -6,7 +6,7 @@ This document records the wall time and the peak memory of `seed_match_report` o
 
 - Python: `seed_match_report(de, sequences, guide)`, with the default `ReportOptions()` and the default `workers=None`. `workers=None` gives a thread pool with one thread for each CPU.
 - R: `SeedMatchR::SeedMatchReport(res, seqs, guide.seq)`, with the default arguments (`R/SeedMatchReport.R:46-55`). R uses one thread.
-- The defaults of the two calls agree. The row `SeedMatchReport` of [`docs/r-map.md`](r-map.md) maps each argument.
+- The defaults of the two calls agree. The row `SeedMatchReport` of [`src/seedmatch/r-map.md`](../src/seedmatch/r-map.md) maps each argument.
 - The guide is `UUAUAGAGCAAGAACACUGUUUU`, the guide of the R goldens.
 - The R call also makes the `gt` table (`R/SeedMatchReport.R:135`). In Python, `report_html` makes the table in a separate call, and this call takes less than 1 ms.
 

@@ -6,7 +6,7 @@
 
 seedmatch is a Python port of the R package [SeedMatchR](https://github.com/tacazares/SeedMatchR), ready for AI agent sandboxes. It finds the seed matches of an siRNA guide strand in transcript sequences. It then joins the matches with the results of a differential expression (DE) analysis. Thus you can see which genes with a seed match go down.
 
-The output is the same as the output of SeedMatchR on the core paths. R golden files in `tests/golden/` keep this true. Each change of behavior from R has an entry in [`docs/divergences.md`](docs/divergences.md).
+The output is the same as the output of SeedMatchR on the core paths. R golden files in `tests/golden/` keep this true. Each change of behavior from R has an entry in [`src/seedmatch/divergences.md`](src/seedmatch/divergences.md). The installed package holds this file and `r-map.md`, thus `importlib.resources.files("seedmatch").joinpath("divergences.md")` reads the file without network.
 
 ## A part of an agentic toolchain for bioinformatics
 
@@ -97,7 +97,7 @@ utr3_counts = count_matches(target, utr3)
 
 `Reference.sequences` also takes a `TranscriptFilter` and a `PerGene` option. The defaults are the defaults of `load_annotations` in R. `PerGene.LONGEST` selects, for each gene, the transcript with the longest feature. For `FeatureType.UTR3`, this is the transcript with the longest 3' UTR. `PerGene.UNION` merges the ranges of the transcripts of a gene. `Reference.from_directory(path)` opens the one `.sqlite` file and the one `.2bit` or `.fa.gz` file of a directory. `Reference.from_gtf(gtf, genome)` reads a GTF file instead of an EnsDb file.
 
-[`docs/r-map.md`](docs/r-map.md) gives the Python name of each R function, and the changes of the arguments.
+[`src/seedmatch/r-map.md`](src/seedmatch/r-map.md) gives the Python name of each R function, and the changes of the arguments.
 
 ## Other analyses
 
@@ -404,21 +404,21 @@ This version has these parts:
 
 ## Installation
 
-Python 3.12 or later is necessary. seedmatch uses pandas 2.2 or later. A text column of a table that seedmatch returns has the dtype that the installed pandas gives a column of text: `object` on pandas 2, and `str` on pandas 3. Install seedmatch from GitHub:
+Python 3.12 or later is necessary. seedmatch uses pandas 2.2 or later. A text column of a table that seedmatch returns has the dtype that the installed pandas gives a column of text: `object` on pandas 2, and `str` on pandas 3. Install seedmatch from PyPI:
 
 ```bash
-uv pip install git+https://github.com/inflexa-ai/seedmatch.git
+uv pip install seedmatch
 ```
 
 To draw the figures of `seedmatch.plot`, install the extra `plot`:
 
 ```bash
-uv pip install "seedmatch[plot] @ git+https://github.com/inflexa-ai/seedmatch.git"
+uv pip install "seedmatch[plot]"
 ```
 
-To install it from a clone of this repository, use `uv pip install .`.
+The search kernels are a Rust extension. PyPI has a wheel with the compiled extension for Linux x86_64 and Linux aarch64 (glibc 2.28 or later), and for macOS arm64. A wheel needs no Rust toolchain. On a different platform, the install builds the extension from the sdist.
 
-The search kernels are a Rust extension. A wheel holds the compiled extension, thus it needs no Rust toolchain. An install from GitHub or from a clone builds the extension from the source. This build needs [rustup](https://rustup.rs), and rustup installs the Rust version of `rust-toolchain.toml`.
+To install the code of `main`, use `uv pip install git+https://github.com/inflexa-ai/seedmatch.git`. To install it from a clone of this repository, use `uv pip install .`. An install from the sdist, from GitHub, or from a clone builds the extension from the source. This build needs [rustup](https://rustup.rs), and rustup installs the Rust version of `rust-toolchain.toml`.
 
 ## Development
 

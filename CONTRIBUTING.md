@@ -1,6 +1,6 @@
 # Contribute to seedmatch
 
-seedmatch is a Python port of [SeedMatchR](https://github.com/tacazares/SeedMatchR). On the core paths, seedmatch gives the same results as SeedMatchR. Each difference from SeedMatchR is a recorded divergence in [`docs/divergences.md`](docs/divergences.md).
+seedmatch is a Python port of [SeedMatchR](https://github.com/tacazares/SeedMatchR). On the core paths, seedmatch gives the same results as SeedMatchR. Each difference from SeedMatchR is a recorded divergence in [`src/seedmatch/divergences.md`](src/seedmatch/divergences.md).
 
 ## Before you start
 
@@ -60,7 +60,7 @@ If the variable is not set, each of these tests skips with the reason `SEEDMATCH
 ## Rules for a change
 
 - **Results from R.** The golden files in `tests/golden/` hold the results of SeedMatchR. Do not edit a golden file by hand. To make or to update a golden file, use the scripts in `tools/golden/`. [`tools/golden/README.md`](tools/golden/README.md) gives the commands.
-- **Divergences.** If a change makes a result different from SeedMatchR, add an entry to `docs/divergences.md`. Give each of the six fields of the entry. Put the ID of the entry in the name of the test, for example `test_D001_...`.
+- **Divergences.** If a change makes a result different from SeedMatchR, add an entry to `src/seedmatch/divergences.md`. Give each of the six fields of the entry. Put the ID of the entry in the name of the test, for example `test_D001_...`.
 - **No network in the core.** The core reads each resource from a path. Network access belongs only in `seedmatch.fetch`.
 - **Tests.** A test covers each change of behavior. For a bug fix, write the test that fails before the fix.
 - **Documentation.** If a user can see the change, update `README.md` or the documents in `docs/`.
@@ -71,6 +71,19 @@ If the variable is not set, each of these tests skips with the reason `SEEDMATCH
 - Keep each pull request to one change.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) for the commit messages, for example `fix(search): count the matches at the end of a sequence`.
 - In the description, give what changed and why. Give the link to the issue.
+
+## Make a release
+
+A maintainer makes each release:
+
+1. In a pull request, change `version` in `pyproject.toml`.
+2. After the merge, add the tag `v` and the version to the commit on `main`, for example `v0.2.0`. Push the tag.
+3. The job `publish` of `.github/workflows/wheels.yml` uploads the wheels and the sdist to PyPI. Before the upload, the job makes sure that each file has the version of the tag.
+4. Write the changes of the release in a GitHub release for the tag.
+
+PyPI keeps each version for all time. Thus, a version that has an error gets a new version, not a new upload.
+
+The PyPI project trusts the job `publish` in the GitHub environment `pypi`. Thus the job uses no token.
 
 ## Developer Certificate of Origin
 

@@ -18,7 +18,7 @@ The source of truth for behavior is the SeedMatchR repository at commit `2fc0c4f
 - Give a separate fetch module and command that download each resource from its upstream.
 - Fix each defect of the R code, also on the core paths.
 - Improve a behavior when a better behavior is possible.
-- Record each change of behavior in `docs/divergences.md`.
+- Record each change of behavior in `src/seedmatch/divergences.md`.
 - Do a test of each behavior with tests that can find a real defect: R goldens, oracles, and invariants.
 
 ## Non-goals
@@ -32,7 +32,7 @@ The source of truth for behavior is the SeedMatchR repository at commit `2fc0c4f
 
 - Network access in a core module, also as a fallback.
 - A write next to a resource file. The stores are read-only, thus such a write fails with `EACCES` in the sandbox.
-- A divergence from R that `docs/divergences.md` does not record.
+- A divergence from R that `src/seedmatch/divergences.md` does not record.
 - A test that only restates the code. Examples: a test that a dataclass keeps a field, a test of a default value, or a test that a mock received a call.
 
 ## Constraints
@@ -48,7 +48,7 @@ The source of truth for behavior is the SeedMatchR repository at commit `2fc0c4f
 - The CI tests the versions of the sandbox lock. One more job installs the latest versions without `constraint-dependencies`, for example pandas 3.
 - The genome readers use only the standard library (`mmap`, `zlib`, `sqlite3`) and numpy. Thus the port reads a BGZF FASTA genome without an extra.
 - A new runtime dependency must have an entry in the inflexa manifest. Thus, do not add one.
-- The wheel has a compiled extension, `seedmatch.search._kernels`. The inflexa build images have no Rust toolchain. Thus the package index must have a wheel for each platform of the sandbox. The workflow `wheels.yml` builds these wheels:
+- The wheel has a compiled extension, `seedmatch.search._kernels`. The inflexa build images have no Rust toolchain. Thus PyPI must have a wheel for each platform of the sandbox. The workflow `wheels.yml` builds these wheels, and a push of a tag `v*` publishes them and the sdist to PyPI:
   - `cp312-abi3-manylinux_2_28_x86_64`
   - `cp312-abi3-manylinux_2_28_aarch64`
   - `cp312-abi3-macosx_11_0_arm64`, for development
@@ -86,7 +86,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 - The DTS p-value comes from permutations. The statistic is identical. The p-value agrees with R only within random error. The caller gives the random generator.
 - Plots use matplotlib.
 - The report table is the HTML of `report_html`, not `gt`. pandas 2.3.3 gives a `Styler` only with jinja2 3.1.2 or later, and the store lock has jinja2 3.0.3.
-- Each entry in `docs/divergences.md` changes the R behavior.
+- Each entry in `src/seedmatch/divergences.md` changes the R behavior.
 
 ## Architecture
 
@@ -449,7 +449,7 @@ The ROC curve:
 
 ## Divergences (defect fixes)
 
-`docs/divergences.md` is the record of each change of behavior from R: each defect fix and each improvement. It is part of the repository and of the documentation. Each entry has these fields:
+`src/seedmatch/divergences.md` is the record of each change of behavior from R: each defect fix and each improvement. It is part of the repository, of the documentation, and of the installed package. Each entry has these fields:
 
 - a stable ID, for example `D-001`
 - the R function and the R location
@@ -475,7 +475,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 | `match_distances` | A sequence with one match gives `c(NA, 0)` (`R/match_distances.R:33-34`). | A sequence with one match gives no distances. A sequence with n matches gives each of the n(n − 1)/2 pair distances. |
 | `.get_best_match` | Stops if the search did not make each expected column, for example with other edit distances (`R/full_search.R:96-125`). | The best match uses only the columns that the search made. The default output does not change. |
 | `get_stringPPI_to_stringGGI` | Maps the STRING protein IDs through BioMart on the network. The human query uses the GRCh37 archive (`R/get_stringPPI_to_stringGGI.R:32-60`). | Maps the protein IDs with the `protein` table of the EnsDb or of the GTF of the same build. |
-| Documentation | The vignettes call functions that do not exist: `filter_deseq`, `de_fc_ecdf`, `get_feature_seqs`. The network vignette omits `organism`. | The Python examples of `README.md` and the `seedmatch.` names of `docs/r-map.md` use only functions that exist. A test runs each Python example of `README.md`. |
+| Documentation | The vignettes call functions that do not exist: `filter_deseq`, `de_fc_ecdf`, `get_feature_seqs`. The network vignette omits `organism`. | The Python examples of `README.md` and the `seedmatch.` names of `src/seedmatch/r-map.md` use only functions that exist. A test runs each Python example of `README.md`. |
 | `.get_counts_column` (used by `SeedMatchR`) | If the DE table has a column with the seed name, the result has two columns with this name (`R/SeedMatchR.R:214-217`). Then `res$mer7m8` reads the old column. | The counts replace the values of the column with the same name. A new column goes at the end. |
 | `Biostrings::readDNAStringSet` (the sequences of SeedMatchR) | The name of a sequence is the complete header line after `>`. Then a header with a description does not match a `gene_id`. | The ID of a FASTA record ends at the first white space. |
 | `Biostrings::DNAString`, `Biostrings::readDNAStringSet` | The gap letter `-`, the mask letter `+`, and `.` are kept in a sequence. | These letters raise `InputError` with the letter and its position. |
@@ -554,7 +554,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 - Each golden file records the R version and the package versions.
 - Tables are TSV files. Scalar results are JSON files.
 - For a defect fix, a patch in `tools/golden/patches/` applies the fix to a copy of the R function, if the fix is unambiguous. The golden of the patched function then does a test of the rest of the ported logic.
-- The test of a divergence names its ID from `docs/divergences.md`. A test asserts that each ID in the record has at least one test that names it.
+- The test of a divergence names its ID from `src/seedmatch/divergences.md`. A test asserts that each ID in the record has at least one test that names it.
 
 ### Search
 
@@ -696,7 +696,7 @@ Each step ends with ruff, mypy, and the tests of that step.
 - The goal is a better version of SeedMatchR, not only a copy. Improvements are welcome.
 - Output identical to R on the core paths, except for the recorded divergences.
 - Each SeedMatchR function gets a port. Each defect gets a fix, also on the core paths.
-- `docs/divergences.md` records each change of behavior, and it is part of the repository.
+- `src/seedmatch/divergences.md` records each change of behavior, and it is part of the repository and of the installed package.
 - The core reads resources from given paths and never downloads. A separate module downloads.
 - The users are agents in the inflexa sandbox.
 - The license is MIT, the same license as SeedMatchR.
@@ -719,4 +719,4 @@ Each step ends with ruff, mypy, and the tests of that step.
 - The kernel algorithms, within the search rules.
 - The size and the seeds of the random corpus.
 - The layout of the golden files.
-- An entry in `docs/divergences.md` for each new divergence that the work finds.
+- An entry in `src/seedmatch/divergences.md` for each new divergence that the work finds.

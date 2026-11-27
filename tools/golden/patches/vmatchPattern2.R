@@ -1,6 +1,6 @@
 # A patched vmatchPattern2 for the golden files. The version in SeedMatchR (R/vmatchPattern2.R:43)
 # sends the algorithm "indels" to the C matcher for each call, so its ranges ignore with.indels and
-# min.mismatch (docs/divergences.md, D-001). This version gives the ranges that agree with the
+# min.mismatch (src/seedmatch/divergences.md, D-001). This version gives the ranges that agree with the
 # counts of vcountPattern. The data frame has the shape of the original: the columns start, end,
 # width, and names, with one row for each match and no row for a sequence without a match.
 vmatchPattern2 <- function(pattern,
