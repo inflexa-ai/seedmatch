@@ -1,6 +1,6 @@
 # The Rust search kernels: design
 
-Date: 2026-11-27. Status: a draft for the approval of the user.
+Date: 2026-11-27. Status: the user approved this design, and the branch `feat/rust-search-kernels` implements it.
 
 ## Intent
 
@@ -106,7 +106,7 @@ This is an alignment of the full pattern to T[j..j+w], with the cost i0 + d. Thu
 
 At a position that the current kernel does not accept, the kernel changes nothing: it goes to the next position, and the held candidate stays the same. The new kernel does not visit the positions that are not candidates, and these positions are not accepted. Thus the two kernels accept the same positions, in the same order, with the same costs and ends. The held-candidate logic reads only these values, thus the matches are the same.
 
-The DP at a position reads only the codes and its own row. It writes each value of the row before it reads that value (`kernels.py:169-193`). Thus the DP at a candidate gives the same result when the kernel does not visit the positions before it. The Rust port must keep this property.
+The DP at a position reads only the codes and its own row. It writes each value of the row before it reads that value (`kernels.py:169-193` of commit `5e0783c`). The Rust port is `right_alignment` in `rust/src/indel.rs`. Thus the DP at a candidate gives the same result when the kernel does not visit the positions before it. The Rust port must keep this property.
 
 The filter does not replace the DP. S(j) can be less than i0 + d, for example if pattern letter 0 is a substitution at j. Thus the DP decides each candidate, and the cost and the end come only from the DP.
 

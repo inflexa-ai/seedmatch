@@ -27,28 +27,39 @@ pub fn bits(seq: &[u8], letters: &Letters, max_mm: u64, min_mm: u64, emit: &mut 
     let m = letters.len();
     debug_assert!((1..=WORD).contains(&m));
     let top = m - 1;
-    // A window has m mismatches or fewer, thus a state above m is equal to state m.
-    let k = usize::try_from(max_mm).map_or(m, |max_mm| max_mm.min(m));
+    // A window has m mismatches or fewer. Thus if max_mm >= m, each window has max_mm mismatches
+    // or fewer, and no state is necessary for this limit.
+    let upper = usize::try_from(max_mm).ok().filter(|&max_mm| max_mm < m);
     // The window has min_mm mismatches or more if state min_mm - 1 does not match it.
     let below = match usize::try_from(min_mm) {
         Ok(0) => None,
         Ok(min_mm) if min_mm <= m => Some(min_mm - 1),
         _ => return,
     };
+    let Some(last) = upper.max(below) else {
+        for start in 2 - to_i64(m)..=to_i64(seq.len()) {
+            emit(start);
+        }
+        return;
+    };
     let words = letters.words();
-    let mut states = [0_u64; WORD + 1];
-    let states = &mut states[..=k];
+    let mut states = [0_u64; WORD];
+    let states = &mut states[..=last];
     // After the m - 1 virtual letters before the sequence, state d matches each prefix of d
     // letters or fewer.
     for (d, state) in states.iter_mut().enumerate() {
         *state = (1 << d.min(top)) - 1;
     }
     let text = seq.iter().map(|&code| words[usize::from(code & 15)]);
-    let after = iter::repeat_n(0, top);
+    // The window that ends at virtual letter v after the sequence has v mismatches or more. Thus
+    // only the first max_mm of these letters can end a match.
+    let after = iter::repeat_n(0, upper.map_or(top, |max_mm| max_mm.min(top)));
     let ends = |state: u64| (state >> top) & 1 == 1;
     for (start, word) in (2 - to_i64(m)..).zip(text.chain(after)) {
         step(states, word);
-        if ends(states[k]) && below.is_none_or(|below| !ends(states[below])) {
+        if upper.is_none_or(|upper| ends(states[upper]))
+            && below.is_none_or(|below| !ends(states[below]))
+        {
             emit(start);
         }
     }
