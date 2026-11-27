@@ -194,7 +194,7 @@ The IDs of the known divergences have the same order as the rows of the table in
   - `exists(name, envir = asNamespace("SeedMatchR"), inherits = FALSE)` is `FALSE` for `filter_deseq`, `de_fc_ecdf`, and `get_feature_seqs`. It is `TRUE` for `filter_res` and `deseq_fc_ecdf`.
   - `get_network_matches(c("A"), aggregator = "mean")` stops with `argument "organism" is missing, with no default`.
   - The export list of SeedMatchR 2.0.0 (`tests/data/SeedMatchR.NAMESPACE`) has `deseq_fc_ecdf` (`:25`), `filter_res` (`:28`), and `get_network_matches` (`:35`). It has no line for `filter_deseq`, `de_fc_ecdf`, or `get_feature_seqs`.
-- New behavior: The examples of `README.md` use only the public names of seedmatch, and a test runs each Python example. Each `seedmatch.` name and each `seedmatch-fetch` command of `docs/r-map.md` exists.
+- New behavior: The examples of `README.md` use only the public names of seedmatch, and a test runs each Python example. Each `seedmatch.` name and each `seedmatch-fetch` command of `src/seedmatch/r-map.md` exists.
 - Reason: An agent copies the examples of the documentation. An example that calls an absent function stops with an error, and the agent cannot use it.
 - Test: `test_each_python_name_of_the_r_map_exists_D014` in `tests/test_r_map.py`. The tests of `tests/test_readme.py` run each Python example of `README.md`.
 
