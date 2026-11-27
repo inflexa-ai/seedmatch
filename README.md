@@ -15,7 +15,7 @@ Inflexa, Inc. builds an agentic toolchain for bioinformatics. The toolchain port
 A sandbox such as the Inflexa sandbox has no network egress, and an agent corrects its calls from the error messages. Thus seedmatch obeys these rules:
 
 - **No network in the core.** The core modules never use the network. Each function reads its input from a path or an object that you give. The separate module `seedmatch.fetch` downloads the resources (see [Resources](#resources)).
-- **Python only.** The package is pure Python on numpy, pandas, numba, and scipy. It does not use R or a system library. The extra `plot` adds matplotlib.
+- **No R and no system library.** The package is Python on numpy, pandas, and scipy, with a compiled extension for the search kernels. It does not use R or a system library. The extra `plot` adds matplotlib.
 - **Errors that an agent can use.** Each `InputError` names the bad value and the expected value. Thus an agent can correct the call. Each error class that seedmatch defines is a `SeedMatchError`, and `InputError` is also a `ValueError`. If a file does not exist, the function raises `FileNotFoundError`.
 
 ## Example
@@ -418,11 +418,11 @@ uv pip install "seedmatch[plot] @ git+https://github.com/inflexa-ai/seedmatch.gi
 
 To install it from a clone of this repository, use `uv pip install .`.
 
-If numba has no writable cache directory, `import seedmatch` stops with a `RuntimeError`. Thus set `NUMBA_CACHE_DIR`, or use a writable `HOME`.
+The search kernels are a Rust extension. A wheel holds the compiled extension, thus it needs no Rust toolchain. An install from GitHub or from a clone builds the extension from the source. This build needs [rustup](https://rustup.rs), and rustup installs the Rust version of `rust-toolchain.toml`.
 
 ## Development
 
-Install the dependencies:
+Install [rustup](https://rustup.rs) and the dependencies. `uv sync` builds the Rust extension, and it builds it again after a change of a Rust file:
 
 ```bash
 uv sync
@@ -435,15 +435,16 @@ uv run ruff check
 uv run ruff format --check
 uv run mypy
 uv run pytest
+cargo test --manifest-path rust/Cargo.toml
+cargo fmt --manifest-path rust/Cargo.toml --check
+PYO3_PYTHON="$PWD/.venv/bin/python" cargo clippy --manifest-path rust/Cargo.toml --all-targets --all-features -- -D warnings
 ```
 
 Measure the coverage:
 
 ```bash
-PYTHONPATH=tools/coverage NUMBA_DISABLE_JIT=1 uv run pytest -p serial_pool --cov
+uv run pytest --cov
 ```
-
-Without the JIT, the coverage tracer stops the pool threads on its data lock, thus the plugin `tools/coverage/serial_pool.py` runs the pool in the caller thread.
 
 `tools/golden/README.md` tells how to make the R golden files again.
 

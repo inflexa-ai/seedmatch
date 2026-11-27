@@ -9,7 +9,7 @@ seedmatch is a Python port of [SeedMatchR](https://github.com/tacazares/SeedMatc
 
 ## Set up the project
 
-Install [uv](https://docs.astral.sh/uv/). uv installs the correct Python version and the dependencies:
+Install [uv](https://docs.astral.sh/uv/) and [rustup](https://rustup.rs). uv installs the correct Python version and the dependencies. rustup installs the Rust version of `rust-toolchain.toml`, and `uv sync` builds the Rust extension:
 
 ```bash
 git clone https://github.com/inflexa-ai/seedmatch.git
@@ -26,7 +26,12 @@ uv run ruff check
 uv run ruff format --check
 uv run mypy
 uv run pytest
+cargo test --manifest-path rust/Cargo.toml
+cargo fmt --manifest-path rust/Cargo.toml --check
+PYO3_PYTHON="$PWD/.venv/bin/python" cargo clippy --manifest-path rust/Cargo.toml --all-targets --all-features -- -D warnings
 ```
+
+The feature `python` of the crate builds PyO3, thus clippy needs the Python interpreter of the environment in `PYO3_PYTHON`.
 
 `uv sync` installs the versions of the inflexa sandbox, which `constraint-dependencies` in `pyproject.toml` pins. The CI also runs the tests with the latest versions, for example pandas 3. To do this test on your machine, run these commands:
 

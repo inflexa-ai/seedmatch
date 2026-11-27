@@ -39,7 +39,8 @@ class SequenceSet:
     The sequences of one gene share a gene ID. Each ID and each gene ID is a `str`. The
     constructor does not copy `codes` and `offsets`, but it makes them read-only. Thus the arrays
     of the caller also become read-only. The search kernels trust the values that the constructor
-    checks. Thus a write through a base array after the call can give a wrong result or a crash.
+    checks. Thus a write through a base array after the call can give a wrong result, or a
+    `ValueError` from a search.
     """
 
     ids: tuple[str, ...]
