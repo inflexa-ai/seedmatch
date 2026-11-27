@@ -104,6 +104,10 @@ jobs:
           command: sdist
           args: --out dist
 
+      # Without the file, the build below uses the Rust version of the runner, and it passes.
+      - name: Make sure that the sdist holds rust-toolchain.toml
+        run: tar -tzf dist/*.tar.gz | grep '^seedmatch-[^/]*/rust-toolchain\.toml$'
+
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12"
