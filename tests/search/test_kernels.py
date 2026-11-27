@@ -282,6 +282,20 @@ def test_kernels_reject_offsets_outside_codes(call):
 
 
 @pytest.mark.parametrize("call", KERNEL_CALLS)
+def test_kernels_reject_an_empty_pattern(call):
+    message = "empty pattern; expected a pattern of one letter or more"
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
+        call(np.array([1, 2], np.uint8), np.array([0, 2], np.int64), encode_dna(""), COMPAT)
+
+
+@pytest.mark.parametrize("kernel", [hamming_counts, hamming_ranges])
+def test_hamming_kernels_reject_min_mm_above_max_mm(kernel):
+    message = "min_mm 2 is greater than max_mm 0; expected at most 0"
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
+        kernel(*encoded("ACGTA", ["ACGTA"], FIXED), 0, 2)
+
+
+@pytest.mark.parametrize("call", KERNEL_CALLS)
 def test_kernels_read_a_code_above_15_as_its_low_four_bits(call):
     offsets = np.array([0, 3], np.int64)
     high = call(np.array([200, 1, 8], np.uint8), offsets, encode_dna("TA"), COMPAT)
