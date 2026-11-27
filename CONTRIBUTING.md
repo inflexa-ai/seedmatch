@@ -9,7 +9,7 @@ seedmatch is a Python port of [SeedMatchR](https://github.com/tacazares/SeedMatc
 
 ## Set up the project
 
-Install [uv](https://docs.astral.sh/uv/) and [rustup](https://rustup.rs). uv installs the correct Python version and the dependencies. rustup installs the Rust version of `rust-toolchain.toml`, and `uv sync` builds the Rust extension:
+Install [uv](https://docs.astral.sh/uv/), [rustup](https://rustup.rs), and a C linker, `cc`. On macOS, `xcode-select --install` installs the linker. uv installs the correct Python version and the dependencies. rustup installs the Rust version of `rust-toolchain.toml`, and `uv sync` builds the Rust extension:
 
 ```bash
 git clone https://github.com/inflexa-ai/seedmatch.git

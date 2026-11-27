@@ -418,11 +418,13 @@ uv pip install "seedmatch[plot]"
 
 The search kernels are a Rust extension. PyPI has a wheel with the compiled extension for Linux x86_64 and Linux aarch64 (glibc 2.28 or later), and for macOS arm64. A wheel needs no Rust toolchain. On a different platform, the install builds the extension from the sdist.
 
-To install the code of `main`, use `uv pip install git+https://github.com/inflexa-ai/seedmatch.git`. To install it from a clone of this repository, use `uv pip install .`. An install from the sdist, from GitHub, or from a clone builds the extension from the source. This build needs [rustup](https://rustup.rs), and rustup installs the Rust version of `rust-toolchain.toml`.
+To install the code of `main`, use `uv pip install git+https://github.com/inflexa-ai/seedmatch.git`. To install it from a clone of this repository, use `uv pip install .`. An install from the sdist, from GitHub, or from a clone builds the extension from the source.
+
+The build from the source needs [rustup](https://rustup.rs), and rustup installs the Rust version of `rust-toolchain.toml`. A cargo that does not come from rustup must be Rust 1.88 or later. The build also needs a C linker, `cc`. On macOS, `xcode-select --install` installs it. On Debian or Ubuntu, `apt install build-essential` installs it.
 
 ## Development
 
-Install [rustup](https://rustup.rs) and the dependencies. `uv sync` builds the Rust extension, and it builds it again after a change of a Rust file:
+Install [rustup](https://rustup.rs), a C linker, and the dependencies. `uv sync` builds the Rust extension, and it builds it again after a change of a Rust file:
 
 ```bash
 uv sync
