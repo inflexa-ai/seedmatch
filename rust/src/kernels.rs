@@ -157,9 +157,10 @@ pub fn indel_counts(
     let Some(budget) = indel_budget(max_mm, &letters) else {
         return hamming_counts_of(codes, offsets, &letters, max_mm, 0);
     };
+    let mut work = indel::Workspace::new(&letters, budget);
     counts_of(codes, offsets, |seq| {
         let mut found = 0;
-        indel::search(seq, &letters, budget, &mut |_, _| found += 1);
+        indel::search(seq, &letters, budget, &mut work, &mut |_, _| found += 1);
         found
     })
 }
@@ -183,9 +184,10 @@ pub fn indel_ranges(
     let mut index = Vec::new();
     let mut starts = Vec::new();
     let mut ends = Vec::new();
+    let mut work = indel::Workspace::new(&letters, budget);
     each_sequence(codes, offsets, |i, seq| {
         let i = to_i64(i);
-        indel::search(seq, &letters, budget, &mut |start, end| {
+        indel::search(seq, &letters, budget, &mut work, &mut |start, end| {
             index.push(i);
             starts.push(start);
             ends.push(end);

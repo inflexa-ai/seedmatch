@@ -622,10 +622,10 @@ A test runs each Python example in `README.md`. The example of "Public API examp
   - `Homo_sapiens.GRCh38.109.gtf.gz` has 1,648,278 exon lines. The read takes 31 seconds, the peak resident memory above the start is 834 MiB, and the database pages are 270 MiB.
   - `Rattus_norvegicus.mRatBN7.2.109.gtf.gz` has 526,640 exon lines. The read takes 13 seconds, the peak resident memory above the start is 278 MiB, and the database pages are 95 MiB.
 - On the human GTF, the `protein` table of `load_gtf` has 111,317 rows and adds about 25 MiB. The read time grows by less than 1 second.
-- For N bases, a pattern of m letters, and a limit of k edits, the search kernels have these costs:
-  - A mismatch search uses shift-and if m is 64 or less. It takes O((N + 2m) · min(k, m)) word operations.
-  - An indel search uses the Myers filter if m is 64 or less. The filter takes O(N) word operations, and the DP takes O(m · k) at each candidate. In the worst case, for example a run of `N`, each position is a candidate.
-  - A pattern of more than 64 letters uses the scalar path: O(N · m) with an early stop for a mismatch search, and O(N · m · k) for an indel search.
+- For S sequences of N bases in total, a pattern of m letters, and a limit of k edits, the search kernels have these costs:
+  - A mismatch search uses shift-and if m is 64 or less. It takes O((N + S · min(k, m)) · (min(k, m) + 1)) word operations.
+  - An indel search uses the Myers filter if m is 64 or less. The filter takes O(N + S) word operations, and the DP takes O(m · k) at each candidate. In the worst case, for example a run of `N`, each position is a candidate.
+  - A pattern of more than 64 letters uses the scalar path: O((N + S · m) · m) with an early stop for a mismatch search, and O(N · m · k) for an indel search.
   - The filter keeps the candidates of 65,536 positions at a time, and the DP keeps one row of m + k values. Thus the work memory does not grow with N.
   - [`docs/plans/2026-11-27-rust-search-design.md`](plans/2026-11-27-rust-search-design.md) gives the proof that the filter does not change the result.
 - Each search kernel releases the GIL for its full search. `full_search` runs its patterns on a thread pool of fixed width. The width is a parameter, with the CPU count as the default.

@@ -9,21 +9,50 @@ use crate::to_i64;
 /// memory of the filter does not grow with the sequence.
 pub const BLOCK: usize = 1 << 16;
 
+/// The buffers of the search: the DP row and the marks of one block. A kernel makes them one
+/// time, and each sequence uses them again.
+pub struct Workspace {
+    row: Vec<usize>,
+    marks: Vec<u64>,
+}
+
+impl Workspace {
+    pub fn new(letters: &Letters, max_mm: usize) -> Self {
+        // A candidate aligns len() - 1 letters or fewer with a budget of max_mm or less. Thus its
+        // widths are 0 to len() - 1 + max_mm.
+        Self {
+            row: vec![0; letters.len() + max_mm],
+            marks: Vec::new(),
+        }
+    }
+}
+
 /// Find the matches of rule 4 in `seq`. `emit` gets the 1-based start and end of each match.
-pub fn search(seq: &[u8], letters: &Letters, max_mm: usize, emit: &mut impl FnMut(i64, i64)) {
+pub fn search(
+    seq: &[u8],
+    letters: &Letters,
+    max_mm: usize,
+    work: &mut Workspace,
+    emit: &mut impl FnMut(i64, i64),
+) {
     if letters.len() <= WORD {
-        bits(seq, letters, max_mm, BLOCK, emit);
+        bits(seq, letters, max_mm, BLOCK, work, emit);
     } else {
-        scalar(seq, letters, max_mm, emit);
+        scalar(seq, letters, max_mm, work, emit);
     }
 }
 
 /// Run the exact step at each position of `seq`.
-pub fn scalar(seq: &[u8], letters: &Letters, max_mm: usize, emit: &mut impl FnMut(i64, i64)) {
-    let mut row = dp_row(letters, max_mm);
+pub fn scalar(
+    seq: &[u8],
+    letters: &Letters,
+    max_mm: usize,
+    work: &mut Workspace,
+    emit: &mut impl FnMut(i64, i64),
+) {
     let mut held = Held::default();
     for j in 0..seq.len() {
-        if let Some((end, cost)) = accept(seq, letters, max_mm, j, &mut row) {
+        if let Some((end, cost)) = accept(seq, letters, max_mm, j, &mut work.row) {
             held.offer(j + 1, end, cost, emit);
         }
     }
@@ -39,12 +68,13 @@ pub fn bits(
     letters: &Letters,
     max_mm: usize,
     block: usize,
+    work: &mut Workspace,
     emit: &mut impl FnMut(i64, i64),
 ) {
-    let mut row = dp_row(letters, max_mm);
+    let Workspace { row, marks } = work;
     let mut held = Held::default();
-    filter(seq, letters, max_mm, block, |j| {
-        if let Some((end, cost)) = accept(seq, letters, max_mm, j, &mut row) {
+    filter(seq, letters, max_mm, block, marks, |j| {
+        if let Some((end, cost)) = accept(seq, letters, max_mm, j, row) {
             held.offer(j + 1, end, cost, emit);
         }
     });
@@ -53,16 +83,17 @@ pub fn bits(
 
 /// Return each 0-based position that the exact step accepts, in increasing order.
 pub fn accepted(seq: &[u8], letters: &Letters, max_mm: usize) -> Vec<usize> {
-    let mut row = dp_row(letters, max_mm);
+    let mut work = Workspace::new(letters, max_mm);
     (0..seq.len())
-        .filter(|&j| accept(seq, letters, max_mm, j, &mut row).is_some())
+        .filter(|&j| accept(seq, letters, max_mm, j, &mut work.row).is_some())
         .collect()
 }
 
 /// Return each 0-based candidate of the filter, in increasing order.
 pub fn candidates(seq: &[u8], letters: &Letters, max_mm: usize, block: usize) -> Vec<usize> {
     let mut found = Vec::new();
-    filter(seq, letters, max_mm, block, |j| found.push(j));
+    let mut marks = Vec::new();
+    filter(seq, letters, max_mm, block, &mut marks, |j| found.push(j));
     found
 }
 
@@ -77,6 +108,7 @@ fn filter(
     letters: &Letters,
     max_mm: usize,
     block: usize,
+    marks: &mut Vec<u64>,
     mut visit: impl FnMut(usize),
 ) {
     let m = letters.len();
@@ -84,7 +116,7 @@ fn filter(
     let peq = letters.reversed_words();
     let high = 1_u64 << (m - 1);
     let n = seq.len();
-    let mut marks = vec![0_u64; block.min(n).div_ceil(WORD)];
+    marks.resize(block.min(n).div_ceil(WORD), 0);
     let mut b0 = 0;
     while b0 < n {
         let b1 = n.min(b0 + block);
@@ -125,12 +157,6 @@ fn filter(
         }
         b0 = b1;
     }
-}
-
-/// A candidate aligns len() - 1 letters or fewer with a budget of max_mm or less. Thus its widths
-/// are 0 to len() - 1 + max_mm.
-fn dp_row(letters: &Letters, max_mm: usize) -> Vec<usize> {
-    vec![0; letters.len() + max_mm]
 }
 
 /// Return the 1-based end and the cost of the match that starts at the 0-based position `j`, or

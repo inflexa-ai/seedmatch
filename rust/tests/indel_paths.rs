@@ -1,6 +1,6 @@
 mod common;
 
-use _kernels::indel::{self, BLOCK};
+use _kernels::indel::{self, BLOCK, Workspace};
 use _kernels::letters::Letters;
 use common::{SplitMix64, compat, copy_with_edits, letter, plant, sequence};
 
@@ -45,8 +45,13 @@ fn bits_and_scalar(
     block: usize,
 ) -> [Vec<(i64, i64)>; 2] {
     let (mut bits, mut scalar) = (Vec::new(), Vec::new());
-    indel::bits(seq, letters, max_mm, block, &mut |s, e| bits.push((s, e)));
-    indel::scalar(seq, letters, max_mm, &mut |s, e| scalar.push((s, e)));
+    let mut work = Workspace::new(letters, max_mm);
+    indel::bits(seq, letters, max_mm, block, &mut work, &mut |s, e| {
+        bits.push((s, e));
+    });
+    indel::scalar(seq, letters, max_mm, &mut work, &mut |s, e| {
+        scalar.push((s, e))
+    });
     [bits, scalar]
 }
 
