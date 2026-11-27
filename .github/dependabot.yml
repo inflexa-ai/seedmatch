@@ -10,8 +10,6 @@ updates:
     ignore:
       - dependency-name: "numpy"
       - dependency-name: "pandas"
-      - dependency-name: "numba"
-      - dependency-name: "llvmlite"
       - dependency-name: "scipy"
       - dependency-name: "pandas-stubs"
       - dependency-name: "matplotlib"
@@ -23,6 +21,20 @@ updates:
       - dependency-name: "pyparsing"
       - dependency-name: "python-dateutil"
       - dependency-name: "six"
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "cargo"
+    directory: "/rust"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "build"
       include: "scope"

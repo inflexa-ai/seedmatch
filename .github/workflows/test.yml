@@ -37,11 +37,17 @@ jobs:
           python-version: ${{ matrix.python }}
           enable-cache: true
 
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+
       - name: Install the dependencies
         run: uv sync --locked
 
       - name: Run the tests
         run: uv run pytest
+
+      - name: Run the Rust tests
+        run: cargo test --manifest-path rust/Cargo.toml --locked
 
   latest:
     name: test (latest versions, 3.12)
@@ -56,6 +62,9 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
+
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
 
       # constraint-dependencies in pyproject.toml pins the versions of the inflexa sandbox.
       # --no-config makes uv skip the pins, thus this job tests the latest versions. The sandbox
