@@ -72,6 +72,19 @@ If the variable is not set, each of these tests skips with the reason `SEEDMATCH
 - Use [Conventional Commits](https://www.conventionalcommits.org/) for the commit messages, for example `fix(search): count the matches at the end of a sequence`.
 - In the description, give what changed and why. Give the link to the issue.
 
+## Make a release
+
+A maintainer makes each release:
+
+1. In a pull request, change `version` in `pyproject.toml`.
+2. After the merge, add the tag `v` and the version to the commit on `main`, for example `v0.2.0`. Push the tag.
+3. The job `publish` of `.github/workflows/wheels.yml` uploads the wheels and the sdist to PyPI. Before the upload, the job makes sure that each file has the version of the tag.
+4. Write the changes of the release in a GitHub release for the tag.
+
+PyPI keeps each version for all time. Thus, a version that has an error gets a new version, not a new upload.
+
+The PyPI project trusts the job `publish` in the GitHub environment `pypi`. Thus the job uses no token.
+
 ## Developer Certificate of Origin
 
 seedmatch uses the [Developer Certificate of Origin](https://developercertificate.org/) (DCO), version 1.1. Each commit must have a `Signed-off-by` line. The `-s` option of `git commit` adds the line:

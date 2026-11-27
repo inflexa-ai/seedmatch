@@ -48,7 +48,7 @@ The source of truth for behavior is the SeedMatchR repository at commit `2fc0c4f
 - The CI tests the versions of the sandbox lock. One more job installs the latest versions without `constraint-dependencies`, for example pandas 3.
 - The genome readers use only the standard library (`mmap`, `zlib`, `sqlite3`) and numpy. Thus the port reads a BGZF FASTA genome without an extra.
 - A new runtime dependency must have an entry in the inflexa manifest. Thus, do not add one.
-- The wheel has a compiled extension, `seedmatch.search._kernels`. The inflexa build images have no Rust toolchain. Thus the package index must have a wheel for each platform of the sandbox. The workflow `wheels.yml` builds these wheels:
+- The wheel has a compiled extension, `seedmatch.search._kernels`. The inflexa build images have no Rust toolchain. Thus PyPI must have a wheel for each platform of the sandbox. The workflow `wheels.yml` builds these wheels, and a push of a tag `v*` publishes them and the sdist to PyPI:
   - `cp312-abi3-manylinux_2_28_x86_64`
   - `cp312-abi3-manylinux_2_28_aarch64`
   - `cp312-abi3-macosx_11_0_arm64`, for development

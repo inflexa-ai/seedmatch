@@ -1,6 +1,6 @@
 name: Wheels
 
-# The wheels are artifacts of the run. This workflow does not publish them.
+# A push of a tag v* also publishes the wheels and the sdist to PyPI.
 on:
   push:
     branches: [main]
@@ -120,3 +120,34 @@ jobs:
         with:
           name: sdist
           path: dist/
+
+  publish:
+    name: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos, sdist]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The PyPI project trusts this job in this environment, thus the upload needs no token.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/seedmatch
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+
+      # PyPI keeps each version for all time, thus a file with a different version must not go up.
+      - name: Compare the version of each file with the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for file in dist/*; do
+            case "${file#dist/}" in
+              "seedmatch-$version.tar.gz" | "seedmatch-$version-"*.whl) ;;
+              *) echo "::error::$file does not have the version $version of the tag"; exit 1 ;;
+            esac
+          done
+
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
