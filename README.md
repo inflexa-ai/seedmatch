@@ -404,21 +404,21 @@ This version has these parts:
 
 ## Installation
 
-Python 3.12 or later is necessary. seedmatch uses pandas 2.2 or later. A text column of a table that seedmatch returns has the dtype that the installed pandas gives a column of text: `object` on pandas 2, and `str` on pandas 3. Install seedmatch from GitHub:
+Python 3.12 or later is necessary. seedmatch uses pandas 2.2 or later. A text column of a table that seedmatch returns has the dtype that the installed pandas gives a column of text: `object` on pandas 2, and `str` on pandas 3. Install seedmatch from PyPI:
 
 ```bash
-uv pip install git+https://github.com/inflexa-ai/seedmatch.git
+uv pip install seedmatch
 ```
 
 To draw the figures of `seedmatch.plot`, install the extra `plot`:
 
 ```bash
-uv pip install "seedmatch[plot] @ git+https://github.com/inflexa-ai/seedmatch.git"
+uv pip install "seedmatch[plot]"
 ```
 
-To install it from a clone of this repository, use `uv pip install .`.
+The search kernels are a Rust extension. PyPI has a wheel with the compiled extension for Linux x86_64 and Linux aarch64 (glibc 2.28 or later), and for macOS arm64. A wheel needs no Rust toolchain. On a different platform, the install builds the extension from the sdist.
 
-The search kernels are a Rust extension. A wheel holds the compiled extension, thus it needs no Rust toolchain. An install from GitHub or from a clone builds the extension from the source. This build needs [rustup](https://rustup.rs), and rustup installs the Rust version of `rust-toolchain.toml`.
+To install the code of `main`, use `uv pip install git+https://github.com/inflexa-ai/seedmatch.git`. To install it from a clone of this repository, use `uv pip install .`. An install from the sdist, from GitHub, or from a clone builds the extension from the source. This build needs [rustup](https://rustup.rs), and rustup installs the Rust version of `rust-toolchain.toml`.
 
 ## Development
 
