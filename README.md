@@ -6,7 +6,7 @@
 
 seedmatch is a Python port of the R package [SeedMatchR](https://github.com/tacazares/SeedMatchR), ready for AI agent sandboxes. It finds the seed matches of an siRNA guide strand in transcript sequences. It then joins the matches with the results of a differential expression (DE) analysis. Thus you can see which genes with a seed match go down.
 
-The output is the same as the output of SeedMatchR on the core paths. R golden files in `tests/golden/` keep this true. Each change of behavior from R has an entry in [`docs/divergences.md`](docs/divergences.md).
+The output is the same as the output of SeedMatchR on the core paths. R golden files in `tests/golden/` keep this true. Each change of behavior from R has an entry in [`src/seedmatch/divergences.md`](src/seedmatch/divergences.md). The installed package holds this file and `r-map.md`, thus `importlib.resources.files("seedmatch").joinpath("divergences.md")` reads the file without network.
 
 ## A part of an agentic toolchain for bioinformatics
 
@@ -97,7 +97,7 @@ utr3_counts = count_matches(target, utr3)
 
 `Reference.sequences` also takes a `TranscriptFilter` and a `PerGene` option. The defaults are the defaults of `load_annotations` in R. `PerGene.LONGEST` selects, for each gene, the transcript with the longest feature. For `FeatureType.UTR3`, this is the transcript with the longest 3' UTR. `PerGene.UNION` merges the ranges of the transcripts of a gene. `Reference.from_directory(path)` opens the one `.sqlite` file and the one `.2bit` or `.fa.gz` file of a directory. `Reference.from_gtf(gtf, genome)` reads a GTF file instead of an EnsDb file.
 
-[`docs/r-map.md`](docs/r-map.md) gives the Python name of each R function, and the changes of the arguments.
+[`src/seedmatch/r-map.md`](src/seedmatch/r-map.md) gives the Python name of each R function, and the changes of the arguments.
 
 ## Other analyses
 

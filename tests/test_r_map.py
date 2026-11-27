@@ -11,7 +11,7 @@ from seedmatch.errors import InputError
 from seedmatch.resources import Group, lookup
 
 ROOT = Path(__file__).parents[1]
-R_MAP = ROOT / "docs" / "r-map.md"
+R_MAP = ROOT / "src" / "seedmatch" / "r-map.md"
 README = ROOT / "README.md"
 NAMESPACE = ROOT / "tests" / "data" / "SeedMatchR.NAMESPACE"
 TICK = re.compile(r"`([^`]+)`")

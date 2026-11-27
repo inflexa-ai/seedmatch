@@ -1,4 +1,5 @@
 import ast
+import importlib.resources
 import re
 import subprocess
 import sys
@@ -11,7 +12,7 @@ import seedmatch
 from seedmatch.errors import InputError, SeedMatchError
 
 ROOT = Path(__file__).parents[1]
-DIVERGENCES = ROOT / "docs" / "divergences.md"
+DIVERGENCES = ROOT / "src" / "seedmatch" / "divergences.md"
 DESIGN = ROOT / "docs" / "design.md"
 DIVERGENCE_FIELDS = ("ID", "R location", "R behavior", "New behavior", "Reason", "Test")
 TESTS = Path(__file__).parent
@@ -47,6 +48,21 @@ def bad_entry_headings(text: str) -> list[str]:
     entries = text.split("\n## Entries\n", 1)[1]
     headings = re.findall(r"^#.*$", entries, flags=re.MULTILINE)
     return [line for line in headings if not re.fullmatch(r"## D-\d{3}: \S.*", line)]
+
+
+@pytest.mark.parametrize("name", ["divergences.md", "r-map.md"])
+def test_the_installed_package_holds_the_document(name):
+    assert importlib.resources.files("seedmatch").joinpath(name).is_file()
+
+
+def test_each_divergence_id_in_the_installed_code_has_an_entry_in_the_package():
+    package = importlib.resources.files("seedmatch")
+    code = "".join(
+        path.read_text(encoding="utf-8") for path in Path(seedmatch.__file__).parent.rglob("*.py")
+    )
+    entries = package.joinpath("divergences.md").read_text(encoding="utf-8")
+    entry_ids = set(re.findall(r"^## (D-\d{3}):", entries, flags=re.MULTILINE))
+    assert set(re.findall(r"D-\d{3}", code)) - entry_ids == set()
 
 
 def test_import_loads_no_fetch_and_no_plot_modules():
@@ -146,8 +162,8 @@ def test_input_error_is_caught_as_value_error_and_as_package_error(base):
         raise error
 
 
-# The README, docs/r-map.md, and the docstrings of the options name these, so a user imports
-# them from seedmatch.
+# The README, src/seedmatch/r-map.md, and the docstrings of the options name these, so a user
+# imports them from seedmatch.
 @pytest.mark.parametrize("name", ["InputError", "SeedMatchError", "DEFAULT_SEEDS", "NONSEED_SEEDS"])
 def test_a_name_that_the_documentation_uses_is_in_the_top_level_package(name):
     assert name in seedmatch.__all__

@@ -547,7 +547,7 @@ The case `benchmark_1` uses `tools/golden/patches/benchmark_preds.R` (`D-006`). 
 
 ## Patch of vmatchPattern2
 
-`vmatchPattern2` of SeedMatchR ignores `with.indels` and `min.mismatch` (`docs/divergences.md`, `D-001`). The file `tools/golden/patches/vmatchPattern2.R` defines a patched function with the same arguments and the same data frame. `full_search.R` puts it into the SeedMatchR namespace with `assignInNamespace`. As a result, the ranges in the golden files obey the same rules as the counts. A script that needs the original function does not source the patch.
+`vmatchPattern2` of SeedMatchR ignores `with.indels` and `min.mismatch` (`src/seedmatch/divergences.md`, `D-001`). The file `tools/golden/patches/vmatchPattern2.R` defines a patched function with the same arguments and the same data frame. `full_search.R` puts it into the SeedMatchR namespace with `assignInNamespace`. As a result, the ranges in the golden files obey the same rules as the counts. A script that needs the original function does not source the patch.
 
 ## Patches of the annotation functions
 

@@ -1,4 +1,9 @@
-"""seedmatch: a Python port of SeedMatchR."""
+"""seedmatch: a Python port of SeedMatchR.
+
+A `D-NNN` ID in the code names an entry of `divergences.md` in this package, a change of behavior
+from SeedMatchR. `r-map.md` in this package gives the Python name of each SeedMatchR function. Read
+them with `importlib.resources.files("seedmatch").joinpath("divergences.md").read_text()`.
+"""
 
 from seedmatch.alignment import alignment_text
 from seedmatch.annotation import Features, FeatureType, PerGene, Reference, TranscriptFilter
