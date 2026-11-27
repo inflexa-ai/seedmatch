@@ -1,0 +1,17 @@
+[package]
+name = "seedmatch-kernels"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+name = "_kernels"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+python = ["dep:pyo3", "dep:numpy", "pyo3/extension-module"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["abi3-py312"], optional = true }
+numpy = { version = "0.30", optional = true }

@@ -20,7 +20,7 @@ from seedmatch.search import (
 )
 from seedmatch.search.compat import compat_table
 from seedmatch.sequence import SequenceSet
-from seedmatch.sequence.alphabet import MASKS
+from seedmatch.sequence.alphabet import MASKS, encode_dna
 
 
 def s(**named):
@@ -390,3 +390,16 @@ def test_match_ranges_name_the_sequence_of_a_repeated_id():
     assert starts.tolist() == [1, 1, 3]
     assert ends.tolist() == [2, 2, 4]
     assert find_matches("AC", seqs)["seq_id"].tolist() == ["x", "y", "y"]
+
+
+def test_search_of_a_set_with_unaligned_offsets_equals_the_aligned_search():
+    offsets = np.frombuffer(bytearray(1 + 8 * 3), dtype=np.int64, offset=1)
+    offsets[:] = [0, 4, 8]
+    assert not offsets.flags.aligned
+    codes = encode_dna("ACGTACGA")
+    unaligned = SequenceSet(("a", "b"), ("a", "b"), codes.copy(), offsets)
+    aligned = SequenceSet(("a", "b"), ("a", "b"), codes.copy(), offsets.copy())
+    for options in (SearchOptions(max_mismatch=1), SearchOptions(max_mismatch=1, indels=True)):
+        np.testing.assert_array_equal(
+            count_matches("ACG", unaligned, options), count_matches("ACG", aligned, options)
+        )

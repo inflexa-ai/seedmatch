@@ -1,3 +1,4 @@
+import re
 from itertools import product
 
 import corpus
@@ -7,11 +8,10 @@ import pytest
 from corpus import Range
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
-from numba import config
 from strategies import dna, subjects_for
 
+from seedmatch.search._kernels import hamming_counts, hamming_ranges, indel_counts, indel_ranges
 from seedmatch.search.compat import compat_table
-from seedmatch.search.kernels import hamming_counts, hamming_ranges, indel_counts, indel_ranges
 from seedmatch.sequence import SequenceSet
 from seedmatch.sequence.alphabet import encode_dna
 
@@ -73,8 +73,7 @@ SETS = PATTERNS.flatmap(
     lambda pattern: st.tuples(st.just(pattern), st.lists(subjects_for(pattern, 30), max_size=6))
 )
 
-# The first example compiles the kernels, which takes longer than the default deadline.
-KERNEL_SETTINGS = settings(deadline=None, max_examples=300)
+KERNEL_SETTINGS = settings(max_examples=300)
 
 
 @KERNEL_SETTINGS
@@ -177,11 +176,6 @@ def test_indel_match_of_a_short_sequence_stays_inside_it():
     assert indel_count_list("ACGTACG", ["GTA", "", "G"], 4) == [1, 0, 0]
 
 
-# Without the JIT (the coverage run), the kernels run as Python code, and the complete corpora take
-# about a minute. Each 13th group still compares the Python code with R.
-CORPUS_STRIDE = 13 if config.DISABLE_JIT else 1
-
-
 def corpus_kernel_mismatches(name: str) -> list[tuple[object, ...]]:
     """Run the kernels once for each case and option set, with the max_mm of the option set."""
     r_counts = corpus.counts(name)
@@ -191,7 +185,7 @@ def corpus_kernel_mismatches(name: str) -> list[tuple[object, ...]]:
     }
     arrays: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
     mismatches = []
-    for case, opts, expected in corpus.groups(name)[::CORPUS_STRIDE]:
+    for case, opts, expected in corpus.groups(name):
         if case.case_id not in arrays:
             seqs = SequenceSet.from_records([(case.case_id, case.subject)])
             arrays[case.case_id] = (seqs.codes, seqs.offsets, encode_dna(case.pattern))
@@ -214,3 +208,83 @@ def corpus_kernel_mismatches(name: str) -> list[tuple[object, ...]]:
 @pytest.mark.parametrize("name", [corpus.RANDOM, corpus.SEEDS])
 def test_kernels_equal_biostrings_on_corpus(name):
     assert corpus_kernel_mismatches(name) == []
+
+
+LONG_LENGTHS = (63, 64, 65, 80)
+ALL_FIXED = list(product((True, False), repeat=2))
+
+
+def long_case(m, size):
+    """Return a pattern of m letters, and a subject with an exact copy and a copy with 2 edits."""
+    rng = np.random.default_rng(m)
+
+    def letters(alphabet, count):
+        return "".join(rng.choice(list(alphabet), size=count))
+
+    pattern = letters("ACGTRYN", m)
+    edited = list(pattern)
+    for edit in rng.choice(["substitute", "insert", "delete"], size=2):
+        at = int(rng.integers(len(edited)))
+        if edit == "substitute":
+            edited[at] = letters("ACGT", 1)
+        elif edit == "insert":
+            edited.insert(at, letters("ACGT", 1))
+        else:
+            del edited[at]
+    filler = size - m - len(edited)
+    first, second = sorted(int(cut) for cut in rng.integers(0, filler + 1, size=2))
+    subject = (
+        letters("ACGT", first)
+        + pattern
+        + letters("ACGT", second - first)
+        + "".join(edited)
+        + letters("ACGT", filler - second)
+    )
+    return pattern, subject
+
+
+@pytest.mark.parametrize("m", LONG_LENGTHS)
+@pytest.mark.parametrize("max_mm", [0, 1, 2, 3])
+@pytest.mark.parametrize("fixed", ALL_FIXED)
+def test_long_patterns_equal_the_oracle(m, max_mm, fixed):
+    pattern, subject = long_case(m, 4 * m)
+    expected = oracle.hamming(pattern, subject, max_mm, 0, *fixed)
+    assert expected
+    assert kernel_hamming(pattern, subject, max_mm, 0, fixed) == expected
+    assert kernel_indels(pattern, subject, max_mm, fixed) == oracle.indels(
+        pattern, subject, max_mm, *fixed
+    )
+
+
+KERNEL_CALLS = [
+    lambda c, o, p, t: hamming_counts(c, o, p, t, 1, 0),
+    lambda c, o, p, t: hamming_ranges(c, o, p, t, 1, 0),
+    lambda c, o, p, t: indel_counts(c, o, p, t, 1),
+    lambda c, o, p, t: indel_ranges(c, o, p, t, 1),
+]
+COMPAT = compat_table(fixed_pattern=True, fixed_subject=True)
+
+
+@pytest.mark.parametrize("call", KERNEL_CALLS)
+def test_kernels_reject_offsets_outside_codes(call):
+    message = "offsets do not fit codes of length 2; expected the offsets of a SequenceSet"
+    with pytest.raises(ValueError, match="^" + re.escape(message) + "$"):
+        call(np.array([1, 2], np.uint8), np.array([0, 3], np.int64), encode_dna("AC"), COMPAT)
+
+
+@pytest.mark.parametrize("call", KERNEL_CALLS)
+def test_kernels_read_a_code_above_15_as_its_low_four_bits(call):
+    offsets = np.array([0, 3], np.int64)
+    high = call(np.array([200, 1, 8], np.uint8), offsets, encode_dna("TA"), COMPAT)
+    low = call(np.array([8, 1, 8], np.uint8), offsets, encode_dna("TA"), COMPAT)
+    for found, expected in zip(np.atleast_2d(high), np.atleast_2d(low), strict=True):
+        np.testing.assert_array_equal(found, expected)
+
+
+INT64_MAX = 2**63 - 1
+
+
+def test_limits_near_the_int64_maximum():
+    assert hamming_count_list("AC", EMPTY_INSIDE, INT64_MAX, 0) == [3, 1, 4]
+    assert hamming_count_list("AC", EMPTY_INSIDE, INT64_MAX, INT64_MAX) == [0, 0, 0]
+    assert indel_hits("AC", EMPTY_INSIDE, INT64_MAX) == EMPTY_INSIDE_MISMATCH_HITS
