@@ -9,3 +9,5 @@ htmlcov/
 tools/golden/.rlib/
 tmp/
 .DS_Store
+rust/target/
+*.so

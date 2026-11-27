@@ -14,7 +14,7 @@ from numpy.typing import NDArray
 from seedmatch._checks import as_flag, as_limit, check_not_negative, check_type
 from seedmatch._frames import with_text_dtype
 from seedmatch.errors import InputError
-from seedmatch.search import kernels
+from seedmatch.search import _kernels
 from seedmatch.search.compat import compat_table
 from seedmatch.seed import Target
 from seedmatch.sequence import SequenceSet
@@ -42,7 +42,6 @@ class SearchOptions:
 
     def __post_init__(self) -> None:
         """Make sure that the options are valid, because the kernels trust them."""
-        # Plain int limits give each kernel one type signature, thus one numba cache entry.
         object.__setattr__(self, "max_mismatch", as_limit("max_mismatch", self.max_mismatch))
         object.__setattr__(self, "min_mismatch", as_limit("min_mismatch", self.min_mismatch))
         object.__setattr__(self, "indels", as_flag("indels", self.indels))
@@ -86,6 +85,11 @@ def _compat(options: SearchOptions) -> NDArray[np.bool_]:
     return compat_table(fixed_pattern=options.fixed_pattern, fixed_subject=options.fixed_subject)
 
 
+def _aligned(offsets: NDArray[np.int64]) -> NDArray[np.int64]:
+    """Return the offsets, or an aligned copy: the kernels read only aligned int64 arrays."""
+    return np.require(offsets, requirements="A")
+
+
 def _uses_indel_kernel(options: SearchOptions) -> bool:
     return options.indels and options.max_mismatch > 0
 
@@ -99,14 +103,15 @@ def count_matches(
     _check_arguments(pattern, sequences, options)
     masks = _encode_pattern(pattern)
     compat = _compat(options)
+    offsets = _aligned(sequences.offsets)
     if _uses_indel_kernel(options):
-        counts = kernels.indel_counts(
-            sequences.codes, sequences.offsets, masks, compat, options.max_mismatch
+        counts = _kernels.indel_counts(
+            sequences.codes, offsets, masks, compat, options.max_mismatch
         )
     else:
-        counts = kernels.hamming_counts(
+        counts = _kernels.hamming_counts(
             sequences.codes,
-            sequences.offsets,
+            offsets,
             masks,
             compat,
             options.max_mismatch,
@@ -129,14 +134,15 @@ def match_ranges(
     _check_arguments(pattern, sequences, options)
     masks = _encode_pattern(pattern)
     compat = _compat(options)
+    offsets = _aligned(sequences.offsets)
     if _uses_indel_kernel(options):
-        index, starts, ends = kernels.indel_ranges(
-            sequences.codes, sequences.offsets, masks, compat, options.max_mismatch
+        index, starts, ends = _kernels.indel_ranges(
+            sequences.codes, offsets, masks, compat, options.max_mismatch
         )
     else:
-        index, starts = kernels.hamming_ranges(
+        index, starts = _kernels.hamming_ranges(
             sequences.codes,
-            sequences.offsets,
+            offsets,
             masks,
             compat,
             options.max_mismatch,

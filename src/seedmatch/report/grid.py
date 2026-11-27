@@ -1,6 +1,6 @@
 """`full_search` and `full_search_ranges` of R: one guide, many seeds and edit distances.
 
-The searches of one call are independent, so a thread pool runs them in parallel. The numba
+The searches of one call are independent, so a thread pool runs them in parallel. The search
 kernels release the GIL. The output does not depend on the width of the pool.
 """
 

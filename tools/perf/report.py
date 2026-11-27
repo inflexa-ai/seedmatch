@@ -23,7 +23,7 @@ from seedmatch import Guide, read_fasta, report_html, seed_match_report  # noqa:
 IMPORT_SECONDS = time.perf_counter() - started
 GUIDE = "UUAUAGAGCAAGAACACUGUUUU"
 DE_TABLE = Path("tests/data/DESEQ2_results.tsv")
-VERSIONS = ("seedmatch", "numba", "llvmlite", "numpy", "pandas")
+VERSIONS = ("seedmatch", "numpy", "pandas")
 
 
 def peak_mib() -> float:
