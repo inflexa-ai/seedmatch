@@ -2,13 +2,67 @@
 //!
 //! The 1-based starts go from 2 - m to n. Each pattern letter outside the sequence is a mismatch.
 
-use crate::letters::Letters;
+use std::iter;
+
+use crate::letters::{Letters, WORD};
 use crate::{to_i64, to_u64};
 
 /// Find the matches of rule 2 in `seq`. `emit` gets the 1-based start of each match, in
 /// increasing order.
 pub fn search(seq: &[u8], letters: &Letters, max_mm: u64, min_mm: u64, emit: &mut impl FnMut(i64)) {
-    scalar(seq, letters, max_mm, min_mm, emit);
+    if letters.len() <= WORD {
+        bits(seq, letters, max_mm, min_mm, emit);
+    } else {
+        scalar(seq, letters, max_mm, min_mm, emit);
+    }
+}
+
+/// Shift-and with k mismatches, for a pattern of 1 to `WORD` letters.
+///
+/// Bit a of state d is 1 if the pattern letters 0 to a match the last a + 1 letters with d
+/// mismatches or fewer. The text has m - 1 virtual letters before and after the sequence, and a
+/// virtual letter matches no pattern letter. Thus the windows of the text are the windows of
+/// rule 2, and the result is exact.
+pub fn bits(seq: &[u8], letters: &Letters, max_mm: u64, min_mm: u64, emit: &mut impl FnMut(i64)) {
+    let m = letters.len();
+    debug_assert!((1..=WORD).contains(&m));
+    let top = m - 1;
+    // A window has m mismatches or fewer, thus a state above m is equal to state m.
+    let k = usize::try_from(max_mm).map_or(m, |max_mm| max_mm.min(m));
+    // The window has min_mm mismatches or more if state min_mm - 1 does not match it.
+    let below = match usize::try_from(min_mm) {
+        Ok(0) => None,
+        Ok(min_mm) if min_mm <= m => Some(min_mm - 1),
+        _ => return,
+    };
+    let words = letters.words();
+    let mut states = [0_u64; WORD + 1];
+    let states = &mut states[..=k];
+    // After the m - 1 virtual letters before the sequence, state d matches each prefix of d
+    // letters or fewer.
+    for (d, state) in states.iter_mut().enumerate() {
+        *state = (1 << d.min(top)) - 1;
+    }
+    let text = seq.iter().map(|&code| words[usize::from(code & 15)]);
+    let after = iter::repeat_n(0, top);
+    let ends = |state: u64| (state >> top) & 1 == 1;
+    for (start, word) in (2 - to_i64(m)..).zip(text.chain(after)) {
+        step(states, word);
+        if ends(states[k]) && below.is_none_or(|below| !ends(states[below])) {
+            emit(start);
+        }
+    }
+}
+
+/// Read one text letter, with the word of its mask.
+fn step(states: &mut [u64], word: u64) {
+    let mut before = states[0];
+    states[0] = ((before << 1) | 1) & word;
+    for state in &mut states[1..] {
+        let old = *state;
+        *state = (((old << 1) | 1) & word) | ((before << 1) | 1);
+        before = old;
+    }
 }
 
 /// Count the mismatches of each window, with an early stop.

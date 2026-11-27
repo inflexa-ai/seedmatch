@@ -43,4 +43,18 @@ impl Letters {
     pub fn first(&self, code: u8) -> usize {
         self.first[usize::from(code & 15)]
     }
+
+    /// Return one word for each subject mask s: bit a is 1 if pattern letter a matches s. The
+    /// letters after the first `WORD` letters are not in the words.
+    pub fn words(&self) -> [u64; MASKS] {
+        let mut words = [0; MASKS];
+        for (a, row) in self.ok.iter().take(WORD).enumerate() {
+            for (word, &ok) in words.iter_mut().zip(row) {
+                if ok {
+                    *word |= 1 << a;
+                }
+            }
+        }
+        words
+    }
 }
