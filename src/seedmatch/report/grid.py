@@ -213,22 +213,8 @@ def best_match(counts: pd.DataFrame) -> pd.Series:
     return pd.Series(labels, index=counts.index, name="best_match", dtype=text_dtype())
 
 
-def full_search(
-    guide: Guide,
-    sequences: SequenceSet,
-    options: FullSearchOptions = FullSearchOptions(),
-    group: str = "siRNA",
-    *,
-    workers: int | None = None,
-) -> pd.DataFrame:
-    """Count the matches of each seed at each edit distance in each sequence (`full_search` of R).
-
-    The columns are `seq_id`, `gene_id`, one count column `<seed>.mm<distance>` for each seed and
-    distance in the order of the options, `group`, and `best_match`. A guide that is too short for
-    a seed raises `InputError` before any search. `workers` is the width of the thread pool, and
-    `None` is the number of CPUs. The result does not depend on `workers`.
-    """
-    width = pool_width(workers)
+def _searches(guide: Guide, options: FullSearchOptions) -> list[_Search]:
+    """Return the searches of `full_search`, in the order of its count columns."""
     searches: list[_Search] = []
     for seed in options.seeds:
         target = guide.target(seed, wobble=options.wobble)
@@ -248,6 +234,26 @@ def full_search(
             )
             for distance in distances
         )
+    return searches
+
+
+def full_search(
+    guide: Guide,
+    sequences: SequenceSet,
+    options: FullSearchOptions = FullSearchOptions(),
+    group: str = "siRNA",
+    *,
+    workers: int | None = None,
+) -> pd.DataFrame:
+    """Count the matches of each seed at each edit distance in each sequence (`full_search` of R).
+
+    The columns are `seq_id`, `gene_id`, one count column `<seed>.mm<distance>` for each seed and
+    distance in the order of the options, `group`, and `best_match`. A guide that is too short for
+    a seed raises `InputError` before any search. `workers` is the width of the thread pool, and
+    `None` is the number of CPUs. The result does not depend on `workers`.
+    """
+    width = pool_width(workers)
+    searches = _searches(guide, options)
     counts = list(
         map_in_pool(lambda s: count_matches(s.target, sequences, s.options), searches, width)
     )

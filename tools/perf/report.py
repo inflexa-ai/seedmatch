@@ -8,6 +8,7 @@ NUMBA_CACHE_DIR=tmp/perf/numba uv run python tools/perf/report.py tmp/perf/rnor7
 """
 
 import argparse
+import hashlib
 import resource
 import sys
 import time
@@ -36,6 +37,7 @@ def main() -> None:
     parser.add_argument("fasta", type=Path)
     parser.add_argument("--calls", type=int, default=3)
     parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument("--hashes", action="store_true")
     args = parser.parse_args()
     if args.calls < 1:
         parser.error("--calls must be 1 or more")
@@ -56,6 +58,10 @@ def main() -> None:
     print(f"report_html: {time.perf_counter() - started:.3f} s")
     total = result.report.set_index("category").loc["In silico predictions", "Total"]
     print(f"In silico predictions, Total: {total:.0f}")
+    if args.hashes:
+        for name, frame in (("report", result.report), ("matches", result.matches)):
+            text = frame.to_csv(sep="\t", index=False).encode()
+            print(f"sha256 {name}: {hashlib.sha256(text).hexdigest()}")
     versions = ", ".join(f"{name} {version(name)}" for name in VERSIONS)
     print(f"{versions}, Python {sys.version.split()[0]}")
 
