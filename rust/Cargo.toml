@@ -15,3 +15,8 @@ python = ["dep:pyo3", "dep:numpy", "pyo3/extension-module"]
 [dependencies]
 pyo3 = { version = "0.30", features = ["abi3-py312"], optional = true }
 numpy = { version = "0.30", optional = true }
+
+# The random tests compare the paths on 20,000 cases each. Without optimization, they take minutes.
+# The test profile keeps the overflow checks and the debug assertions.
+[profile.test]
+opt-level = 3

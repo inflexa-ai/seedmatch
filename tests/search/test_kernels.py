@@ -256,6 +256,15 @@ def test_long_patterns_equal_the_oracle(m, max_mm, fixed):
     )
 
 
+@pytest.mark.parametrize("max_mm", [62, 63])
+@pytest.mark.parametrize("fixed", ALL_FIXED)
+def test_pattern_of_64_letters_with_max_mm_near_its_length_equals_the_oracle(max_mm, fixed):
+    pattern, subject = long_case(64, 160)
+    expected = oracle.indels(pattern, subject, max_mm, *fixed)
+    assert expected
+    assert kernel_indels(pattern, subject, max_mm, fixed) == expected
+
+
 KERNEL_CALLS = [
     lambda c, o, p, t: hamming_counts(c, o, p, t, 1, 0),
     lambda c, o, p, t: hamming_ranges(c, o, p, t, 1, 0),
