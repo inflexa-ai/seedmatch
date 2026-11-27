@@ -12,7 +12,7 @@ jobs:
   coverage:
     name: coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,6 +28,6 @@ jobs:
       - name: Install the dependencies
         run: uv sync --locked
 
-      # This run takes more than 30 minutes, thus it is not a check of each pull request.
+      # On an Apple M2 Max, this run takes about 2 minutes.
       - name: Run the tests with coverage
         run: uv run pytest --cov --cov-report=term-missing

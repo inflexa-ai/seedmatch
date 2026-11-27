@@ -1,10 +1,10 @@
 """Measure the wall time and the peak memory of `seed_match_report`.
 
 The input is the FASTA file of `tools/perf/utr3_fasta.py` and the DE table of the R goldens
-(`tests/data/DESEQ2_results.tsv`). Set `NUMBA_CACHE_DIR` to an empty directory for a cold run.
+(`tests/data/DESEQ2_results.tsv`).
 
 Run it from the repository root:
-NUMBA_CACHE_DIR=tmp/perf/numba uv run python tools/perf/report.py tmp/perf/rnor7_utr3.fa
+uv run python tools/perf/report.py tmp/perf/rnor7_utr3.fa
 """
 
 import argparse

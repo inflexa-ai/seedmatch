@@ -38,18 +38,20 @@ The source of truth for behavior is the SeedMatchR repository at commit `2fc0c4f
 ## Constraints
 
 - Python 3.12. `pyproject.toml` sets `requires-python = ">=3.12"`, and `.python-version` is `3.12`.
-- uv manages the project, with the `uv_build` backend and the `src/` layout.
+- uv manages the project, with the `maturin` backend and the `src/` layout. The search kernels are a Rust crate in `rust/`.
 - ruff does the lint and the format.
 - The runtime dependencies come only from the inflexa package-store lock (`../inflexa/images/package-store/lock.amd64.json`):
-  - required: `numpy`, `pandas`, `scipy`, `numba`
+  - required: `numpy`, `pandas`, `scipy`
   - extra `plot`: `matplotlib`
 - A text column of a table that the port returns has the dtype that the installed pandas gives a column of text: `object` on pandas 2, and `str` on pandas 3. An empty table has the same dtype. pandas 3 gives `object` to an empty column, thus each function that makes a table sets the dtype with `_frames.with_text_dtype`.
 - A message that names the dtype of a column of the caller names the dtype that the column has, for example `str` on pandas 3.
 - The CI tests the versions of the sandbox lock. One more job installs the latest versions without `constraint-dependencies`, for example pandas 3.
 - The genome readers use only the standard library (`mmap`, `zlib`, `sqlite3`) and numpy. Thus the port reads a BGZF FASTA genome without an extra.
 - A new runtime dependency must have an entry in the inflexa manifest. Thus, do not add one.
-- The wheel is pure Python. The inflexa build images have no Rust toolchain. Numba compiles the search kernels at run time.
-- The kernels use `@njit(cache=True)`. In the sandbox, the package directory is read-only. Thus numba writes its cache to `NUMBA_CACHE_DIR` or to its user cache. An inflexa warm script can fill this cache later.
+- The wheel has a compiled extension, `seedmatch.search._kernels`. The inflexa build images have no Rust toolchain. Thus the package index must have a wheel for each platform of the sandbox. The workflow `wheels.yml` builds these wheels:
+  - `cp312-abi3-manylinux_2_28_x86_64`
+  - `cp312-abi3-manylinux_2_28_aarch64`
+  - `cp312-abi3-macosx_11_0_arm64`, for development
 
 ## Parity contract
 
@@ -94,7 +96,7 @@ These paths must be identical to R. A recorded divergence replaces the R behavio
 |---|---|
 | `seedmatch.sequence` | IUPAC alphabet as 4-bit masks. `SequenceSet`: names, one `uint8` buffer, and offsets. FASTA read and write. |
 | `seedmatch.seed` | `Guide`, `Seed` (enum of the canonical seeds, plus a custom window), and the target derivation. |
-| `seedmatch.search` | Numba kernels and the search API. |
+| `seedmatch.search` | Rust kernels and the search API. |
 | `seedmatch.annotation` | EnsDb reader, GTF reader, 2bit and FASTA genome readers (plain and BGZF), filters, feature derivation, sequence extraction, `Reference`. |
 | `seedmatch.de` | DE table schema, the reader for the GEO DESeq2 files, the filter. |
 | `seedmatch.mirdb` | The reader of the miRDB table of predicted miRNA targets. |
@@ -559,7 +561,7 @@ A change of behavior that has no entry is a defect of the port. The builder adds
 - Compatibility table: R gives the match result for each pair of IUPAC letters, for each `fixed` pair. A test compares the complete table.
 - Random corpus: a seeded generator makes patterns and subjects. They contain IUPAC codes, runs of `N`, repeats, and matches near the ends. R gives the match ranges for each case and each option set: mismatches 0 to 4, indels on and off, each `fixed` pair, and `min_mismatch`. A test compares the ranges exactly.
 - Seed corpus: a second seeded generator makes patterns with the lengths of the seeds. Each subject is longer than the pattern, and it holds edited copies of the pattern. An edit is a substitution, an insertion, or a deletion. R gives the match ranges for each case with indels on, mismatches 1 to 4, and each `fixed` pair. A test compares the ranges exactly. `tools/golden/make_corpus.py` writes the cases of the two corpora.
-- Oracle: a slow Python version of each rule, written from the definitions. Hypothesis property tests compare the numba kernels with the oracle on generated input. The random corpus also does a test of each oracle, and the seed corpus does a test of the indel oracle.
+- Oracle: a slow Python version of each rule, written from the definitions. Hypothesis property tests compare the Rust kernels with the oracle on generated input. Rust tests compare the bit-parallel path of each kernel with its scalar path on random input. The random corpus also does a test of each oracle, and the seed corpus does a test of the indel oracle.
 - Invariants: the count equals the number of ranges. An independent edit-distance function gives each reported range a distance that is not more than the limit.
 
 ### Statistics
@@ -620,8 +622,13 @@ A test runs each Python example in `README.md`. The example of "Public API examp
   - `Homo_sapiens.GRCh38.109.gtf.gz` has 1,648,278 exon lines. The read takes 31 seconds, the peak resident memory above the start is 834 MiB, and the database pages are 270 MiB.
   - `Rattus_norvegicus.mRatBN7.2.109.gtf.gz` has 526,640 exon lines. The read takes 13 seconds, the peak resident memory above the start is 278 MiB, and the database pages are 95 MiB.
 - On the human GTF, the `protein` table of `load_gtf` has 111,317 rows and adds about 25 MiB. The read time grows by less than 1 second.
-- A mismatch search is O(N · m) at worst, with an early stop when the mismatch count passes the limit. An indel search is O(N · m) dynamic programming.
-- The kernels use `nogil=True`. `full_search` runs its patterns on a thread pool of fixed width. The width is a parameter, with the CPU count as the default.
+- For N bases, a pattern of m letters, and a limit of k edits, the search kernels have these costs:
+  - A mismatch search uses shift-and if m is 64 or less. It takes O((N + 2m) · min(k, m)) word operations.
+  - An indel search uses the Myers filter if m is 64 or less. The filter takes O(N) word operations, and the DP takes O(m · k) at each candidate. In the worst case, for example a run of `N`, each position is a candidate.
+  - A pattern of more than 64 letters uses the scalar path: O(N · m) with an early stop for a mismatch search, and O(N · m · k) for an indel search.
+  - The filter keeps the candidates of 65,536 positions at a time, and the DP keeps one row of m + k values. Thus the work memory does not grow with N.
+  - [`docs/plans/2026-11-27-rust-search-design.md`](plans/2026-11-27-rust-search-design.md) gives the proof that the filter does not change the result.
+- Each search kernel releases the GIL for its full search. `full_search` runs its patterns on a thread pool of fixed width. The width is a parameter, with the CPU count as the default.
 - `kmer_counts` works in blocks of 2^20 window starts, and its matrix has at most one entry for each window.
 - `KmerCounts.to_frame` is dense and holds n · 4^k · 8 bytes.
 - `kmer_gene_counts` multiplies a sparse gene indicator matrix with the matrix of `kmer_counts`. Its memory is O(the entries of the matrix + 4^k), because each k-mer has a label and a value. On the 18,614 canonical 3' UTRs of `rnor7` with k = 7, the call takes 0.11 seconds, and its peak memory is 360 MB. The product has an entry for each pair of a gene and a k-mer. For k = 12, the call takes about 3 seconds, and its peak memory is near 2 GB, because of the 16,777,216 labels. Machine: Apple M2 Max.
@@ -654,14 +661,16 @@ A test runs each Python example in `README.md`. The example of "Public API examp
   - `plot_wasserstein` on the test data: 100.4 ms and 104.7 ms.
 - `report_html` writes the table in one pass over the rows of `report.report`. A dict of lists groups the row positions by group, and each row takes one f-string for each cell. The time and the memory are O(R) for R rows. For 10^5 rows in 25,000 groups, the call takes 1.0 seconds, 10 µs for each row. The peak of `tracemalloc` is 119 MiB, and the result is 46 MiB. The report of the test data has 4 rows, and the call takes 0.3 ms. Machine: Apple M2 Max, Python 3.12.
 - `docs/performance.md` records the wall time and the peak memory of `seed_match_report` on the canonical 3' UTRs of `rnor7`, for Python and for R.
-- Target: after the JIT compilation, Python is not slower than R by more than a factor of 2.
+- Target: Python is not slower than R by more than a factor of 2.
 
 ## Tooling
 
 - uv: `uv sync` and `uv run`. The `dev` group holds pytest, pytest-cov, hypothesis, pytest-socket, mypy, pandas-stubs, and ruff.
 - ruff: `select = ["ALL"]`. Each ignore has a reason in `pyproject.toml`, for example `COM812` and `ISC001`, which conflict with the formatter. `line-length = 100`, as in the sibling project `tcga`. `target-version = "py312"`.
-- mypy with `--strict`. An override applies only to the modules with numba decorators.
-- `README.md` gives the commands: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run pytest`.
+- mypy with `--strict`. The one override makes mypy skip the missing types of scipy.
+- cargo checks the crate in `rust/`: `cargo test`, `cargo fmt --check`, and `cargo clippy --all-targets --all-features -- -D warnings`. `rust-toolchain.toml` pins the Rust version, with rustfmt and clippy.
+- maturin builds the extension. `uv sync` and `uv run` build it again after a change of a Rust file.
+- `README.md` gives the commands: `uv run ruff check`, `uv run ruff format --check`, `uv run mypy`, `uv run pytest`, and the cargo checks.
 
 ## Delivery order
 
@@ -695,7 +704,7 @@ Each step ends with ruff, mypy, and the tests of that step.
 
 ### Calls of the designer
 
-- Numba kernels. Runtime dependencies only from the inflexa store lock, with the `plot` extra. The genome readers use only the standard library and numpy.
+- Rust kernels with bit-parallel algorithms ([`docs/plans/2026-11-27-rust-search-design.md`](plans/2026-11-27-rust-search-design.md)). Runtime dependencies only from the inflexa store lock, with the `plot` extra. The genome readers use only the standard library and numpy.
 - R coordinates: 1-based and inclusive.
 - No layer with the R function names.
 - `SequenceSet` keeps the transcript ID and the gene ID. Gene-level results use the maximum count and the best match.
