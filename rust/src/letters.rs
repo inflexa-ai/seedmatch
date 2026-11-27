@@ -57,4 +57,18 @@ impl Letters {
         }
         words
     }
+
+    /// Return the words of the reversed pattern: bit a of word s is 1 if pattern letter
+    /// len() - 1 - a matches s. Only for a pattern of `WORD` letters or fewer.
+    pub fn reversed_words(&self) -> [u64; MASKS] {
+        let mut words = [0; MASKS];
+        for (a, row) in self.ok.iter().rev().take(WORD).enumerate() {
+            for (word, &ok) in words.iter_mut().zip(row) {
+                if ok {
+                    *word |= 1 << a;
+                }
+            }
+        }
+        words
+    }
 }

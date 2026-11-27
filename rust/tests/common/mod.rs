@@ -64,9 +64,9 @@ pub fn sequence(rng: &mut SplitMix64, len: usize) -> Vec<u8> {
     (0..len).map(|_| letter(rng)).collect()
 }
 
-/// Put a copy of the pattern with `edits` random edits at a random position of `seq`. Each letter
-/// of the copy is a base of its pattern mask.
-pub fn plant(rng: &mut SplitMix64, seq: &mut Vec<u8>, pattern: &[u8], edits: usize) {
+/// Return a copy of the pattern with `edits` random edits. Each letter of the copy is a base of
+/// its pattern mask.
+pub fn copy_with_edits(rng: &mut SplitMix64, pattern: &[u8], edits: usize) -> Vec<u8> {
     let mut copy: Vec<u8> = pattern.iter().map(|&mask| base_of(rng, mask)).collect();
     for _ in 0..edits {
         let at = rng.below(copy.len() + 1);
@@ -79,6 +79,12 @@ pub fn plant(rng: &mut SplitMix64, seq: &mut Vec<u8>, pattern: &[u8], edits: usi
             _ => copy.push(letter(rng)),
         }
     }
+    copy
+}
+
+/// Put a copy of the pattern with `edits` random edits at a random position of `seq`.
+pub fn plant(rng: &mut SplitMix64, seq: &mut Vec<u8>, pattern: &[u8], edits: usize) {
+    let copy = copy_with_edits(rng, pattern, edits);
     let at = rng.below(seq.len() + 1);
     seq.splice(at..at, copy);
 }
