@@ -22,15 +22,12 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install the Rust toolchain
+        run: rustup toolchain install
+
       - name: Install the dependencies
         run: uv sync --locked
 
-      # Coverage cannot see into compiled numba kernels, thus the kernels run as Python here.
-      # Then the coverage tracer stops the pool threads on its data lock, thus the plugin
-      # tools/coverage/serial_pool.py runs the pool in the caller thread.
       # This run takes more than 30 minutes, thus it is not a check of each pull request.
       - name: Run the tests with coverage
-        env:
-          PYTHONPATH: tools/coverage
-          NUMBA_DISABLE_JIT: "1"
-        run: uv run pytest -p serial_pool --cov --cov-report=term-missing
+        run: uv run pytest --cov --cov-report=term-missing
