@@ -28,6 +28,24 @@ fn value_error(error: OffsetsError) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
 
+fn check_pattern(pattern: &[u8]) -> PyResult<()> {
+    if pattern.is_empty() {
+        return Err(PyValueError::new_err(
+            "empty pattern; expected a pattern of one letter or more",
+        ));
+    }
+    Ok(())
+}
+
+fn check_mismatch_bounds(max_mm: u64, min_mm: u64) -> PyResult<()> {
+    if min_mm > max_mm {
+        return Err(PyValueError::new_err(format!(
+            "min_mm {min_mm} is greater than max_mm {max_mm}; expected at most {max_mm}"
+        )));
+    }
+    Ok(())
+}
+
 #[pyfunction]
 #[pyo3(signature = (codes, offsets, pattern, compat, max_mm, min_mm, /))]
 fn hamming_counts<'py>(
@@ -41,6 +59,8 @@ fn hamming_counts<'py>(
 ) -> PyResult<Array<'py>> {
     let compat = compat_table(&compat)?;
     let (codes, offsets, pattern) = (codes.as_slice()?, offsets.as_slice()?, pattern.as_slice()?);
+    check_pattern(pattern)?;
+    check_mismatch_bounds(max_mm, min_mm)?;
     let counts = py
         .detach(|| kernels::hamming_counts(codes, offsets, pattern, &compat, max_mm, min_mm))
         .map_err(value_error)?;
@@ -60,6 +80,8 @@ fn hamming_ranges<'py>(
 ) -> PyResult<(Array<'py>, Array<'py>)> {
     let compat = compat_table(&compat)?;
     let (codes, offsets, pattern) = (codes.as_slice()?, offsets.as_slice()?, pattern.as_slice()?);
+    check_pattern(pattern)?;
+    check_mismatch_bounds(max_mm, min_mm)?;
     let (index, starts) = py
         .detach(|| kernels::hamming_ranges(codes, offsets, pattern, &compat, max_mm, min_mm))
         .map_err(value_error)?;
@@ -81,6 +103,7 @@ fn indel_counts<'py>(
 ) -> PyResult<Array<'py>> {
     let compat = compat_table(&compat)?;
     let (codes, offsets, pattern) = (codes.as_slice()?, offsets.as_slice()?, pattern.as_slice()?);
+    check_pattern(pattern)?;
     let counts = py
         .detach(|| kernels::indel_counts(codes, offsets, pattern, &compat, max_mm))
         .map_err(value_error)?;
@@ -99,6 +122,7 @@ fn indel_ranges<'py>(
 ) -> PyResult<(Array<'py>, Array<'py>, Array<'py>)> {
     let compat = compat_table(&compat)?;
     let (codes, offsets, pattern) = (codes.as_slice()?, offsets.as_slice()?, pattern.as_slice()?);
+    check_pattern(pattern)?;
     let (index, starts, ends) = py
         .detach(|| kernels::indel_ranges(codes, offsets, pattern, &compat, max_mm))
         .map_err(value_error)?;
