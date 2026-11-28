@@ -22,7 +22,7 @@ This document records the wall time and the peak memory of `seed_match_report` o
 ## The machine
 
 - Apple M2 Max with 12 CPUs (8 performance cores and 4 efficiency cores), 32 GiB of memory, and macOS 26.5.2.
-- Python 3.12.13, seedmatch 0.1.0 (commit `733712a`), Rust 1.100.0, PyO3 0.30.1, rust-numpy 0.30.0, numpy 2.5.2, and pandas 2.3.3.
+- Python 3.12.13, seedmatch 0.1.0 (commit `07648b7`), Rust 1.100.0, PyO3 0.30.1, rust-numpy 0.30.0, numpy 2.5.2, and pandas 2.3.3.
 - R 4.5.3, SeedMatchR 2.0.0 (commit `2fc0c4f`), Biostrings 2.78.0, dplyr 1.2.1, and gt 1.4.0.
 - Other processes used the CPUs during the Python runs. The 15-minute load average after the runs was 9.7.
 
@@ -66,7 +66,7 @@ Each cell gives the values of two runs.
 
 ## Before the change to the Rust kernels
 
-Before commit `ce9460c`, numba compiled the search kernels at run time. These runs used the same machine, the same input, and seedmatch commit `5e0783c` with numba 0.67.0 and llvmlite 0.49.0. The numba cache was full. The report and the matches have the same SHA-256 before and after the change.
+Before commit `13f5cf2`, numba compiled the search kernels at run time. These runs used the same machine, the same input, and seedmatch commit `5e0783c` with numba 0.67.0 and llvmlite 0.49.0. The numba cache was full. The report and the matches have the same SHA-256 before and after the change.
 
 | Measure | Python, `workers=None` | Python, `workers=1` |
 |---|---|---|
