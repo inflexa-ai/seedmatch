@@ -377,6 +377,18 @@ seedmatch corrects the defects of SeedMatchR that it finds. These changes are th
 - `plot_ecdf` gives a figure for each p-value, and its legend counts the values of each line. R stops for a p-value of 0.01, and its legend counts the gene lists (D-063, D-064).
 - An input that R accepts in silence, but that gives a wrong result, raises `InputError`. The message gives the bad value. Examples are a gap letter in a sequence (D-017), a DESeq2 table with the wrong columns (D-021), and a NaN cutoff (D-024).
 
+## Performance
+
+seedmatch is faster than SeedMatchR, and its process uses less memory. The table gives the values of `seed_match_report` with the default options, on the canonical 3' UTRs of the rat genome build `rnor7`. This input has 18,614 sequences and 17,913,962 bases. The machine is an Apple M2 Max with 12 CPUs. Each run makes three calls in one process, and a cell gives the range of two runs. SeedMatchR uses one thread.
+
+| Measure | seedmatch, all CPUs | seedmatch, 1 thread | SeedMatchR |
+|---|---|---|---|
+| Time of one call | 0.18 to 0.20 s | 1.19 to 1.22 s | 9.32 to 9.63 s |
+| Speedup over SeedMatchR | 47× to 54× | 7.6× to 8.1× | 1× |
+| Peak resident memory of the process | 137 to 140 MiB | 135 to 136 MiB | 432 to 443 MiB |
+
+[`docs/performance.md`](docs/performance.md) gives the versions, the commands that measure these values, and the time of each search of `full_search`.
+
 ## Scope
 
 This version has these parts:
@@ -449,8 +461,6 @@ uv run pytest --cov
 ```
 
 `tools/golden/README.md` tells how to make the R golden files again.
-
-[`docs/performance.md`](docs/performance.md) gives the time and the memory of `seed_match_report` on `rnor7`, and the commands that measure them.
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) gives the rules for a contribution. To report a security problem, obey [`SECURITY.md`](SECURITY.md).
 
